@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { CircleCheck, SearchX } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CircleCheck, SearchX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { createPublicClient } from "@/lib/supabase/public";
 import { ar } from "@/lib/i18n/ar";
@@ -44,6 +45,13 @@ export default async function TrackPage({
   return (
     <section className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-12">
       <div>
+        <Link
+          href="/track"
+          className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowRight className="size-4" aria-hidden />
+          {ar.track.backToLookup}
+        </Link>
         <h1 className="text-3xl font-bold">{ar.track.title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {ar.track.refCode}:{" "}

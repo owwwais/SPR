@@ -19,6 +19,7 @@ export const ar = {
   nav: {
     home: "الرئيسية",
     jobs: "الوظائف",
+    track: "تتبّع طلبك",
     hrLogin: "دخول الموظفين",
   },
 
@@ -77,6 +78,9 @@ export const ar = {
     cvHint: "ملف PDF أو DOCX بحجم أقصاه 5 ميجابايت",
     submit: "إرسال الطلب",
     submitting: "جارٍ إرسال الطلب…",
+    questionsTitle: "أسئلة من فريق التوظيف",
+    yes: "نعم",
+    no: "لا",
     successTitle: "تم استلام طلبك بنجاح",
     successBody:
       "احتفظ برمز المتابعة التالي لتتبّع حالة طلبك، وسنراسلك عبر البريد الإلكتروني عند أي تحديث.",
@@ -93,6 +97,7 @@ export const ar = {
       cvRequired: "يرجى إرفاق السيرة الذاتية",
       cvType: "صيغة الملف غير مدعومة — أرفق ملف PDF أو DOCX",
       cvSize: "حجم الملف يتجاوز 5 ميجابايت",
+      questionRequired: "هذا السؤال إلزامي",
       duplicate: "سبق أن تقدّمت لهذه الوظيفة بهذا البريد الإلكتروني",
       jobClosed: "التقديم غير متاح لهذه الوظيفة حالياً",
       serverError: "تعذّر إرسال الطلب، يرجى المحاولة مرة أخرى",
@@ -100,6 +105,11 @@ export const ar = {
   },
 
   track: {
+    lookupHint:
+      "أدخل رمز المتابعة الذي استلمته عند التقديم (مثال: SRP-XXXXXXXX)",
+    codeLabel: "رمز المتابعة",
+    lookupSubmit: "عرض الحالة",
+    backToLookup: "البحث برمز آخر",
     title: "تتبّع حالة الطلب",
     notFoundTitle: "لم نعثر على طلب بهذا الرمز",
     notFoundBody:
@@ -136,6 +146,29 @@ export const ar = {
       closesAt: "آخر موعد",
       createdAt: "تاريخ الإنشاء",
       actions: "إجراءات",
+    },
+    questions: {
+      builderTitle: "أسئلة التقديم المخصصة",
+      builderHint:
+        "تُعرض على المتقدم في نموذج التقديم وتدخل إجاباته في التحليل الذكي (10 أسئلة كحد أقصى).",
+      addQuestion: "إضافة سؤال",
+      questionLabel: "نص السؤال",
+      questionType: "نوع السؤال",
+      required: "إلزامي",
+      optionsLabel: "الخيارات (سطر لكل خيار)",
+      optionsPlaceholder: "الخيار الأول\nالخيار الثاني",
+      remove: "حذف السؤال",
+      empty: "لا توجد أسئلة مخصصة — يمكن إضافة أسئلة فرز اختيارية.",
+      types: {
+        text: "نص حر",
+        yes_no: "نعم / لا",
+        single_choice: "اختيار واحد",
+        multiple_choice: "اختيار متعدد",
+      },
+      errors: {
+        invalid:
+          "تحقق من الأسئلة المخصصة: نص السؤال 3 أحرف على الأقل، وسؤالا الاختيار يحتاجان خيارين على الأقل",
+      },
     },
     form: {
       jobTitle: "المسمى الوظيفي",
@@ -276,8 +309,67 @@ export const ar = {
     meta: "النموذج: {model} — إصدار البرومبت: {version}",
   },
 
+  interview: {
+    sectionTitle: "المقابلة",
+    scheduleLabel: "موعد المقابلة",
+    scheduleSave: "حفظ الموعد",
+    scheduleSaved: "تم حفظ الموعد",
+    notScheduled: "لم يُحدد موعد للمقابلة بعد",
+    manageTitle: "إدارة المقابلة",
+    manageHint:
+      "سجّل إجابات المرشح على الأسئلة المقترحة أو أضف أسئلة جديدة بإجاباتها، ثم استخدم «إعادة التحليل» ليأخذها التقييم في الحسبان.",
+    aiBadge: "مقترح آلياً",
+    hrBadge: "سؤال إضافي",
+    answerPlaceholder: "إجابة المرشح…",
+    newQuestionLabel: "سؤال جديد",
+    newQuestionPlaceholder: "اكتب نص السؤال الجديد…",
+    addQa: "إضافة السؤال",
+    save: "حفظ سجل المقابلة",
+    saving: "جارٍ الحفظ…",
+    saved: "تم حفظ سجل المقابلة",
+    failed: "تعذّر الحفظ، حاول مرة أخرى",
+    remove: "حذف",
+  },
+
+  calendar: {
+    title: "التقويم",
+    upcoming: "المقابلات القادمة",
+    past: "مقابلات سابقة",
+    unscheduled: "بانتظار تحديد موعد",
+    unscheduledHint:
+      "مرشحون في مرحلة المقابلة دون موعد محدد — افتح الملف لتحديد الموعد.",
+    emptyTitle: "لا توجد مقابلات مجدولة",
+    emptyBody:
+      "عند نقل مرشح إلى مرحلة «دعوة لمقابلة» وتحديد موعده سيظهر هنا.",
+    manage: "إدارة المقابلة",
+    questionsCount: "سؤالاً مقترحاً",
+    answersCount: "إجابة مسجلة",
+  },
+
+  settingsPage: {
+    title: "الإعدادات",
+    companyTitle: "بيانات الشركة والاحتفاظ",
+    companyName: "اسم الشركة",
+    retention: "مدة الاحتفاظ بالطلبات (بالأشهر)",
+    retentionHint:
+      "تُحذف الطلبات وسيرها الذاتية نهائياً بعد هذه المدة (من 1 إلى 60 شهراً) وفق مهمة التنظيف اليومية.",
+    save: "حفظ الإعدادات",
+    saving: "جارٍ الحفظ…",
+    saved: "تم حفظ الإعدادات",
+    failed: "تعذّر الحفظ، حاول مرة أخرى",
+    teamTitle: "فريق التوظيف",
+    teamHint:
+      "لإضافة عضو جديد: أنشئ المستخدم من لوحة Supabase (Authentication → Invite) ثم أضف سجلّه في جدول profiles.",
+    member: "العضو",
+    role: "الدور",
+    you: "(أنت)",
+    roleSaved: "تم تحديث الدور",
+    roleFailed: "تعذّر تحديث الدور",
+  },
+
   application: {
     title: "ملف المتقدم",
+    screeningTitle: "إجابات أسئلة التقديم",
     appliedTo: "الوظيفة",
     appliedAt: "تاريخ التقديم",
     refCode: "رمز المتابعة",

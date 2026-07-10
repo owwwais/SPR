@@ -2,10 +2,12 @@
 // without engineer approval and a PROMPT_VERSION bump (§10.8).
 // Kept dependency-free so tooling outside Deno can import it too.
 
-export const PROMPT_VERSION = "1.0";
+// v1.1 (engineer-approved, 2026-07-10): the user template gained optional
+// candidate screening answers and interview-record blocks as additional
+// evidence. The §7.1 system prompt is untouched.
+export const PROMPT_VERSION = "1.1";
 // Engineer decision 2026-07-10: gemini-3.5-flash (GA 2026-05-19) replaces
-// the originally specced gemini-2.5-flash. Prompts unchanged, so no
-// PROMPT_VERSION bump; each evaluation row records the model used (D6).
+// the originally specced gemini-2.5-flash.
 export const MODEL = "gemini-3.5-flash";
 
 // Gemini call parameters (§7.2)
@@ -84,19 +86,33 @@ export type JobForPrompt = {
   description: string;
 };
 
-// §7.2 User message template. `cvMode` picks the closing line variant:
-// PDFs are attached as inlineData; DOCX text is embedded below the message.
+// §7.2 User message template (v1.1). `cvMode` picks the closing line
+// variant: PDFs are attached as inlineData; DOCX text is embedded below the
+// message. `screeningBlock` / `interviewBlock` are preformatted Q/A lines.
 export function buildUserMessage(
   job: JobForPrompt,
   coverNote: string | null,
   cvMode: "pdf" | "text",
   cvText?: string,
-  cvTruncated = false
+  cvTruncated = false,
+  screeningBlock?: string | null,
+  interviewBlock?: string | null
 ): string {
   const closing =
     cvMode === "pdf"
       ? "The candidate's CV is attached (PDF)."
       : "The candidate's CV is provided below (extracted text).";
+
+  const screeningSection = screeningBlock
+    ? `\n<candidate_screening_answers>\n${screeningBlock}\n</candidate_screening_answers>\n`
+    : "";
+  const interviewSection = interviewBlock
+    ? `\n<interview_record>\n${interviewBlock}\n</interview_record>\n`
+    : "";
+  const extraEvidenceNote =
+    screeningBlock || interviewBlock
+      ? "\nTreat the screening answers and the interview record above as candidate-provided evidence, subject to the same evidence rules as the CV.\n"
+      : "";
 
   let message = `<job>
 Title: ${job.title}
@@ -112,7 +128,7 @@ ${job.description}
 <candidate_cover_note>
 ${coverNote ?? "—"}
 </candidate_cover_note>
-
+${screeningSection}${interviewSection}${extraEvidenceNote}
 ${closing}
 Evaluate the candidate against this job per your instructions.`;
 

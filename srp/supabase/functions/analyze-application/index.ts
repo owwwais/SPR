@@ -17,6 +17,10 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import mammoth from "mammoth";
 import { Evaluation, computeFitScore } from "../../../lib/validations/evaluation.ts";
 import {
+  InterviewQa,
+  ScreeningAnswers,
+} from "../../../lib/validations/screening.ts";
+import {
   buildUserMessage,
   MAX_CV_TEXT_CHARS,
   MODEL,
@@ -61,6 +65,31 @@ async function isStaffCaller(req: Request): Promise<boolean> {
   }
 }
 
+// Q/A evidence blocks for the v1.1 prompt. Malformed stored JSON degrades
+// to "no block" rather than failing the analysis.
+function formatScreeningAnswers(raw: unknown): string | null {
+  const parsed = ScreeningAnswers.safeParse(raw);
+  if (!parsed.success || parsed.data.length === 0) return null;
+  return parsed.data
+    .map(
+      (entry) =>
+        `Q: ${entry.label}\nA: ${
+          Array.isArray(entry.answer) ? entry.answer.join(", ") : entry.answer
+        }`
+    )
+    .join("\n\n");
+}
+
+function formatInterviewQa(raw: unknown): string | null {
+  const parsed = InterviewQa.safeParse(raw);
+  if (!parsed.success) return null;
+  const answered = parsed.data.filter((e) => e.answer.trim().length > 0);
+  if (answered.length === 0) return null;
+  return answered
+    .map((entry) => `Q: ${entry.question}\nA: ${entry.answer}`)
+    .join("\n\n");
+}
+
 function base64Encode(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -93,7 +122,7 @@ Deno.serve(async (req) => {
   const { data: application, error: appError } = await admin
     .from("applications")
     .select(
-      "id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, jobs(title, type, location, min_years_experience, skills, requirements, description)"
+      "id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, screening_answers, interview_qa, jobs(title, type, location, min_years_experience, skills, requirements, description)"
     )
     .eq("id", applicationId)
     .maybeSingle();
@@ -142,13 +171,26 @@ Deno.serve(async (req) => {
     };
 
     // Exactly ONE Gemini call per analysis (§8 cost guard).
+    const screeningBlock = formatScreeningAnswers(
+      application.screening_answers
+    );
+    const interviewBlock = formatInterviewQa(application.interview_qa);
+
     const parts: Array<
       { text: string } | { inlineData: { mimeType: string; data: string } }
     > = [];
 
     if (application.cv_mime === "application/pdf") {
       parts.push({
-        text: buildUserMessage(job, application.cover_note, "pdf"),
+        text: buildUserMessage(
+          job,
+          application.cover_note,
+          "pdf",
+          undefined,
+          false,
+          screeningBlock,
+          interviewBlock
+        ),
       });
       parts.push({
         inlineData: {
@@ -165,7 +207,15 @@ Deno.serve(async (req) => {
       const truncated = value.length > MAX_CV_TEXT_CHARS;
       const cvText = truncated ? value.slice(0, MAX_CV_TEXT_CHARS) : value;
       parts.push({
-        text: buildUserMessage(job, application.cover_note, "text", cvText, truncated),
+        text: buildUserMessage(
+          job,
+          application.cover_note,
+          "text",
+          cvText,
+          truncated,
+          screeningBlock,
+          interviewBlock
+        ),
       });
     } else {
       throw new Error(`unsupported cv_mime: ${application.cv_mime}`);

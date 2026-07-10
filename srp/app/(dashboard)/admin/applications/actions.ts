@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
+import { InterviewQa } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
-import type { AppStatus } from "@/types/database";
+import type { AppStatus, Json } from "@/types/database";
 
 // FR-06: re-run analysis for failed (or re-runnable) applications. Invoked
 // with the staff member's own JWT — the Edge Function verifies is_staff()
@@ -103,6 +104,58 @@ export async function changeApplicationStatus(
 
   revalidatePath(`/admin/applications/${applicationId}`);
   return { changed: true, error: null };
+}
+
+export type InterviewState = { saved: boolean; error: string | null };
+
+// Interview management: schedule + the running Q&A record. The client
+// component serializes state into hidden fields (ISO timestamp + JSON);
+// zod re-validates before anything is written. Column-level grants restrict
+// staff to exactly these two fields.
+export async function saveInterview(
+  applicationId: string,
+  _prev: InterviewState,
+  formData: FormData
+): Promise<InterviewState> {
+  await requireProfile();
+
+  const rawAt = String(formData.get("interview_at_iso") ?? "").trim();
+  let interviewAt: string | null = null;
+  if (rawAt.length > 0) {
+    const date = new Date(rawAt);
+    if (Number.isNaN(date.getTime())) {
+      return { saved: false, error: ar.interview.failed };
+    }
+    interviewAt = date.toISOString();
+  }
+
+  let qa: unknown;
+  try {
+    qa = JSON.parse(String(formData.get("interview_qa") ?? "[]"));
+  } catch {
+    return { saved: false, error: ar.interview.failed };
+  }
+  const parsedQa = InterviewQa.safeParse(qa);
+  if (!parsedQa.success) {
+    return { saved: false, error: ar.interview.failed };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("applications")
+    .update({
+      interview_at: interviewAt,
+      interview_qa: parsedQa.data as unknown as Json,
+    })
+    .eq("id", applicationId);
+  if (error) {
+    console.error("saveInterview failed:", error.message);
+    return { saved: false, error: ar.interview.failed };
+  }
+
+  revalidatePath(`/admin/applications/${applicationId}`);
+  revalidatePath("/admin/calendar");
+  return { saved: true, error: null };
 }
 
 export type NotesState = { saved: boolean; error: string | null };

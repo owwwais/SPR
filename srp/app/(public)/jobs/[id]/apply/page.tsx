@@ -5,6 +5,7 @@ import { cache } from "react";
 import { ArrowRight } from "lucide-react";
 import { ApplyForm } from "@/components/jobs/apply-form";
 import { createPublicClient } from "@/lib/supabase/public";
+import { ScreeningQuestions } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 import { todayISO } from "@/lib/format";
 import { submitApplication } from "./actions";
@@ -24,7 +25,7 @@ const getJob = cache(async (id: string) => {
     const supabase = createPublicClient();
     const { data, error } = await supabase
       .from("jobs")
-      .select("id,title,closes_at")
+      .select("id,title,closes_at,screening_questions")
       .eq("id", id)
       .eq("status", "published")
       .is("deleted_at", null)
@@ -81,7 +82,15 @@ export default async function ApplyPage({
           {ar.jobs.closedForApplications}
         </div>
       ) : (
-        <ApplyForm action={submitApplication.bind(null, job.id)} />
+        <ApplyForm
+          action={submitApplication.bind(null, job.id)}
+          questions={(() => {
+            const parsed = ScreeningQuestions.safeParse(
+              job.screening_questions
+            );
+            return parsed.success ? parsed.data : [];
+          })()}
+        />
       )}
     </section>
   );

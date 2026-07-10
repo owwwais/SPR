@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { JobFormState } from "@/app/(dashboard)/admin/jobs/actions";
+import { QuestionsBuilder } from "@/components/admin/questions-builder";
 import { JOB_TYPES } from "@/lib/validations/job";
+import type { ScreeningQuestionType } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 
 export type JobFormValues = {
@@ -22,6 +24,7 @@ export type JobFormValues = {
   skills: string;
   min_years_experience: number;
   closes_at: string;
+  screening_questions: ScreeningQuestionType[];
 };
 
 const selectClass =
@@ -143,6 +146,9 @@ export function JobForm({
             defaultValue={defaultValues?.requirements}
           />
         </div>
+        <QuestionsBuilder
+          initialQuestions={defaultValues?.screening_questions ?? []}
+        />
       </div>
 
       <div className="flex items-center gap-3">

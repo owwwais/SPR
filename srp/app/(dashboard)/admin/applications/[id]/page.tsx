@@ -26,7 +26,12 @@ import {
   InterviewQuestions,
   type InterviewQuestion,
 } from "@/components/admin/interview-questions";
+import { InterviewManager } from "@/components/admin/interview-manager";
 import { StatusChanger } from "@/components/admin/status-changer";
+import {
+  InterviewQa,
+  ScreeningAnswers,
+} from "@/lib/validations/screening";
 import { scoreBandClass } from "@/components/admin/score-badge";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -85,11 +90,20 @@ export default async function ApplicationPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, created_at, jobs(title)"
+      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, screening_answers, interview_at, interview_qa, created_at, jobs(title)"
     )
     .eq("id", id)
     .maybeSingle();
   if (!application) notFound();
+
+  const screeningAnswers = (() => {
+    const parsed = ScreeningAnswers.safeParse(application.screening_answers);
+    return parsed.success ? parsed.data : [];
+  })();
+  const interviewQa = (() => {
+    const parsed = InterviewQa.safeParse(application.interview_qa);
+    return parsed.success ? parsed.data : [];
+  })();
 
   const job = application.jobs as unknown as { title: string } | null;
 
@@ -226,6 +240,25 @@ export default async function ApplicationPage({
               <p className="whitespace-pre-wrap text-sm">
                 {application.cover_note}
               </p>
+            </div>
+          )}
+          {screeningAnswers.length > 0 && (
+            <div className="rounded-lg bg-muted/50 p-4">
+              <h3 className="mb-2 text-sm font-semibold">
+                {ar.application.screeningTitle}
+              </h3>
+              <dl className="flex flex-col gap-3">
+                {screeningAnswers.map((entry) => (
+                  <div key={entry.question_id} className="text-sm">
+                    <dt className="font-medium">{entry.label}</dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap text-muted-foreground">
+                      {Array.isArray(entry.answer)
+                        ? entry.answer.join("، ")
+                        : entry.answer}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           )}
           <div className="border-t pt-4">
@@ -390,6 +423,26 @@ export default async function ApplicationPage({
         </CardContent>
       </Card>
 
+      <Card id="interview" className="scroll-mt-6">
+        <CardHeader>
+          <CardTitle>{ar.interview.manageTitle}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {application.interview_at
+              ? `${ar.interview.scheduleLabel}: ${formatDateTime(application.interview_at)}`
+              : ar.interview.notScheduled}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <InterviewManager
+            applicationId={id}
+            aiQuestions={
+              evaluation?.interview_questions.map((q) => q.question) ?? []
+            }
+            initialQa={interviewQa}
+            initialAt={application.interview_at}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

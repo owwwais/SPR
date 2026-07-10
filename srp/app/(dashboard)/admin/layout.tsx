@@ -1,4 +1,11 @@
-import { Briefcase, ChartColumn, LayoutDashboard, LogOut, Settings } from "lucide-react";
+import {
+  Briefcase,
+  CalendarDays,
+  ChartColumn,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+} from "lucide-react";
 import { requireProfile } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { NavLink } from "@/components/admin/nav-link";
@@ -28,6 +35,10 @@ export default async function AdminLayout({
           <NavLink href="/admin/jobs">
             <Briefcase className="size-4" aria-hidden />
             {ar.admin.jobs}
+          </NavLink>
+          <NavLink href="/admin/calendar">
+            <CalendarDays className="size-4" aria-hidden />
+            {ar.calendar.title}
           </NavLink>
           <NavLink href="/admin/stats">
             <ChartColumn className="size-4" aria-hidden />

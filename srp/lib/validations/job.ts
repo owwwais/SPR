@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ScreeningQuestions } from "./screening";
 
 export const JOB_TYPES = [
   "full_time",
@@ -41,6 +42,19 @@ export const jobSchema = z.object({
     .trim()
     .regex(/^(\d{4}-\d{2}-\d{2})?$/)
     .transform((v) => (v === "" ? null : v)),
+  // Serialized by the questions builder as JSON in a hidden field.
+  screening_questions: z
+    .string()
+    .max(20000)
+    .transform((v, ctx) => {
+      try {
+        return JSON.parse(v === "" ? "[]" : v) as unknown;
+      } catch {
+        ctx.addIssue({ code: "custom", message: "invalid questions JSON" });
+        return z.NEVER;
+      }
+    })
+    .pipe(ScreeningQuestions),
 });
 
 export type JobInput = z.infer<typeof jobSchema>;

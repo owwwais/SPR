@@ -7,8 +7,14 @@ import {
   CV_MIME_TYPES,
   type CvMime,
 } from "@/lib/validations/application";
+import {
+  ScreeningAnswers,
+  ScreeningQuestions,
+  type ScreeningAnswerType,
+} from "@/lib/validations/screening";
 import { generateRefCode } from "@/lib/ref-code";
 import { ar } from "@/lib/i18n/ar";
+import type { Json } from "@/types/database";
 
 export type ApplyState =
   | { ok: false; error: string | null; fieldErrors: Record<string, string> }
@@ -57,6 +63,74 @@ export async function submitApplication(
   }
 
   const supabase = createPublicClient();
+
+  // Screening answers are validated against the job's authoritative question
+  // definitions — never against anything the client sent.
+  const { data: jobRow } = await supabase
+    .from("jobs")
+    .select("screening_questions")
+    .eq("id", jobId)
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!jobRow) return fail(ar.apply.errors.jobClosed);
+
+  const parsedQuestions = ScreeningQuestions.safeParse(
+    jobRow.screening_questions
+  );
+  const questions = parsedQuestions.success ? parsedQuestions.data : [];
+
+  const answers: ScreeningAnswerType[] = [];
+  const questionErrors: Record<string, string> = {};
+  for (const question of questions) {
+    const key = `sq_${question.id}`;
+    if (question.type === "multiple_choice") {
+      const values = formData
+        .getAll(key)
+        .map(String)
+        .filter((v) => question.options.includes(v));
+      if (values.length > 0) {
+        answers.push({
+          question_id: question.id,
+          label: question.label,
+          type: question.type,
+          answer: values,
+        });
+      } else if (question.required) {
+        questionErrors[key] = ar.apply.errors.questionRequired;
+      }
+      continue;
+    }
+
+    let value = String(formData.get(key) ?? "").trim();
+    const yesNoOptions: string[] = [ar.apply.yes, ar.apply.no];
+    if (question.type === "yes_no" && !yesNoOptions.includes(value)) {
+      value = "";
+    }
+    if (question.type === "single_choice" && !question.options.includes(value)) {
+      value = "";
+    }
+    value = value.slice(0, 2000);
+
+    if (value.length > 0) {
+      answers.push({
+        question_id: question.id,
+        label: question.label,
+        type: question.type,
+        answer: value,
+      });
+    } else if (question.required) {
+      questionErrors[key] = ar.apply.errors.questionRequired;
+    }
+  }
+  if (Object.keys(questionErrors).length > 0) {
+    return fail(ar.apply.errors.invalidInput, questionErrors);
+  }
+  const validatedAnswers = ScreeningAnswers.safeParse(answers);
+  if (!validatedAnswers.success) {
+    return fail(ar.apply.errors.invalidInput);
+  }
+
   const applicationId = crypto.randomUUID();
   const cvPath = `${applicationId}.${CV_MIME_TYPES[cv.type as CvMime]}`;
 
@@ -84,6 +158,7 @@ export async function submitApplication(
       cv_path: cvPath,
       cv_mime: cv.type,
       cover_note: parsed.data.cover_note,
+      screening_answers: validatedAnswers.data as unknown as Json,
     });
 
     if (!error) {

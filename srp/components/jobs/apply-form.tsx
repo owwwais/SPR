@@ -13,6 +13,7 @@ import {
   CV_MAX_BYTES,
   CV_MIME_TYPES,
 } from "@/lib/validations/application";
+import type { ScreeningQuestionType } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 
 const initialState: ApplyState = { ok: false, error: null, fieldErrors: {} };
@@ -22,10 +23,72 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
+function ScreeningField({
+  question,
+  error,
+}: {
+  question: ScreeningQuestionType;
+  error?: string;
+}) {
+  const name = `sq_${question.id}`;
+  const label = (
+    <Label htmlFor={name}>
+      {question.label}
+      {question.required && <span className="text-destructive"> *</span>}
+    </Label>
+  );
+
+  if (question.type === "text") {
+    return (
+      <div className="flex flex-col gap-2">
+        {label}
+        <Textarea
+          id={name}
+          name={name}
+          rows={3}
+          maxLength={2000}
+          required={question.required}
+        />
+        <FieldError message={error} />
+      </div>
+    );
+  }
+
+  const options =
+    question.type === "yes_no" ? [ar.apply.yes, ar.apply.no] : question.options;
+  const inputType = question.type === "multiple_choice" ? "checkbox" : "radio";
+
+  return (
+    <div className="flex flex-col gap-2">
+      {label}
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {options.map((option) => (
+          <label
+            key={option}
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <input
+              type={inputType}
+              name={name}
+              value={option}
+              required={question.required && inputType === "radio"}
+              className="size-4 accent-primary"
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+      <FieldError message={error} />
+    </div>
+  );
+}
+
 export function ApplyForm({
   action,
+  questions,
 }: {
   action: (prev: ApplyState, formData: FormData) => Promise<ApplyState>;
+  questions: ScreeningQuestionType[];
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const [cvError, setCvError] = useState<string | null>(null);
@@ -142,6 +205,21 @@ export function ApplyForm({
         <Textarea id="cover_note" name="cover_note" rows={5} maxLength={2000} />
         <FieldError message={state.fieldErrors.cover_note} />
       </div>
+
+      {questions.length > 0 && (
+        <fieldset className="flex flex-col gap-5 rounded-lg border p-4">
+          <legend className="px-2 text-sm font-semibold">
+            {t.questionsTitle}
+          </legend>
+          {questions.map((question) => (
+            <ScreeningField
+              key={question.id}
+              question={question}
+              error={state.fieldErrors[`sq_${question.id}`]}
+            />
+          ))}
+        </fieldset>
+      )}
 
       <Button type="submit" size="lg" disabled={pending || cvError !== null}>
         {pending ? t.submitting : t.submit}

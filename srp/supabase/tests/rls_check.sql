@@ -152,6 +152,28 @@ exception when sqlstate '42501' then
   raise notice 'PASS: hr can only update application status';
 end $$;
 
+-- hr CAN schedule interviews and record interview Q&A (0005)
+update applications
+set interview_at = now() + interval '2 days',
+    interview_qa = '[{"question":"سؤال","answer":"جواب","source":"hr"}]'
+where ref_code = 'TRK-TEST-001';
+select 'hr: interview fields updatable' as test,
+       exists (
+         select 1 from applications
+         where ref_code = 'TRK-TEST-001'
+           and interview_at is not null
+           and jsonb_array_length(interview_qa) = 1
+       ) as pass;
+
+-- hr CANNOT tamper with applicant screening answers
+do $$
+begin
+  update applications set screening_answers = '[]' where ref_code = 'TRK-TEST-001';
+  raise notice 'FAIL: hr updated screening_answers';
+exception when sqlstate '42501' then
+  raise notice 'PASS: hr cannot update screening_answers';
+end $$;
+
 -- hr CANNOT hard-delete applications
 do $$
 begin

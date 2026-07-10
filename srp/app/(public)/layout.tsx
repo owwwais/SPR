@@ -29,6 +29,12 @@ export default function PublicLayout({
               {ar.nav.jobs}
             </Link>
             <Link
+              href="/track"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {ar.nav.track}
+            </Link>
+            <Link
               href="/login"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >

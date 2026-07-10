@@ -20,7 +20,17 @@ function formValues(formData: FormData) {
     skills: String(formData.get("skills") ?? ""),
     min_years_experience: String(formData.get("min_years_experience") ?? "0"),
     closes_at: String(formData.get("closes_at") ?? ""),
+    screening_questions: String(formData.get("screening_questions") ?? "[]"),
   };
+}
+
+function formError(parseError: { issues: Array<{ path: PropertyKey[] }> }) {
+  const questionsIssue = parseError.issues.some(
+    (issue) => issue.path[0] === "screening_questions"
+  );
+  return questionsIssue
+    ? ar.adminJobs.questions.errors.invalid
+    : ar.adminJobs.errors.invalidInput;
 }
 
 // Public pages are ISR-cached (60s); refresh them immediately after HR edits.
@@ -38,7 +48,7 @@ export async function createJob(
   const profile = await requireProfile();
   const parsed = jobSchema.safeParse(formValues(formData));
   if (!parsed.success) {
-    return { error: ar.adminJobs.errors.invalidInput };
+    return { error: formError(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -62,7 +72,7 @@ export async function updateJob(
   await requireProfile();
   const parsed = jobSchema.safeParse(formValues(formData));
   if (!parsed.success) {
-    return { error: ar.adminJobs.errors.invalidInput };
+    return { error: formError(parsed.error) };
   }
 
   const supabase = await createClient();

@@ -81,6 +81,7 @@ export type Database = {
           min_years_experience: number | null;
           status: JobStatus;
           closes_at: string | null;
+          screening_questions: Json;
           created_by: string | null;
           created_at: string;
           deleted_at: string | null;
@@ -97,6 +98,7 @@ export type Database = {
           min_years_experience?: number | null;
           status?: JobStatus;
           closes_at?: string | null;
+          screening_questions?: Json;
           created_by?: string | null;
           created_at?: string;
           deleted_at?: string | null;
@@ -113,6 +115,7 @@ export type Database = {
           min_years_experience?: number | null;
           status?: JobStatus;
           closes_at?: string | null;
+          screening_questions?: Json;
           created_by?: string | null;
           created_at?: string;
           deleted_at?: string | null;
@@ -133,6 +136,9 @@ export type Database = {
           status: AppStatus;
           analysis_status: AnalysisStatus;
           analysis_attempts: number;
+          screening_answers: Json;
+          interview_at: string | null;
+          interview_qa: Json;
           created_at: string;
         };
         Insert: {
@@ -148,6 +154,9 @@ export type Database = {
           status?: AppStatus;
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
+          screening_answers?: Json;
+          interview_at?: string | null;
+          interview_qa?: Json;
           created_at?: string;
         };
         Update: {
@@ -163,6 +172,9 @@ export type Database = {
           status?: AppStatus;
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
+          screening_answers?: Json;
+          interview_at?: string | null;
+          interview_qa?: Json;
           created_at?: string;
         };
         Relationships: [

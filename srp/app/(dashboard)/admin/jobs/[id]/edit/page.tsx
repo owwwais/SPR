@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { JobForm } from "@/components/admin/job-form";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { ScreeningQuestions } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 import { updateJob } from "../../actions";
 
@@ -26,11 +27,15 @@ export default async function EditJobPage({
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,deleted_at"
+      "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,screening_questions,deleted_at"
     )
     .eq("id", id)
     .maybeSingle();
   if (!job || job.deleted_at) notFound();
+
+  const screeningQuestions = ScreeningQuestions.safeParse(
+    job.screening_questions
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,6 +55,9 @@ export default async function EditJobPage({
           skills: job.skills.join(", "),
           min_years_experience: job.min_years_experience ?? 0,
           closes_at: job.closes_at ?? "",
+          screening_questions: screeningQuestions.success
+            ? screeningQuestions.data
+            : [],
         }}
       />
     </div>
