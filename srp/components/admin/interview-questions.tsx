@@ -42,6 +42,14 @@ export function InterviewQuestions({
     saveInterviewNotes.bind(null, applicationId),
     { saved: false, error: null }
   );
+  // Controlled + render-synced with the server value (uncontrolled
+  // defaultValue must not change after mount).
+  const [notes, setNotes] = useState(initialNotes);
+  const [prevNotes, setPrevNotes] = useState(initialNotes);
+  if (prevNotes !== initialNotes) {
+    setPrevNotes(initialNotes);
+    setNotes(initialNotes);
+  }
   const t = ar.evaluation;
 
   const copyAll = async () => {
@@ -93,7 +101,8 @@ export function InterviewQuestions({
           name="interview_notes"
           rows={5}
           maxLength={4000}
-          defaultValue={initialNotes}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           placeholder={t.notesPlaceholder}
         />
         <div className="flex items-center gap-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,20 @@ export function CompanySettingsForm({
     updateSettings,
     initialState
   );
+  // Controlled fields synced with the server values after revalidation
+  // (uncontrolled defaultValue must never change after mount — Base UI
+  // warns and the displayed value would go stale).
+  const [name, setName] = useState(companyName);
+  const [months, setMonths] = useState(String(retentionMonths));
+  const [prev, setPrev] = useState({ companyName, retentionMonths });
+  if (
+    prev.companyName !== companyName ||
+    prev.retentionMonths !== retentionMonths
+  ) {
+    setPrev({ companyName, retentionMonths });
+    setName(companyName);
+    setMonths(String(retentionMonths));
+  }
   const t = ar.settingsPage;
 
   return (
@@ -55,7 +69,8 @@ export function CompanySettingsForm({
           id="company_name"
           name="company_name"
           maxLength={200}
-          defaultValue={companyName}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
         />
       </div>
       <div className="flex flex-col gap-2">
@@ -67,7 +82,8 @@ export function CompanySettingsForm({
           min={1}
           max={60}
           required
-          defaultValue={retentionMonths}
+          value={months}
+          onChange={(e) => setMonths(e.target.value)}
           className="max-w-32"
         />
         <p className="text-xs text-muted-foreground">{t.retentionHint}</p>
@@ -93,12 +109,19 @@ export function MemberRoleForm({
     updateMemberRole.bind(null, memberId),
     initialState
   );
+  const [role, setRole] = useState<UserRole>(currentRole);
+  const [prevRole, setPrevRole] = useState<UserRole>(currentRole);
+  if (prevRole !== currentRole) {
+    setPrevRole(currentRole);
+    setRole(currentRole);
+  }
 
   return (
     <form action={formAction} className="flex items-center gap-2">
       <select
         name="role"
-        defaultValue={currentRole}
+        value={role}
+        onChange={(e) => setRole(e.target.value as UserRole)}
         className={selectClass}
         aria-label={ar.settingsPage.role}
       >
