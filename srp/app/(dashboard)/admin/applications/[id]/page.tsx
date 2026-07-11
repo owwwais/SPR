@@ -16,12 +16,13 @@ import { z } from "zod";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   InterviewQuestions,
   type InterviewQuestion,
@@ -46,6 +47,8 @@ export const metadata: Metadata = {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const TAB_IDS = ["profile", "evaluation", "questions", "interview"] as const;
 
 // Defensive re-validation of stored jsonb before display (§10.5) — data was
 // zod-validated before persist, but never render anything that no longer
@@ -79,12 +82,18 @@ const BREAKDOWN_MAX = {
 
 export default async function ApplicationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   await requireProfile();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
+  const sp = await searchParams;
+  const activeTab = TAB_IDS.includes(sp.tab as (typeof TAB_IDS)[number])
+    ? (sp.tab as (typeof TAB_IDS)[number])
+    : "profile";
 
   const supabase = await createClient();
   const { data: application } = await supabase
@@ -149,6 +158,7 @@ export default async function ApplicationPage({
 
   const currentPath = `/admin/applications/${id}`;
   const t = ar.evaluation;
+  const tabs = ar.application.tabs;
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
@@ -186,263 +196,298 @@ export default async function ApplicationPage({
         </div>
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-            <span>
-              {ar.application.email}:{" "}
-              <a
-                dir="ltr"
-                href={`mailto:${application.email}`}
-                className="text-primary hover:underline"
-              >
-                {application.email}
-              </a>
-            </span>
-            <span>
-              {ar.application.phone}:{" "}
-              <a
-                dir="ltr"
-                href={`tel:${application.phone}`}
-                className="text-primary hover:underline"
-              >
-                {application.phone}
-              </a>
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {cvUrl ? (
-              <>
-                <Button
-                  nativeButton={false}
-                  render={
-                    <a href={cvUrl} target="_blank" rel="noopener noreferrer" />
-                  }
-                >
-                  <ExternalLink className="size-4" aria-hidden />
-                  {ar.application.viewCv}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {ar.application.cvLinkNote}
+      <Tabs defaultValue={activeTab}>
+        <TabsList className="w-full sm:w-fit">
+          <TabsTrigger value="profile">{tabs.profile}</TabsTrigger>
+          <TabsTrigger value="evaluation">{tabs.evaluation}</TabsTrigger>
+          <TabsTrigger value="questions">{tabs.questions}</TabsTrigger>
+          <TabsTrigger value="interview">{tabs.interview}</TabsTrigger>
+        </TabsList>
+
+        {/* ------------------------------ الملف ------------------------------ */}
+        <TabsContent value="profile">
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                <span>
+                  {ar.application.email}:{" "}
+                  <a
+                    dir="ltr"
+                    href={`mailto:${application.email}`}
+                    className="text-primary hover:underline"
+                  >
+                    {application.email}
+                  </a>
                 </span>
-              </>
-            ) : (
-              <span className="text-sm text-destructive">
-                {ar.application.cvUnavailable}
-              </span>
-            )}
-          </div>
-          {application.cover_note && (
-            <div className="rounded-lg bg-muted/50 p-4">
-              <h3 className="mb-1 text-sm font-semibold">
-                {ar.application.coverNote}
-              </h3>
-              <p className="whitespace-pre-wrap text-sm">
-                {application.cover_note}
-              </p>
-            </div>
-          )}
-          {screeningAnswers.length > 0 && (
-            <div className="rounded-lg bg-muted/50 p-4">
-              <h3 className="mb-2 text-sm font-semibold">
-                {ar.application.screeningTitle}
-              </h3>
-              <dl className="flex flex-col gap-3">
-                {screeningAnswers.map((entry) => (
-                  <div key={entry.question_id} className="text-sm">
-                    <dt className="font-medium">{entry.label}</dt>
-                    <dd className="mt-0.5 whitespace-pre-wrap text-muted-foreground">
-                      {Array.isArray(entry.answer)
-                        ? entry.answer.join("، ")
-                        : entry.answer}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
-          <div className="border-t pt-4">
-            <StatusChanger
-              applicationId={application.id}
-              currentStatus={application.status}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t.sectionTitle}</CardTitle>
-          {/* §10.4: the advisory framing must always be visible. */}
-          <p className="text-sm text-muted-foreground">
-            {t.advisoryDisclaimer}
-          </p>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          {(application.analysis_status === "pending" ||
-            application.analysis_status === "processing") && (
-            <div className="flex items-center gap-2 rounded-lg border border-dashed p-6 text-muted-foreground">
-              <Loader2 className="size-5 animate-spin" aria-hidden />
-              {application.analysis_status === "pending"
-                ? t.pendingAnalysis
-                : t.processingAnalysis}
-            </div>
-          )}
-
-          {application.analysis_status === "failed" && (
-            <div className="flex flex-col gap-3">
-              <Alert variant="destructive">
-                <AlertCircle className="size-4" aria-hidden />
-                <AlertDescription>
-                  {t.failedAnalysis} ({t.attempts}:{" "}
-                  {application.analysis_attempts})
-                </AlertDescription>
-              </Alert>
-              <form action={reRunAnalysis.bind(null, id, currentPath)}>
-                <Button type="submit" variant="outline">
-                  <RefreshCw className="size-4" aria-hidden />
-                  {t.retry}
-                </Button>
-              </form>
-            </div>
-          )}
-
-          {application.analysis_status === "done" && !evaluation && (
-            <p className="text-sm text-muted-foreground">{t.unavailable}</p>
-          )}
-
-          {evaluation && evaluationMeta && (
-            <>
-              <div className="flex flex-wrap items-center gap-4">
-                <span
-                  title={t.advisoryTooltip}
-                  className={`inline-flex items-baseline gap-2 rounded-xl px-4 py-2 text-3xl font-bold tabular-nums ${scoreBandClass(evaluation.fit_score)}`}
-                >
-                  {evaluation.fit_score}
-                  <span className="text-xs font-medium">{t.advisory}</span>
+                <span>
+                  {ar.application.phone}:{" "}
+                  <a
+                    dir="ltr"
+                    href={`tel:${application.phone}`}
+                    className="text-primary hover:underline"
+                  >
+                    {application.phone}
+                  </a>
                 </span>
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-medium">{t.fitScore}</span>
-                  {evaluation.justification.confidence === "low" && (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500 text-amber-700 dark:text-amber-400"
-                    >
-                      <TriangleAlert className="size-3" aria-hidden />
-                      {t.confidenceLow}
-                    </Badge>
-                  )}
-                </div>
-                <form
-                  action={reRunAnalysis.bind(null, id, currentPath)}
-                  className="ms-auto"
-                >
-                  <Button type="submit" variant="ghost" size="sm">
-                    <RefreshCw className="size-3.5" aria-hidden />
-                    {t.retry}
-                  </Button>
-                </form>
               </div>
-
-              <section className="flex flex-col gap-2">
-                <h3 className="font-semibold">{t.scoreBreakdown}</h3>
-                <div className="flex flex-col gap-2">
-                  {(
-                    Object.keys(BREAKDOWN_MAX) as Array<
-                      keyof typeof BREAKDOWN_MAX
+              <div className="flex flex-wrap items-center gap-3">
+                {cvUrl ? (
+                  <>
+                    <Button
+                      nativeButton={false}
+                      render={
+                        <a
+                          href={cvUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        />
+                      }
                     >
-                  ).map((key) => {
-                    const value = evaluation.score_breakdown[key];
-                    const max = BREAKDOWN_MAX[key];
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <span className="w-40 shrink-0 text-sm">
-                          {t.criteria[key]}
-                        </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary"
-                            style={{ width: `${(value / max) * 100}%` }}
-                          />
-                        </div>
-                        <span className="w-14 shrink-0 text-end text-sm tabular-nums text-muted-foreground">
-                          {value} / {max}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      <ExternalLink className="size-4" aria-hidden />
+                      {ar.application.viewCv}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {ar.application.cvLinkNote}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm text-destructive">
+                    {ar.application.cvUnavailable}
+                  </span>
+                )}
+              </div>
+              {application.cover_note && (
+                <div className="rounded-lg bg-muted/50 p-4">
+                  <h3 className="mb-1 text-sm font-semibold">
+                    {ar.application.coverNote}
+                  </h3>
+                  <p className="whitespace-pre-wrap text-sm">
+                    {application.cover_note}
+                  </p>
                 </div>
-              </section>
-
-              <section className="grid gap-4 sm:grid-cols-3">
-                <JustificationList
-                  title={t.strengths}
-                  items={evaluation.justification.strengths}
-                  icon={
-                    <CircleCheck
-                      className="size-4 shrink-0 text-emerald-600"
-                      aria-hidden
-                    />
-                  }
+              )}
+              {screeningAnswers.length > 0 && (
+                <div className="rounded-lg bg-muted/50 p-4">
+                  <h3 className="mb-2 text-sm font-semibold">
+                    {ar.application.screeningTitle}
+                  </h3>
+                  <dl className="flex flex-col gap-3">
+                    {screeningAnswers.map((entry) => (
+                      <div key={entry.question_id} className="text-sm">
+                        <dt className="font-medium">{entry.label}</dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap text-muted-foreground">
+                          {Array.isArray(entry.answer)
+                            ? entry.answer.join("، ")
+                            : entry.answer}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+              <div className="border-t pt-4">
+                <StatusChanger
+                  applicationId={application.id}
+                  currentStatus={application.status}
                 />
-                <JustificationList
-                  title={t.gaps}
-                  items={evaluation.justification.gaps}
-                  icon={
-                    <CircleAlert
-                      className="size-4 shrink-0 text-amber-600"
-                      aria-hidden
-                    />
-                  }
-                />
-                <JustificationList
-                  title={t.redFlags}
-                  items={evaluation.justification.red_flags}
-                  icon={
-                    <Flag className="size-4 shrink-0 text-red-600" aria-hidden />
-                  }
-                />
-              </section>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              <ExtractedProfile extracted={evaluation.extracted} />
-
-              <InterviewQuestions
-                applicationId={id}
-                questions={evaluation.interview_questions as InterviewQuestion[]}
-                initialNotes={evaluationMeta.interview_notes ?? ""}
-              />
-
-              <p className="border-t pt-3 text-xs text-muted-foreground">
-                {t.meta
-                  .replace("{model}", evaluationMeta.model)
-                  .replace("{version}", evaluationMeta.prompt_version)}{" "}
-                — {formatDateTime(evaluationMeta.created_at)}
+        {/* --------------------------- التقييم الذكي --------------------------- */}
+        <TabsContent value="evaluation">
+          <Card>
+            <CardContent className="flex flex-col gap-6">
+              {/* §10.4: the advisory framing must always be visible. */}
+              <p className="text-sm text-muted-foreground">
+                {t.advisoryDisclaimer}
               </p>
-            </>
-          )}
-        </CardContent>
-      </Card>
 
-      <Card id="interview" className="scroll-mt-6">
-        <CardHeader>
-          <CardTitle>{ar.interview.manageTitle}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {application.interview_at
-              ? `${ar.interview.scheduleLabel}: ${formatDateTime(application.interview_at)}`
-              : ar.interview.notScheduled}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <InterviewManager
-            applicationId={id}
-            aiQuestions={
-              evaluation?.interview_questions.map((q) => q.question) ?? []
-            }
-            initialQa={interviewQa}
-            initialAt={application.interview_at}
-          />
-        </CardContent>
-      </Card>
+              {(application.analysis_status === "pending" ||
+                application.analysis_status === "processing") && (
+                <div className="flex items-center gap-2 rounded-lg border border-dashed p-6 text-muted-foreground">
+                  <Loader2 className="size-5 animate-spin" aria-hidden />
+                  {application.analysis_status === "pending"
+                    ? t.pendingAnalysis
+                    : t.processingAnalysis}
+                </div>
+              )}
+
+              {application.analysis_status === "failed" && (
+                <div className="flex flex-col gap-3">
+                  <Alert variant="destructive">
+                    <AlertCircle className="size-4" aria-hidden />
+                    <AlertDescription>
+                      {t.failedAnalysis} ({t.attempts}:{" "}
+                      {application.analysis_attempts})
+                    </AlertDescription>
+                  </Alert>
+                  <form action={reRunAnalysis.bind(null, id, currentPath)}>
+                    <Button type="submit" variant="outline">
+                      <RefreshCw className="size-4" aria-hidden />
+                      {t.retry}
+                    </Button>
+                  </form>
+                </div>
+              )}
+
+              {application.analysis_status === "done" && !evaluation && (
+                <p className="text-sm text-muted-foreground">{t.unavailable}</p>
+              )}
+
+              {evaluation && evaluationMeta && (
+                <>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <span
+                      title={t.advisoryTooltip}
+                      className={`inline-flex items-baseline gap-2 rounded-xl px-4 py-2 text-3xl font-bold tabular-nums ${scoreBandClass(evaluation.fit_score)}`}
+                    >
+                      {evaluation.fit_score}
+                      <span className="text-xs font-medium">{t.advisory}</span>
+                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-medium">{t.fitScore}</span>
+                      {evaluation.justification.confidence === "low" && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500 text-amber-700 dark:text-amber-400"
+                        >
+                          <TriangleAlert className="size-3" aria-hidden />
+                          {t.confidenceLow}
+                        </Badge>
+                      )}
+                    </div>
+                    <form
+                      action={reRunAnalysis.bind(null, id, currentPath)}
+                      className="ms-auto"
+                    >
+                      <Button type="submit" variant="ghost" size="sm">
+                        <RefreshCw className="size-3.5" aria-hidden />
+                        {t.retry}
+                      </Button>
+                    </form>
+                  </div>
+
+                  <section className="flex flex-col gap-2">
+                    <h3 className="font-semibold">{t.scoreBreakdown}</h3>
+                    <div className="flex flex-col gap-2">
+                      {(
+                        Object.keys(BREAKDOWN_MAX) as Array<
+                          keyof typeof BREAKDOWN_MAX
+                        >
+                      ).map((key) => {
+                        const value = evaluation.score_breakdown[key];
+                        const max = BREAKDOWN_MAX[key];
+                        return (
+                          <div key={key} className="flex items-center gap-3">
+                            <span className="w-40 shrink-0 text-sm">
+                              {t.criteria[key]}
+                            </span>
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{ width: `${(value / max) * 100}%` }}
+                              />
+                            </div>
+                            <span className="w-14 shrink-0 text-end text-sm tabular-nums text-muted-foreground">
+                              {value} / {max}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="grid gap-4 sm:grid-cols-3">
+                    <JustificationList
+                      title={t.strengths}
+                      items={evaluation.justification.strengths}
+                      icon={
+                        <CircleCheck
+                          className="size-4 shrink-0 text-emerald-600"
+                          aria-hidden
+                        />
+                      }
+                    />
+                    <JustificationList
+                      title={t.gaps}
+                      items={evaluation.justification.gaps}
+                      icon={
+                        <CircleAlert
+                          className="size-4 shrink-0 text-amber-600"
+                          aria-hidden
+                        />
+                      }
+                    />
+                    <JustificationList
+                      title={t.redFlags}
+                      items={evaluation.justification.red_flags}
+                      icon={
+                        <Flag
+                          className="size-4 shrink-0 text-red-600"
+                          aria-hidden
+                        />
+                      }
+                    />
+                  </section>
+
+                  <ExtractedProfile extracted={evaluation.extracted} />
+
+                  <p className="border-t pt-3 text-xs text-muted-foreground">
+                    {t.meta
+                      .replace("{model}", evaluationMeta.model)
+                      .replace("{version}", evaluationMeta.prompt_version)}{" "}
+                    — {formatDateTime(evaluationMeta.created_at)}
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* -------------------------- أسئلة المقابلة -------------------------- */}
+        <TabsContent value="questions">
+          <Card>
+            <CardContent>
+              {evaluation && evaluationMeta ? (
+                <InterviewQuestions
+                  applicationId={id}
+                  questions={
+                    evaluation.interview_questions as InterviewQuestion[]
+                  }
+                  initialNotes={evaluationMeta.interview_notes ?? ""}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {t.unavailable}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ------------------------------ المقابلة ----------------------------- */}
+        <TabsContent value="interview">
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                {application.interview_at
+                  ? `${ar.interview.scheduleLabel}: ${formatDateTime(application.interview_at)}`
+                  : ar.interview.notScheduled}
+              </p>
+              <InterviewManager
+                applicationId={id}
+                aiQuestions={
+                  evaluation?.interview_questions.map((q) => q.question) ?? []
+                }
+                initialQa={interviewQa}
+                initialAt={application.interview_at}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -508,7 +553,10 @@ function ExtractedProfile({
                 <span className="font-medium">
                   {exp.title}
                   {exp.company && (
-                    <span className="text-muted-foreground"> — {exp.company}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      — {exp.company}
+                    </span>
                   )}
                 </span>
                 <span dir="ltr" className="text-xs text-muted-foreground">

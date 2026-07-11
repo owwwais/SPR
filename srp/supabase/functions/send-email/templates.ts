@@ -4,6 +4,7 @@
 export type EmailKind =
   | "application_received"
   | "interview_invited"
+  | "accepted"
   | "rejected";
 
 type TemplateInput = {
@@ -67,6 +68,19 @@ export function buildEmail(
            <p>سيتواصل معك فريق التوظيف قريباً لتنسيق موعد المقابلة وتفاصيلها.</p>
            <p>رمز المتابعة الخاص بك: <strong dir="ltr" style="font-family:monospace">${input.refCode}</strong></p>
            ${trackLine}`,
+          input.companyName
+        ),
+      };
+    }
+    case "accepted": {
+      return {
+        subject: `تهانينا — ${input.jobTitle}`,
+        html: layout(
+          "تهانينا!",
+          `<p>مرحباً ${input.fullName}،</p>
+           <p>يسعدنا إبلاغك بقبولك لوظيفة <strong>${input.jobTitle}</strong>. 🎉</p>
+           <p>سيتواصل معك فريق التوظيف قريباً لاستكمال إجراءات التعيين والتفاصيل التالية.</p>
+           <p>نتطلع لانضمامك إلينا!</p>`,
           input.companyName
         ),
       };

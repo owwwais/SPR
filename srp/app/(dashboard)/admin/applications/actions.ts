@@ -48,10 +48,11 @@ const APP_STATUSES: AppStatus[] = [
   "rejected",
 ];
 
-// FR-08: templates exist for interview & rejection only ("received" goes out
-// at submission time); other transitions send no email.
+// Applicant emails per status ("received" goes out at submission time;
+// under_review sends nothing). Acceptance email added by engineer request.
 const STATUS_EMAIL_KIND: Partial<Record<AppStatus, string>> = {
   interview: "interview_invited",
+  accepted: "accepted",
   rejected: "rejected",
 };
 

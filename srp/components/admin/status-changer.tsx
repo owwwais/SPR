@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,9 @@ const selectClass =
 
 // FR-08 control. The RPC + trigger handle validation/history server-side;
 // accept/reject remains a human action — nothing here is automated.
+// The select is CONTROLLED: React 19 resets uncontrolled form fields to
+// their defaults after a form action completes, which made the selection
+// visually snap back to the old status.
 export function StatusChanger({
   applicationId,
   currentStatus,
@@ -39,6 +42,16 @@ export function StatusChanger({
     changed: false,
     error: null,
   });
+  const [selected, setSelected] = useState<AppStatus>(currentStatus);
+  const [prevStatus, setPrevStatus] = useState<AppStatus>(currentStatus);
+
+  // Follow the authoritative status after revalidation (React's documented
+  // "adjust state during render" pattern — no effect needed).
+  if (prevStatus !== currentStatus) {
+    setPrevStatus(currentStatus);
+    setSelected(currentStatus);
+  }
+
   const t = ar.application.statusChange;
 
   return (
@@ -51,7 +64,8 @@ export function StatusChanger({
             id="status"
             name="status"
             required
-            defaultValue={currentStatus}
+            value={selected}
+            onChange={(e) => setSelected(e.target.value as AppStatus)}
             className={selectClass}
           >
             {APP_STATUSES.map((status) => (
@@ -68,7 +82,11 @@ export function StatusChanger({
       </div>
       <p className="text-xs text-muted-foreground">{t.emailHint}</p>
       <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending || selected === currentStatus}
+        >
           {pending ? t.updating : t.submit}
         </Button>
         {state.changed && !pending && (

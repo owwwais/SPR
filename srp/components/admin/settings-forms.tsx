@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  createMember,
   updateMemberRole,
   updateSettings,
   type SettingsState,
@@ -119,4 +120,84 @@ export function MemberRoleForm({
 
 export function MemberRoleBadge({ role }: { role: UserRole }) {
   return <Badge variant="secondary">{ar.admin.roles[role]}</Badge>;
+}
+
+// Admin creates HR/admin accounts directly from the platform (relayed to
+// the manage-users Edge Function).
+export function AddMemberForm() {
+  const [state, formAction, pending] = useActionState(
+    createMember,
+    initialState
+  );
+  const t = ar.settingsPage.addMember;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <h3 className="font-semibold">{t.title}</h3>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="member_full_name">{t.fullName}</Label>
+          <Input
+            id="member_full_name"
+            name="full_name"
+            required
+            minLength={2}
+            maxLength={120}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="member_email">{t.email}</Label>
+          <Input
+            id="member_email"
+            name="email"
+            type="email"
+            required
+            dir="ltr"
+            className="text-start"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="member_password">{t.password}</Label>
+          <Input
+            id="member_password"
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            maxLength={72}
+            dir="ltr"
+            className="text-start"
+            autoComplete="new-password"
+          />
+          <p className="text-xs text-muted-foreground">{t.passwordHint}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="member_role">{t.role}</Label>
+          <select
+            id="member_role"
+            name="role"
+            defaultValue="hr"
+            className={selectClass + " h-9"}
+          >
+            <option value="hr">{ar.admin.roles.hr}</option>
+            <option value="admin">{ar.admin.roles.admin}</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={pending}>
+          {pending ? t.creating : t.submit}
+        </Button>
+        {state.saved && !pending && (
+          <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <Check className="size-4" aria-hidden />
+            {t.created}
+          </span>
+        )}
+        {state.error && !pending && (
+          <span className="text-sm text-destructive">{state.error}</span>
+        )}
+      </div>
+    </form>
+  );
 }

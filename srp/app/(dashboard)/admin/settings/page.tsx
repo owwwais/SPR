@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  AddMemberForm,
   CompanySettingsForm,
   MemberRoleBadge,
   MemberRoleForm,
@@ -107,6 +108,9 @@ export default async function AdminSettingsPage() {
               ))}
             </TableBody>
           </Table>
+          <div className="mt-6 border-t pt-6">
+            <AddMemberForm />
+          </div>
         </CardContent>
       </Card>
     </div>

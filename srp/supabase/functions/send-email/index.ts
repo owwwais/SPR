@@ -11,6 +11,7 @@ import { buildEmail, type EmailKind } from "./templates.ts";
 const EMAIL_KINDS: EmailKind[] = [
   "application_received",
   "interview_invited",
+  "accepted",
   "rejected",
 ];
 
