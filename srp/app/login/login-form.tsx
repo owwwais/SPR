@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { AlertCircle } from "lucide-react";
 import { signIn, type LoginState } from "./actions";
@@ -11,11 +12,12 @@ import { ar } from "@/lib/i18n/ar";
 
 const initialState: LoginState = { error: null };
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       {state.error && (
         <Alert variant="destructive">
           <AlertCircle className="size-4" aria-hidden />
@@ -49,6 +51,12 @@ export function LoginForm() {
       <Button type="submit" disabled={pending} className="mt-2">
         {pending ? ar.auth.signingIn : ar.auth.submit}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">
+        {ar.auth.noAccount}{" "}
+        <Link href="/signup" className="text-primary hover:underline">
+          {ar.auth.signupSubmit}
+        </Link>
+      </p>
     </form>
   );
 }

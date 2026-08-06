@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Turnstile } from "@/components/jobs/turnstile";
 import type { ApplyState } from "@/app/(public)/jobs/[id]/apply/actions";
 import {
   CV_MAX_BYTES,
@@ -86,9 +87,11 @@ function ScreeningField({
 export function ApplyForm({
   action,
   questions,
+  turnstileSiteKey,
 }: {
   action: (prev: ApplyState, formData: FormData) => Promise<ApplyState>;
   questions: ScreeningQuestionType[];
+  turnstileSiteKey: string | null;
 }) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const [cvError, setCvError] = useState<string | null>(null);
@@ -220,6 +223,8 @@ export function ApplyForm({
           ))}
         </fieldset>
       )}
+
+      <Turnstile siteKey={turnstileSiteKey} />
 
       <Button type="submit" size="lg" disabled={pending || cvError !== null}>
         {pending ? t.submitting : t.submit}

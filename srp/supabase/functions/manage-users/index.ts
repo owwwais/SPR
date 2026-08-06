@@ -7,12 +7,17 @@
 //     of THIS org?") instead of the global profiles.role = 'admin', and
 //   * the new user gets a membership row in that org, not a global role.
 //
-// Contract: POST { action: "create", org_id, email, password, full_name, role }
-// The caller's JWT must belong to an owner or admin of org_id. Only an owner
-// may create another owner.
+// Two actions, both requiring the caller's JWT to belong to an owner or admin
+// of org_id, and both refusing to mint an owner unless the caller is one:
 //
-// The invitation flow (email link, no admin-chosen password) lands in S2;
-// until then this stays the way a tenant adds a colleague.
+//   { action: "invite", org_id, email, role }
+//     The normal path. Creates a one-time invitation and emails the link; the
+//     colleague chooses their own password and accept_invitation() binds the
+//     invitation to their address.
+//
+//   { action: "create", org_id, email, password, full_name, role }
+//     Kept for the case where email delivery is not available — the admin
+//     sets a temporary password and passes it on out of band.
 import { createClient } from "@supabase/supabase-js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -66,6 +71,26 @@ async function findUserIdByEmail(
   return null;
 }
 
+// A one-time invitation token. Only its SHA-256 lands in the database, so a
+// read of the invitations table yields nothing a thief could redeem.
+function generateToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value)
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
 
@@ -83,7 +108,7 @@ Deno.serve(async (req) => {
     return json(400, { error: "invalid JSON body" });
   }
 
-  if (payload.action !== "create") {
+  if (payload.action !== "create" && payload.action !== "invite") {
     return json(400, { error: "unsupported action" });
   }
 
@@ -99,11 +124,13 @@ Deno.serve(async (req) => {
   if (!EMAIL_RE.test(email) || email.length > 200) {
     return json(400, { error: "invalid email" });
   }
-  if (password.length < 8 || password.length > 72) {
-    return json(400, { error: "invalid password" });
-  }
-  if (fullName.length < 2 || fullName.length > 120) {
-    return json(400, { error: "invalid full_name" });
+  if (payload.action === "create") {
+    if (password.length < 8 || password.length > 72) {
+      return json(400, { error: "invalid password" });
+    }
+    if (fullName.length < 2 || fullName.length > 120) {
+      return json(400, { error: "invalid full_name" });
+    }
   }
 
   const actorRole = await callerRole(req, orgId);
@@ -120,6 +147,64 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  // ---- invite: the preferred path (S2) ----
+  // No admin-chosen password: the colleague sets their own credentials, and
+  // the invitation is bound to their email address by accept_invitation().
+  if (payload.action === "invite") {
+    const token = generateToken();
+    const tokenHash = await sha256Hex(token);
+
+    // A pending invitation for this address is replaced rather than
+    // duplicated — the partial unique index (0009) would reject a second one,
+    // and re-inviting should just resend a fresh link.
+    await admin
+      .from("invitations")
+      .update({ status: "revoked" })
+      .eq("org_id", orgId)
+      .eq("email", email)
+      .eq("status", "pending");
+
+    const { data: invitation, error: inviteError } = await admin
+      .from("invitations")
+      .insert({
+        org_id: orgId,
+        email,
+        role,
+        token_hash: tokenHash,
+      })
+      .select("id")
+      .single();
+    if (inviteError || !invitation) {
+      console.error("invitation insert failed:", inviteError?.message);
+      return json(500, { error: "invite failed" });
+    }
+
+    // The token travels to the mailer once and is never stored in the clear.
+    const mailRes = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-email`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({
+          kind: "invitation",
+          invitation_id: invitation.id,
+          token,
+        }),
+      }
+    );
+    if (!mailRes.ok) {
+      // The invitation exists and can be resent; do not fail the whole call.
+      console.error(`invitation email returned HTTP ${mailRes.status}`);
+      return json(200, { ok: true, invitation_id: invitation.id, emailed: false });
+    }
+
+    console.log(`invitation sent (role=${role})`);
+    return json(200, { ok: true, invitation_id: invitation.id, emailed: true });
+  }
 
   const { data: created, error: createError } =
     await admin.auth.admin.createUser({

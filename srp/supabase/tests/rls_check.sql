@@ -358,11 +358,35 @@ select 'storage: cvs bucket is private with 5MB limit + mime whitelist' as test,
            and allowed_mime_types @> array['application/pdf']
        ) as pass;
 
+-- 0011 added write policies for the public org-assets bucket, so this can no
+-- longer assert "no write policies on storage.objects" — it has to name the
+-- bucket the invariant is actually about. Applicants' CVs are written only by
+-- the service role: submit-application on the way in (D15), the retention job
+-- on the way out (D9).
 select 'storage: no client role may write to the cvs bucket' as test,
        not exists (
          select 1 from pg_policies
          where schemaname = 'storage' and tablename = 'objects'
            and cmd in ('INSERT','UPDATE','DELETE','ALL')
+           and coalesce(qual, '') || coalesce(with_check, '') like '%cvs%'
+       ) as pass;
+
+-- The branding bucket is public to read and admin-only to write, and its
+-- policies must not reach into cvs.
+select 'storage: org-assets is readable by anyone' as test,
+       exists (
+         select 1 from pg_policies
+         where schemaname = 'storage' and tablename = 'objects'
+           and cmd = 'SELECT' and coalesce(qual, '') like '%org-assets%'
+       ) as pass;
+
+select 'storage: org-assets writes require owner/admin of the folder' as test,
+       (select bool_and(
+          coalesce(qual, '') || coalesce(with_check, '') like '%is_org_member%')
+        from pg_policies
+        where schemaname = 'storage' and tablename = 'objects'
+          and cmd in ('INSERT','UPDATE','DELETE')
+          and coalesce(qual, '') || coalesce(with_check, '') like '%org-assets%'
        ) as pass;
 
 select 'rls: every tenant table has row level security enabled' as test,

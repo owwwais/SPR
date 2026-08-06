@@ -17,9 +17,16 @@ export const metadata: Metadata = {
   title: ar.auth.loginTitle,
 };
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
   const session = await getSession();
-  if (session) redirect("/admin");
+  // Same-site paths only — see safeNext() in actions.ts.
+  const target = next?.startsWith("/") && !next.startsWith("//") ? next : null;
+  if (session) redirect(target ?? "/admin");
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
@@ -33,7 +40,7 @@ export default async function LoginPage() {
           <CardDescription>{ar.auth.loginSubtitle}</CardDescription>
         </CardHeader>
         <CardContent>
-          <LoginForm />
+          <LoginForm next={target ?? undefined} />
         </CardContent>
       </Card>
     </div>

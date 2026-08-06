@@ -55,6 +55,7 @@ one platform owner. Full rationale in `docs/SAAS_PLAN.md`.
 | **D22** | **Impersonation is a time-boxed, reason-required, fully audited session** (60 minutes), surfaced with a permanent banner. It grants access through `current_org_ids()`, so RLS stays the single gate. |
 | **D23** | Arabic only in v1. D10's "no i18n framework" still holds. |
 | **D24** | "No score without justification" and "the decision is always human" are **product promises**, not just internal rules. They get a public page and an exportable transparency report. |
+| **D25** | **The product is named حكيم (`hakeem`).** It lives as `PRODUCT_NAME` / `PRODUCT_SLUG` in `lib/i18n/ar.ts` and nowhere else — no page, email or migration may hard-code it. The name carries the positioning: a حكيم advises, it does not rule (D24). Root domain is read from `NEXT_PUBLIC_ROOT_DOMAIN` so subdomain routing (D17) is never coupled to a literal. |
 
 **The isolation invariant (the one rule that outranks convenience):**
 > Every query against a tenant-scoped table filters by `org_id` **in application code**
@@ -71,12 +72,13 @@ create them ahead of their milestone.
 ```
 srp/
 ├── app/
-│   ├── (marketing)/                 # ☐ S6: landing, pricing, fairness, legal
 │   ├── (public)/
-│   │   ├── page.tsx                 # landing + featured jobs
-│   │   ├── jobs/                    # list + [id] details + apply form
-│   │   ├── c/[slug]/                # ☐ S3: per-tenant careers page
-│   │   ├── companies/               # ☐ S6: company directory
+│   │   ├── page.tsx                 # marketing landing (S6)
+│   │   ├── pricing/ fairness/       # marketing (S6)
+│   │   ├── privacy/ terms/          # legal (S9-mini)
+│   │   ├── jobs/                    # marketplace grouped by company + [id] + apply
+│   │   ├── c/[slug]/                # per-tenant careers page (S3)
+│   │   ├── companies/               # company directory (S6)
 │   │   └── track/[ref]/             # applicant status tracking by reference code
 │   ├── (dashboard)/admin/           # TENANT workspace, scoped to one org
 │   │   ├── jobs/                    # FR-01 manage jobs
@@ -85,7 +87,9 @@ srp/
 │   │   ├── stats/                   # FR-09
 │   │   └── settings/                # org profile, retention, team (admin only)
 │   ├── (platform)/platform/         # ☐ S4: PLATFORM console (owner only)
-│   └── login/
+│   ├── login/ signup/ onboarding/   # auth + org creation (S2)
+│   ├── invite/[token]/              # invitation acceptance (S2)
+│   ├── sitemap.ts robots.ts         # SEO (S6)
 ├── components/
 ├── lib/
 │   ├── supabase/                    # client factories
@@ -517,6 +521,14 @@ built. Same rule: **stop for engineer approval after each.**
 Deferred until the product has paying customers: **S4** (platform console),
 **S5** (billing and quota enforcement), **S7** (Notion design pass),
 **S8** (parity + differentiator features).
+
+**Status (2026-08-06): S1, S2, S3, S6 and S9-mini are complete and pushed.**
+Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
+`onboarding.sql` (23), `rls_check.sql` (42) — `npm run test:db` runs all
+three against a throwaway database. What remains before charging anyone:
+deploy S1 to production (`docs/S1_DEPLOY.md`), then S5 for billing — the
+pricing page publishes plans that are **not yet enforced**, since the quota
+check belongs inside `analyze-application` (D16).
 
 ---
 

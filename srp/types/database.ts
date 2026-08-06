@@ -32,6 +32,7 @@ export type AppStatus =
   | "accepted"
   | "rejected";
 export type AnalysisStatus = "pending" | "processing" | "done" | "failed";
+export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
 
 export type Database = {
   public: {
@@ -109,6 +110,46 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "memberships_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      invitations: {
+        Row: {
+          id: string;
+          org_id: string;
+          email: string;
+          role: MemberRole;
+          token_hash: string;
+          status: InviteStatus;
+          invited_by: string | null;
+          expires_at: string;
+          accepted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          email: string;
+          role?: MemberRole;
+          token_hash: string;
+          status?: InviteStatus;
+          invited_by?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        // Only the status is ever changed by a client (revoke); acceptance
+        // goes through accept_invitation().
+        Update: {
+          status?: InviteStatus;
+          role?: MemberRole;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invitations_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -425,6 +466,26 @@ export type Database = {
         Args: { p_ref_code: string };
         Returns: { to_status: AppStatus; created_at: string }[];
       };
+      create_organization: {
+        Args: { p_name: string; p_slug: string; p_full_name: string };
+        Returns: string;
+      };
+      accept_invitation: {
+        Args: { p_token: string; p_full_name?: string | null };
+        Returns: string;
+      };
+      invitation_preview: {
+        Args: { p_token: string };
+        Returns: {
+          org_name: string;
+          role: MemberRole;
+          expires_at: string;
+        }[];
+      };
+      slug_available: {
+        Args: { p_slug: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       job_status: JobStatus;
@@ -433,6 +494,7 @@ export type Database = {
       analysis_status: AnalysisStatus;
       member_role: MemberRole;
       org_status: OrgStatus;
+      invite_status: InviteStatus;
     };
     CompositeTypes: Record<string, never>;
   };
