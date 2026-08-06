@@ -35,7 +35,7 @@ const getJob = cache(async (id: string) => {
     const { data, error } = await supabase
       .from("jobs")
       .select(
-        "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,created_at"
+        "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,created_at,org_id,organizations!inner(slug,name,logo_path,status,deleted_at)"
       )
       .eq("id", id)
       .eq("status", "published")
@@ -45,12 +45,31 @@ const getJob = cache(async (id: string) => {
       console.error("job detail query failed:", error.message);
       return null;
     }
+    if (!data) return null;
+    const company = (data as unknown as { organizations: Company | null })
+      .organizations;
+    // A suspended or deleted tenant's jobs stop being public immediately.
+    if (
+      !company ||
+      company.deleted_at !== null ||
+      !["trial", "active"].includes(company.status)
+    ) {
+      return null;
+    }
     return data;
   } catch (err) {
     console.warn("job detail unavailable:", err instanceof Error ? err.message : err);
     return null;
   }
 });
+
+type Company = {
+  slug: string;
+  name: string;
+  logo_path: string | null;
+  status: string;
+  deleted_at: string | null;
+};
 
 export async function generateMetadata({
   params,
@@ -59,7 +78,65 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const job = await getJob(id);
-  return { title: job?.title ?? ar.nav.jobs };
+  if (!job) return { title: ar.nav.jobs };
+  const company = (job as unknown as { organizations: Company }).organizations;
+  return {
+    title: `${job.title} — ${company.name}`,
+    description: job.description.slice(0, 160),
+  };
+}
+
+// Google for Jobs indexes this. It is a free acquisition channel for every
+// tenant, which is a large part of why the shared marketplace exists (D21).
+function jobPostingJsonLd(
+  job: {
+    title: string;
+    description: string;
+    requirements: string;
+    created_at: string;
+    closes_at: string | null;
+    location: string | null;
+    type: string;
+  },
+  company: Company,
+  siteUrl: string | null
+) {
+  const EMPLOYMENT_TYPE: Record<string, string> = {
+    full_time: "FULL_TIME",
+    part_time: "PART_TIME",
+    contract: "CONTRACTOR",
+    remote: "FULL_TIME",
+    internship: "INTERN",
+  };
+
+  return {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    title: job.title,
+    description: `${job.description}\n\n${job.requirements}`,
+    datePosted: job.created_at,
+    ...(job.closes_at ? { validThrough: job.closes_at } : {}),
+    employmentType: EMPLOYMENT_TYPE[job.type] ?? "OTHER",
+    hiringOrganization: {
+      "@type": "Organization",
+      name: company.name,
+      ...(siteUrl ? { sameAs: `${siteUrl}/c/${company.slug}` } : {}),
+    },
+    ...(job.type === "remote"
+      ? { jobLocationType: "TELECOMMUTE" }
+      : job.location
+        ? {
+            jobLocation: {
+              "@type": "Place",
+              address: {
+                "@type": "PostalAddress",
+                addressLocality: job.location,
+                addressCountry: "SA",
+              },
+            },
+          }
+        : {}),
+  };
 }
 
 export default async function JobDetailPage({
@@ -73,9 +150,19 @@ export default async function JobDetailPage({
 
   const applicationsClosed =
     job.closes_at !== null && job.closes_at < todayISO();
+  const company = (job as unknown as { organizations: Company }).organizations;
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? null;
 
   return (
     <article className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12">
+      <script
+        type="application/ld+json"
+        // Serialized from values we control; no user-authored HTML reaches it.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jobPostingJsonLd(job, company, siteUrl)),
+        }}
+      />
       <div>
         <Link
           href="/jobs"
@@ -83,6 +170,12 @@ export default async function JobDetailPage({
         >
           <ArrowRight className="size-4" aria-hidden />
           {ar.jobs.backToJobs}
+        </Link>
+        <Link
+          href={`/c/${company.slug}`}
+          className="mb-1 block text-sm font-medium text-primary hover:underline"
+        >
+          {company.name}
         </Link>
         <h1 className="text-3xl font-bold">{job.title}</h1>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">

@@ -84,6 +84,9 @@ export default async function ApplyPage({
       ) : (
         <ApplyForm
           action={submitApplication.bind(null, job.id)}
+          turnstileSiteKey={
+            process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null
+          }
           questions={(() => {
             const parsed = ScreeningQuestions.safeParse(
               job.screening_questions
