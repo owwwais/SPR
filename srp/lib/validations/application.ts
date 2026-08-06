@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { ar } from "@/lib/i18n/ar";
+
+// Shared by the apply form and the submit-application Edge Function (D15),
+// so it must stay free of Next.js path aliases and of UI strings: Deno
+// imports this file directly, and an API boundary has no business emitting
+// Arabic copy. Issues are identified by their `path`; the Arabic wording
+// lives in lib/i18n/ar.ts and is applied by the caller.
 
 export const CV_MAX_BYTES = 5 * 1024 * 1024; // D8: 5MB cap
 
@@ -14,24 +19,30 @@ export const CV_MIME_TYPES = {
 export type CvMime = keyof typeof CV_MIME_TYPES;
 
 export const applicationSchema = z.object({
-  full_name: z
-    .string()
-    .trim()
-    .min(2, ar.apply.errors.fullName)
-    .max(120, ar.apply.errors.fullName),
+  full_name: z.string().trim().min(2).max(120),
   email: z
-    .email(ar.apply.errors.email)
-    .max(200, ar.apply.errors.email)
+    .email()
+    .max(200)
     .transform((v) => v.toLowerCase()),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^\+?[0-9\s()-]{7,20}$/, ar.apply.errors.phone),
+  phone: z.string().trim().regex(/^\+?[0-9\s()-]{7,20}$/),
   cover_note: z
     .string()
     .trim()
-    .max(2000, ar.apply.errors.coverNote)
+    .max(2000)
     .transform((v) => (v.length > 0 ? v : null)),
 });
 
 export type ApplicationInput = z.infer<typeof applicationSchema>;
+
+// The field names the form and the Edge Function agree on. Anything outside
+// this set that comes back from the function is treated as a generic error
+// rather than shown against an input.
+export const APPLICATION_FIELDS = [
+  "full_name",
+  "email",
+  "phone",
+  "cover_note",
+  "cv",
+] as const;
+
+export type ApplicationField = (typeof APPLICATION_FIELDS)[number];

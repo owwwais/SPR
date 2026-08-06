@@ -66,28 +66,50 @@ values
     'email', now(), now(), now()
   );
 
-insert into profiles (id, role, full_name)
+insert into profiles (id, full_name)
 values
-  ('11111111-1111-1111-1111-111111111111', 'admin', 'أحمد المدير'),
-  ('22222222-2222-2222-2222-222222222222', 'hr', 'سارة الموارد');
+  ('11111111-1111-1111-1111-111111111111', 'أحمد المدير'),
+  ('22222222-2222-2222-2222-222222222222', 'سارة الموارد');
 
 -- ============================================================
--- Company settings
+-- The tenant
+--
+-- 0006's backfill already created the 'default' organization (it carries any
+-- data that existed before the multi-tenancy migration). The seed names it
+-- and attaches the two dev users as members — it does NOT create a second
+-- organization, because rls_check.sql asserts absolute row counts. Tenant
+-- isolation gets its own self-contained fixture in tenant_isolation.sql.
 -- ============================================================
 
-update settings set company_name = 'شركة الأفق للتقنية' where id = 1;
+update organizations
+set name = 'شركة الأفق للتقنية',
+    industry = 'تقنية المعلومات',
+    city = 'الرياض',
+    about = E'شركة سعودية متخصصة في بناء المنتجات الرقمية.',
+    status = 'active',
+    listed_publicly = true
+where slug = 'default';
+
+insert into memberships (org_id, user_id, role)
+values
+  ((select id from organizations where slug = 'default'),
+   '11111111-1111-1111-1111-111111111111', 'owner'),
+  ((select id from organizations where slug = 'default'),
+   '22222222-2222-2222-2222-222222222222', 'hr')
+on conflict (org_id, user_id) do update set role = excluded.role;
 
 -- ============================================================
 -- Jobs: 2 published + 1 draft (exercises anon visibility rules)
 -- ============================================================
 
 insert into jobs (
-  id, title, department, location, type, description, requirements,
+  id, org_id, title, department, location, type, description, requirements,
   skills, min_years_experience, status, closes_at, created_by
 )
 values
   (
     'aaaaaaaa-0000-0000-0000-000000000001',
+    (select id from organizations where slug = 'default'),
     'مطوّر واجهات أمامية',
     'تقنية المعلومات',
     'الرياض',
@@ -102,6 +124,7 @@ values
   ),
   (
     'aaaaaaaa-0000-0000-0000-000000000002',
+    (select id from organizations where slug = 'default'),
     'محاسب عام',
     'المالية',
     'جدة',
@@ -116,6 +139,7 @@ values
   ),
   (
     'aaaaaaaa-0000-0000-0000-000000000003',
+    (select id from organizations where slug = 'default'),
     'أخصائي تسويق رقمي',
     'التسويق',
     'عن بُعد',

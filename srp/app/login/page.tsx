@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Briefcase } from "lucide-react";
-import { getProfile } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import {
   Card,
@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  const profile = await getProfile();
-  if (profile) redirect("/admin");
+  const session = await getSession();
+  if (session) redirect("/admin");
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">

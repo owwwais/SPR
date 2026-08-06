@@ -1,20 +1,11 @@
 "use server";
 
-import { createPublicClient } from "@/lib/supabase/public";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 import {
-  applicationSchema,
   CV_MAX_BYTES,
   CV_MIME_TYPES,
-  type CvMime,
 } from "@/lib/validations/application";
-import {
-  ScreeningAnswers,
-  ScreeningQuestions,
-  type ScreeningAnswerType,
-} from "@/lib/validations/screening";
-import { generateRefCode } from "@/lib/ref-code";
 import { ar } from "@/lib/i18n/ar";
-import type { Json } from "@/types/database";
 
 export type ApplyState =
   | { ok: false; error: string | null; fieldErrors: Record<string, string> }
@@ -27,33 +18,60 @@ function fail(
   return { ok: false, error, fieldErrors };
 }
 
-// FR-03 / §4.2 step 1: validate -> upload CV -> insert application row.
-// Analysis stays `pending` (the analyze-application invocation lands in M4).
-// Always runs in the anon role via the public client, matching the RLS
-// matrix (applications: anon insert only) even if a staff member applies.
+// D15: this action no longer writes anything. `anon` lost INSERT on
+// `applications` and on the `cvs` bucket in 0006/0007, because a public,
+// multi-tenant job board cannot hand unauthenticated callers a write
+// primitive — they could file into another company's folder or flood
+// storage. All of it now happens inside the submit-application Edge
+// Function, which derives org_id from the job, rate-limits, and writes with
+// the service role. This action just relays the form and translates the
+// function's error codes into Arabic.
+
+// The function speaks codes; the UI speaks Arabic. Mapping lives here so
+// the API boundary stays language-free.
+const FIELD_MESSAGES: Record<string, string> = {
+  full_name: ar.apply.errors.fullName,
+  email: ar.apply.errors.email,
+  phone: ar.apply.errors.phone,
+  cover_note: ar.apply.errors.coverNote,
+};
+
+const CV_MESSAGES: Record<string, string> = {
+  required: ar.apply.errors.cvRequired,
+  type: ar.apply.errors.cvType,
+  size: ar.apply.errors.cvSize,
+};
+
+function translateFieldErrors(
+  raw: Record<string, string> | undefined
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, code] of Object.entries(raw ?? {})) {
+    if (key === "cv") {
+      out.cv = CV_MESSAGES[code] ?? ar.apply.errors.cvRequired;
+    } else if (key === "email" && code === "duplicate") {
+      out.email = ar.apply.errors.duplicate;
+    } else if (key in FIELD_MESSAGES) {
+      out[key] = FIELD_MESSAGES[key]!;
+    } else if (key.startsWith("sq_")) {
+      out[key] = ar.apply.errors.questionRequired;
+    }
+  }
+  return out;
+}
+
 export async function submitApplication(
   jobId: string,
   _prev: ApplyState,
   formData: FormData
 ): Promise<ApplyState> {
-  const parsed = applicationSchema.safeParse({
-    full_name: formData.get("full_name"),
-    email: formData.get("email"),
-    phone: formData.get("phone"),
-    cover_note: formData.get("cover_note") ?? "",
-  });
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "");
-      if (key && !(key in fieldErrors)) fieldErrors[key] = issue.message;
-    }
-    return fail(ar.apply.errors.invalidInput, fieldErrors);
-  }
-
+  // Cheap client-side-equivalent checks first, so an oversized file is not
+  // uploaded across the network only to be refused.
   const cv = formData.get("cv");
   if (!(cv instanceof File) || cv.size === 0) {
-    return fail(ar.apply.errors.invalidInput, { cv: ar.apply.errors.cvRequired });
+    return fail(ar.apply.errors.invalidInput, {
+      cv: ar.apply.errors.cvRequired,
+    });
   }
   if (!(cv.type in CV_MIME_TYPES)) {
     return fail(ar.apply.errors.invalidInput, { cv: ar.apply.errors.cvType });
@@ -62,164 +80,65 @@ export async function submitApplication(
     return fail(ar.apply.errors.invalidInput, { cv: ar.apply.errors.cvSize });
   }
 
-  const supabase = createPublicClient();
+  formData.set("job_id", jobId);
 
-  // Screening answers are validated against the job's authoritative question
-  // definitions — never against anything the client sent.
-  const { data: jobRow } = await supabase
-    .from("jobs")
-    .select("screening_questions")
-    .eq("id", jobId)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!jobRow) return fail(ar.apply.errors.jobClosed);
-
-  const parsedQuestions = ScreeningQuestions.safeParse(
-    jobRow.screening_questions
-  );
-  const questions = parsedQuestions.success ? parsedQuestions.data : [];
-
-  const answers: ScreeningAnswerType[] = [];
-  const questionErrors: Record<string, string> = {};
-  for (const question of questions) {
-    const key = `sq_${question.id}`;
-    if (question.type === "multiple_choice") {
-      const values = formData
-        .getAll(key)
-        .map(String)
-        .filter((v) => question.options.includes(v));
-      if (values.length > 0) {
-        answers.push({
-          question_id: question.id,
-          label: question.label,
-          type: question.type,
-          answer: values,
-        });
-      } else if (question.required) {
-        questionErrors[key] = ar.apply.errors.questionRequired;
-      }
-      continue;
-    }
-
-    let value = String(formData.get(key) ?? "").trim();
-    const yesNoOptions: string[] = [ar.apply.yes, ar.apply.no];
-    if (question.type === "yes_no" && !yesNoOptions.includes(value)) {
-      value = "";
-    }
-    if (question.type === "single_choice" && !question.options.includes(value)) {
-      value = "";
-    }
-    value = value.slice(0, 2000);
-
-    if (value.length > 0) {
-      answers.push({
-        question_id: question.id,
-        label: question.label,
-        type: question.type,
-        answer: value,
-      });
-    } else if (question.required) {
-      questionErrors[key] = ar.apply.errors.questionRequired;
-    }
-  }
-  if (Object.keys(questionErrors).length > 0) {
-    return fail(ar.apply.errors.invalidInput, questionErrors);
-  }
-  const validatedAnswers = ScreeningAnswers.safeParse(answers);
-  if (!validatedAnswers.success) {
-    return fail(ar.apply.errors.invalidInput);
-  }
-
-  const applicationId = crypto.randomUUID();
-  const cvPath = `${applicationId}.${CV_MIME_TYPES[cv.type as CvMime]}`;
-
-  // §4.2 order: upload first, then insert. A rejected insert (e.g. duplicate)
-  // leaves an unreferenced upload behind; it is never served to anyone and
-  // the M7 retention job is the designated cleaner.
-  const { error: uploadError } = await supabase.storage
-    .from("cvs")
-    .upload(cvPath, cv, { contentType: cv.type });
-  if (uploadError) {
-    console.error("CV upload failed:", uploadError.message);
+  let response: Response;
+  try {
+    const { url, anonKey } = getSupabaseEnv();
+    response = await fetch(`${url}/functions/v1/submit-application`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${anonKey}`,
+        // Content-Type is deliberately unset: fetch derives the multipart
+        // boundary from the FormData body.
+      },
+      body: formData,
+    });
+  } catch (err) {
+    console.error(
+      "submit-application unreachable:",
+      err instanceof Error ? err.message : err
+    );
     return fail(ar.apply.errors.serverError);
   }
 
-  // Retry only on the astronomically unlikely ref_code collision.
-  let refCode = generateRefCode();
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const { error } = await supabase.from("applications").insert({
-      id: applicationId,
-      job_id: jobId,
-      ref_code: refCode,
-      full_name: parsed.data.full_name,
-      email: parsed.data.email,
-      phone: parsed.data.phone,
-      cv_path: cvPath,
-      cv_mime: cv.type,
-      cover_note: parsed.data.cover_note,
-      screening_answers: validatedAnswers.data as unknown as Json,
-    });
+  let body: {
+    ok?: boolean;
+    ref_code?: string;
+    error?: string;
+    field_errors?: Record<string, string>;
+  };
+  try {
+    body = await response.json();
+  } catch {
+    return fail(ar.apply.errors.serverError);
+  }
 
-    if (!error) {
-      // §4.2: trigger analysis + confirmation email; neither may fail the
-      // submission (D4 — applying never fails because of AI).
-      await Promise.allSettled([
-        triggerAnalysis(applicationId),
-        sendConfirmationEmail(applicationId),
-      ]);
-      return { ok: true, refCode };
-    }
-    if (error.code === "23505") {
-      if (error.message.includes("ref_code")) {
-        refCode = generateRefCode();
-        continue;
-      }
-      // unique (job_id, email) — FR-03 friendly duplicate rejection
+  if (response.ok && body.ok && body.ref_code) {
+    return { ok: true, refCode: body.ref_code };
+  }
+
+  const fieldErrors = translateFieldErrors(body.field_errors);
+
+  switch (body.error) {
+    case "duplicate":
       return fail(ar.apply.errors.duplicate, {
         email: ar.apply.errors.duplicate,
       });
-    }
-    if (error.code === "42501") {
-      // RLS: job no longer published / past its closing date
+    case "job_closed":
       return fail(ar.apply.errors.jobClosed);
-    }
-    console.error("application insert failed:", error.code, error.message);
-    return fail(ar.apply.errors.serverError);
-  }
-  return fail(ar.apply.errors.serverError);
-}
-
-// Fire-and-forget invocation of the AI pipeline (M4). The application row
-// stays `pending` and is retried by cron / re-run from the dashboard if
-// this invocation is lost.
-async function triggerAnalysis(applicationId: string) {
-  try {
-    const supabase = createPublicClient();
-    const { error } = await supabase.functions.invoke("analyze-application", {
-      body: { application_id: applicationId },
-    });
-    if (error) console.warn("analysis trigger failed:", error.message);
-  } catch (err) {
-    console.warn(
-      "analysis trigger failed:",
-      err instanceof Error ? err.message : err
-    );
-  }
-}
-
-// Fire-and-forget: submission must never fail because of email (D4 spirit).
-async function sendConfirmationEmail(applicationId: string) {
-  try {
-    const supabase = createPublicClient();
-    const { error } = await supabase.functions.invoke("send-email", {
-      body: { kind: "application_received", application_id: applicationId },
-    });
-    if (error) console.warn("confirmation email failed:", error.message);
-  } catch (err) {
-    console.warn(
-      "confirmation email failed:",
-      err instanceof Error ? err.message : err
-    );
+    case "rate_limited":
+      return fail(ar.apply.errors.rateLimited);
+    case "captcha_failed":
+      return fail(ar.apply.errors.captchaFailed);
+    case "invalid_input":
+      return fail(ar.apply.errors.invalidInput, fieldErrors);
+    default:
+      console.error(
+        "submit-application failed:",
+        response.status,
+        body.error ?? "unknown"
+      );
+      return fail(ar.apply.errors.serverError);
   }
 }

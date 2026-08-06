@@ -1,12 +1,48 @@
--- rls_check.sql — RLS verification per role (CLAUDE.md §4.1, DoD §11)
--- Run against a database with 0001_init.sql applied AND seed.sql loaded:
+-- rls_check.sql — per-role capability checks inside ONE organization
+-- (CLAUDE.md §4.1, DoD §11).
+--
+-- Scope: what each role may do with its OWN tenant's rows — column grants,
+-- RPC-only status changes, soft-delete rules, immutability of AI originals.
+-- Cross-tenant isolation is a separate question and lives in
+-- tenant_isolation.sql; run both.
+--
+-- Requires the harness (on plain Postgres), all migrations, and seed.sql:
+--   psql "$DATABASE_URL" -f supabase/tests/harness.sql
+--   psql "$DATABASE_URL" -f supabase/migrations/0001_init.sql   (…through 0007)
+--   psql "$DATABASE_URL" -f supabase/seed.sql
 --   psql "$DATABASE_URL" -f supabase/tests/rls_check.sql
--- or paste into the Supabase SQL editor. Everything rolls back at the end.
 --
 -- Every output row must have pass = t. Expected-failure checks raise
 -- NOTICE lines starting with PASS/FAIL — check the messages panel.
+--
+-- Seeded roles: admin@example.com is the org OWNER, hr@example.com is HR.
 
 begin;
+
+-- ============================================================
+-- Fixture
+--
+-- D15 removed anon's INSERT on applications: submissions now arrive through
+-- the submit-application Edge Function, which runs with the service role.
+-- This block stands in for that function.
+-- ============================================================
+
+insert into applications (
+  job_id, ref_code, full_name, email, phone, cv_path, cv_mime
+)
+select
+  'aaaaaaaa-0000-0000-0000-000000000001',
+  'TRK-TEST-001',
+  'مقدم طلب تجريبي',
+  'applicant@test.dev',
+  '+966500000000',
+  o.id || '/00000000-0000-0000-0000-00000000cafe.pdf',
+  'application/pdf'
+from organizations o where o.slug = 'default';
+
+insert into storage.objects (bucket_id, name, metadata)
+select 'cvs', o.id || '/00000000-0000-0000-0000-00000000cafe.pdf', '{}'
+from organizations o where o.slug = 'default';
 
 -- ============================================================
 -- anon (public visitor)
@@ -23,8 +59,19 @@ select 'anon: cannot see draft jobs' as test,
 select 'anon: profiles hidden' as test,
        (select count(*) from profiles) = 0 as pass;
 
-select 'anon: settings hidden' as test,
-       (select count(*) from settings) = 0 as pass;
+-- memberships is not merely filtered for anon, the grant itself is revoked:
+-- the public has no business touching the tenancy table at all.
+do $$
+begin
+  perform count(*) from memberships;
+  raise notice 'FAIL: anon can read memberships';
+exception when sqlstate '42501' then
+  raise notice 'PASS: anon has no privilege on memberships at all';
+end $$;
+
+-- The organization itself IS public: its careers page has to render.
+select 'anon: sees the live organization' as test,
+       (select count(*) from organizations where slug = 'default') = 1 as pass;
 
 select 'anon: applications hidden' as test,
        (select count(*) from applications) = 0 as pass;
@@ -35,17 +82,8 @@ select 'anon: ai_evaluations hidden' as test,
 select 'anon: status_history hidden' as test,
        (select count(*) from status_history) = 0 as pass;
 
--- anon CAN apply to a published job (trigger writes the initial history row)
-insert into applications (job_id, ref_code, full_name, email, phone, cv_path, cv_mime)
-values (
-  'aaaaaaaa-0000-0000-0000-000000000001',
-  'TRK-TEST-001',
-  'مقدم طلب تجريبي',
-  'applicant@test.dev',
-  '+966500000000',
-  'cvs/00000000-0000-0000-0000-00000000cafe.pdf',
-  'application/pdf'
-);
+select 'anon: CV objects hidden' as test,
+       (select count(*) from storage.objects where bucket_id = 'cvs') = 0 as pass;
 
 select 'anon: track_application returns the submission event' as test,
        (select count(*) from track_application('TRK-TEST-001')) = 1 as pass;
@@ -53,36 +91,38 @@ select 'anon: track_application returns the submission event' as test,
 select 'anon: track_application with wrong ref returns nothing' as test,
        (select count(*) from track_application('TRK-NOPE')) = 0 as pass;
 
--- anon CANNOT call the status-change RPC (0003)
-do $$
-begin
-  perform public.change_application_status(
-    (select application_id from status_history limit 1), 'accepted', null);
-  raise notice 'FAIL: anon called change_application_status';
-exception when sqlstate '42501' then
-  raise notice 'PASS: anon cannot call change_application_status';
-end $$;
-
--- anon CANNOT apply to a draft job
+-- D15: applying is server-side only now.
 do $$
 begin
   insert into applications (job_id, ref_code, full_name, email, phone, cv_path, cv_mime)
-  values ('aaaaaaaa-0000-0000-0000-000000000003', 'TRK-TEST-002', 'x', 'x@test.dev',
-          '+966', 'cvs/00000000-0000-0000-0000-00000000beef.pdf', 'application/pdf');
-  raise notice 'FAIL: anon applied to a DRAFT job';
+  values ('aaaaaaaa-0000-0000-0000-000000000001', 'TRK-TEST-999', 'x', 'x@test.dev',
+          '+966', 'x/y.pdf', 'application/pdf');
+  raise notice 'FAIL: anon inserted an application directly (D15)';
 exception when sqlstate '42501' then
-  raise notice 'PASS: anon cannot apply to a draft job';
+  raise notice 'PASS: anon cannot insert applications (D15)';
 end $$;
 
--- anon CANNOT submit with a non-clean initial state
 do $$
 begin
-  insert into applications (job_id, ref_code, full_name, email, phone, cv_path, cv_mime, status)
-  values ('aaaaaaaa-0000-0000-0000-000000000001', 'TRK-TEST-003', 'x', 'x2@test.dev',
-          '+966', 'cvs/00000000-0000-0000-0000-00000000f00d.pdf', 'application/pdf', 'accepted');
-  raise notice 'FAIL: anon inserted a pre-accepted application';
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('cvs', 'anon-upload.pdf', '{}');
+  raise notice 'FAIL: anon uploaded a CV directly (D15)';
 exception when sqlstate '42501' then
-  raise notice 'PASS: anon cannot preset application status';
+  raise notice 'PASS: anon cannot upload CVs (D15)';
+end $$;
+
+-- anon CANNOT call the status-change RPC
+do $$
+begin
+  perform public.change_application_status(
+    (select id from applications where ref_code = 'TRK-TEST-001'), 'accepted', null);
+  raise notice 'FAIL: anon called change_application_status';
+exception
+  when sqlstate '42501' then
+    raise notice 'PASS: anon cannot call change_application_status';
+  when others then
+    -- anon cannot even see the row to name it; also a refusal.
+    raise notice 'PASS: anon cannot call change_application_status';
 end $$;
 
 -- ============================================================
@@ -98,15 +138,18 @@ select 'hr: sees all 3 jobs incl. draft' as test,
 select 'hr: sees applications' as test,
        (select count(*) from applications) = 1 as pass;
 
-select 'hr: sees own profile only' as test,
-       (select count(*) from profiles) = 1
-       and exists (select 1 from profiles
-                   where id = '22222222-2222-2222-2222-222222222222') as pass;
+-- profiles are visible to co-members now, not only to self (D14): a team
+-- screen has to be able to name whoever changed a status.
+select 'hr: sees itself and its co-member' as test,
+       (select count(*) from profiles) = 2 as pass;
 
-select 'hr: reads settings' as test,
-       (select count(*) from settings) = 1 as pass;
+select 'hr: reads its own organization' as test,
+       (select count(*) from organizations where slug = 'default') = 1 as pass;
 
--- hr CANNOT update status directly anymore (0003: RPC only)
+select 'hr: sees its own org CV object' as test,
+       (select count(*) from storage.objects where bucket_id = 'cvs') = 1 as pass;
+
+-- hr CANNOT update status directly (0003: RPC only)
 do $$
 begin
   update applications set status = 'under_review' where ref_code = 'TRK-TEST-001';
@@ -115,14 +158,14 @@ exception when sqlstate '42501' then
   raise notice 'PASS: hr cannot update status directly (RPC-only)';
 end $$;
 
--- hr changes status through the RPC — trigger logs it with the note
+-- hr changes status through the RPC — trigger records it with the note
 select public.change_application_status(
   (select id from applications where ref_code = 'TRK-TEST-001'),
   'under_review',
   'ملاحظة اختبارية'
 );
 
-select 'hr: RPC status change logged with changed_by + note' as test,
+select 'hr: RPC status change logged with changed_by + note + org_id' as test,
        exists (
          select 1 from status_history h
          join applications a on a.id = h.application_id
@@ -130,6 +173,7 @@ select 'hr: RPC status change logged with changed_by + note' as test,
            and h.from_status = 'new' and h.to_status = 'under_review'
            and h.changed_by = '22222222-2222-2222-2222-222222222222'
            and h.note = 'ملاحظة اختبارية'
+           and h.org_id = a.org_id
        ) as pass;
 
 -- no-op change records nothing
@@ -149,7 +193,7 @@ begin
   update applications set full_name = 'hacked' where ref_code = 'TRK-TEST-001';
   raise notice 'FAIL: hr updated a non-status application column';
 exception when sqlstate '42501' then
-  raise notice 'PASS: hr can only update application status';
+  raise notice 'PASS: hr can only update the interview columns';
 end $$;
 
 -- hr CAN schedule interviews and record interview Q&A (0005)
@@ -199,17 +243,37 @@ select 'hr: soft-deleted a job' as test,
                where id = 'aaaaaaaa-0000-0000-0000-000000000002'
                  and deleted_at is not null) as pass;
 
--- hr CANNOT write settings
+-- hr CANNOT edit the organization (owner/admin only)
 do $$
+declare
+  v_rows int;
 begin
-  update settings set retention_months = 1 where id = 1;
-  if not found then
-    raise notice 'PASS: hr cannot update settings (no row visible for update)';
+  update organizations set retention_months = 1 where slug = 'default';
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    raise notice 'PASS: hr cannot update the organization (no row visible for update)';
   else
-    raise notice 'FAIL: hr updated settings';
+    raise notice 'FAIL: hr updated the organization';
   end if;
 exception when sqlstate '42501' then
-  raise notice 'PASS: hr cannot update settings';
+  raise notice 'PASS: hr cannot update the organization';
+end $$;
+
+-- hr CANNOT change the team
+do $$
+declare
+  v_rows int;
+begin
+  update memberships set role = 'owner'
+  where user_id = '22222222-2222-2222-2222-222222222222';
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    raise notice 'PASS: hr cannot change memberships (no row visible for update)';
+  else
+    raise notice 'FAIL: hr promoted itself';
+  end if;
+exception when sqlstate '42501' then
+  raise notice 'PASS: hr cannot change memberships';
 end $$;
 
 -- hr CANNOT write ai_evaluations
@@ -227,7 +291,7 @@ end $$;
 reset role;
 insert into ai_evaluations (application_id, model, prompt_version, extracted,
                             fit_score, score_breakdown, justification, interview_questions)
-select id, 'gemini-2.5-flash', '1.0', '{}', 70, '{}', '{}', '[]'
+select id, 'gemini-3.5-flash', '1.1', '{}', 70, '{}', '{}', '[]'
 from applications where ref_code = 'TRK-TEST-001';
 
 set local role authenticated;
@@ -255,21 +319,34 @@ exception when sqlstate '42501' then
 end $$;
 
 -- ============================================================
--- admin (seeded: admin@example.com)
+-- owner (seeded: admin@example.com)
 -- ============================================================
 set local role authenticated;
 set local request.jwt.claims to
   '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
 
-select 'admin: sees all profiles' as test,
+select 'owner: sees both team profiles' as test,
        (select count(*) from profiles) = 2 as pass;
 
-update settings set retention_months = 24 where id = 1;
-select 'admin: updated settings' as test,
-       (select retention_months from settings where id = 1) = 24 as pass;
+select 'owner: sees the team roster' as test,
+       (select count(*) from memberships) = 2 as pass;
+
+update organizations set retention_months = 24 where slug = 'default';
+select 'owner: updated the organization' as test,
+       (select retention_months from organizations where slug = 'default') = 24 as pass;
+
+-- status is platform-controlled even for an owner (column grant), so a
+-- suspended tenant cannot reactivate itself.
+do $$
+begin
+  update organizations set status = 'active' where slug = 'default';
+  raise notice 'FAIL: owner changed its own subscription status';
+exception when sqlstate '42501' then
+  raise notice 'PASS: owner cannot change its own subscription status';
+end $$;
 
 -- ============================================================
--- storage policies (metadata-level check)
+-- storage + structural checks
 -- ============================================================
 reset role;
 
@@ -280,5 +357,20 @@ select 'storage: cvs bucket is private with 5MB limit + mime whitelist' as test,
            and file_size_limit = 5242880
            and allowed_mime_types @> array['application/pdf']
        ) as pass;
+
+select 'storage: no client role may write to the cvs bucket' as test,
+       not exists (
+         select 1 from pg_policies
+         where schemaname = 'storage' and tablename = 'objects'
+           and cmd in ('INSERT','UPDATE','DELETE','ALL')
+       ) as pass;
+
+select 'rls: every tenant table has row level security enabled' as test,
+       (select bool_and(relrowsecurity)
+        from pg_class
+        where relname in ('organizations','memberships','platform_admins',
+                          'impersonation_sessions','profiles','jobs',
+                          'applications','ai_evaluations','status_history')
+          and relnamespace = 'public'::regnamespace) as pass;
 
 rollback;

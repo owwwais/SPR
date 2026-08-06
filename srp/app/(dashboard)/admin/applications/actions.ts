@@ -2,23 +2,44 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
+import { canWrite, requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import { InterviewQa } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 import type { AppStatus, Json } from "@/types/database";
 
+// Confirms the application belongs to the caller's own organization before
+// any action touches it. RLS would filter it anyway; doing it here as well
+// is the isolation invariant (§2.1), and it turns a silent no-op into a
+// deliberate one.
+async function requireOwnApplication(applicationId: string) {
+  const session = await requireMembership();
+  if (!canWrite(session.role)) redirect("/admin");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("applications")
+    .select("id")
+    .eq("id", applicationId)
+    .eq("org_id", session.org.id)
+    .maybeSingle();
+  if (!data) redirect("/admin");
+
+  return { session, supabase };
+}
+
 // FR-06: re-run analysis for failed (or re-runnable) applications. Invoked
-// with the staff member's own JWT — the Edge Function verifies is_staff()
-// before accepting force. The invocation is not awaited to completion:
-// analysis continues server-side; the page shows the live analysis_status.
+// with the staff member's own JWT — the Edge Function calls
+// can_manage_application(), which authorizes against the application's OWN
+// organization before accepting force. The invocation is not awaited to
+// completion: analysis continues server-side; the page shows the live
+// analysis_status.
 export async function reRunAnalysis(
   applicationId: string,
   returnPath: string
 ): Promise<void> {
-  await requireProfile();
-  const supabase = await createClient();
+  const { supabase } = await requireOwnApplication(applicationId);
 
   const invocation = supabase.functions.invoke("analyze-application", {
     body: { application_id: applicationId, force: true },
@@ -66,7 +87,7 @@ export async function changeApplicationStatus(
   _prev: StatusChangeState,
   formData: FormData
 ): Promise<StatusChangeState> {
-  await requireProfile();
+  await requireOwnApplication(applicationId);
 
   const newStatus = String(formData.get("status") ?? "") as AppStatus;
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
@@ -118,7 +139,7 @@ export async function saveInterview(
   _prev: InterviewState,
   formData: FormData
 ): Promise<InterviewState> {
-  await requireProfile();
+  const { session } = await requireOwnApplication(applicationId);
 
   const rawAt = String(formData.get("interview_at_iso") ?? "").trim();
   let interviewAt: string | null = null;
@@ -148,7 +169,8 @@ export async function saveInterview(
       interview_at: interviewAt,
       interview_qa: parsedQa.data as unknown as Json,
     })
-    .eq("id", applicationId);
+    .eq("id", applicationId)
+    .eq("org_id", session.org.id);
   if (error) {
     console.error("saveInterview failed:", error.message);
     return { saved: false, error: ar.interview.failed };
@@ -168,14 +190,15 @@ export async function saveInterviewNotes(
   _prev: NotesState,
   formData: FormData
 ): Promise<NotesState> {
-  await requireProfile();
+  const { session } = await requireOwnApplication(applicationId);
   const notes = String(formData.get("interview_notes") ?? "").slice(0, 4000);
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("ai_evaluations")
     .update({ interview_notes: notes.trim().length > 0 ? notes : null })
-    .eq("application_id", applicationId);
+    .eq("application_id", applicationId)
+    .eq("org_id", session.org.id);
   if (error) {
     console.error("saveInterviewNotes failed:", error.message);
     return { saved: false, error: ar.evaluation.notesFailed };

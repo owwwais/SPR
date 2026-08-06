@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
   const { data: application, error: appError } = await supabase
     .from("applications")
-    .select("full_name, email, ref_code, jobs(title)")
+    .select("full_name, email, ref_code, org_id, jobs(title)")
     .eq("id", applicationId)
     .maybeSingle();
   if (appError) {
@@ -58,10 +58,13 @@ Deno.serve(async (req) => {
   }
   if (!application) return json(404, { error: "application not found" });
 
-  const { data: settings } = await supabase
-    .from("settings")
-    .select("company_name")
-    .eq("id", 1)
+  // The sender identity now comes from the applicant's own organization —
+  // the single `settings` row is gone (0006). An applicant to company A must
+  // never see company B's name on the email.
+  const { data: organization } = await supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", application.org_id)
     .maybeSingle();
 
   const resendKey = Deno.env.get("RESEND_API_KEY");
@@ -78,7 +81,7 @@ Deno.serve(async (req) => {
     jobTitle: job?.title ?? "",
     refCode: application.ref_code,
     trackUrl: siteUrl ? `${siteUrl}/track/${application.ref_code}` : null,
-    companyName: settings?.company_name ?? "",
+    companyName: organization?.name ?? "",
   });
 
   const resend = new Resend(resendKey);
