@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateJob } from "@/lib/revalidate";
 import { redirect } from "next/navigation";
 import { canWrite, requireMembership, type Session } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -42,12 +42,11 @@ async function requireJobWriter(): Promise<Session> {
   return session;
 }
 
-// Public pages are ISR-cached (60s); refresh them immediately after HR edits.
-function revalidateJobPages(id?: string) {
-  revalidatePath("/");
-  revalidatePath("/jobs");
-  if (id) revalidatePath(`/jobs/${id}`);
-  revalidatePath("/admin/jobs");
+// Public pages are ISR-cached (60s); refresh them immediately after edits.
+// Scoped by slug so one tenant publishing a job does not invalidate another
+// tenant's careers page (see lib/revalidate.ts).
+function revalidateJobPages(slug: string, id?: string) {
+  revalidateJob(slug, id);
 }
 
 export async function createJob(
@@ -73,7 +72,7 @@ export async function createJob(
     return { error: ar.adminJobs.errors.serverError };
   }
 
-  revalidateJobPages();
+  revalidateJobPages(session.org.slug);
   redirect("/admin/jobs");
 }
 
@@ -100,7 +99,7 @@ export async function updateJob(
     return { error: ar.adminJobs.errors.serverError };
   }
 
-  revalidateJobPages(id);
+  revalidateJobPages(session.org.slug, id);
   redirect("/admin/jobs");
 }
 
@@ -131,7 +130,7 @@ export async function publishJob(id: string): Promise<void> {
     redirect("/admin/jobs?error=serverError");
   }
 
-  revalidateJobPages(id);
+  revalidateJobPages(session.org.slug, id);
   redirect("/admin/jobs");
 }
 
@@ -150,7 +149,7 @@ export async function closeJob(id: string): Promise<void> {
     console.error("closeJob failed:", error.message);
     redirect("/admin/jobs?error=serverError");
   }
-  revalidateJobPages(id);
+  revalidateJobPages(session.org.slug, id);
   redirect("/admin/jobs");
 }
 
@@ -167,6 +166,6 @@ export async function deleteJob(id: string): Promise<void> {
     console.error("deleteJob failed:", error.message);
     redirect("/admin/jobs?error=serverError");
   }
-  revalidateJobPages(id);
+  revalidateJobPages(session.org.slug, id);
   redirect("/admin/jobs");
 }

@@ -3,10 +3,27 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { hasSupabaseEnv, getSupabaseEnv } from "./env";
 
+// Paths that only appear in the matcher so the subdomain rewrite can see
+// them. They carry no session, so refreshing one costs a Supabase round trip
+// per public navigation for nothing.
+const PUBLIC_PREFIXES = ["/jobs", "/track"];
+
+function isPublicPath(pathname: string) {
+  return (
+    pathname === "/" ||
+    PUBLIC_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    )
+  );
+}
+
 // Refreshes the Supabase session cookie and applies optimistic redirects.
-// This is NOT the authorization boundary — RLS and the server-side role
-// gate in lib/auth.ts are (CLAUDE.md D7).
+// This is NOT the authorization boundary — RLS and the server-side gate in
+// lib/auth.ts are (CLAUDE.md D7).
 export async function updateSession(request: NextRequest) {
+  if (isPublicPath(request.nextUrl.pathname)) {
+    return NextResponse.next({ request });
+  }
   if (!hasSupabaseEnv()) {
     // Supabase not configured yet: let public pages work; the server-side
     // gate still blocks /admin with a clear configuration error.

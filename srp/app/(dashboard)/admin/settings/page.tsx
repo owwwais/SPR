@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BrandingForm } from "@/components/admin/branding-form";
 import {
   AddMemberForm,
   CompanySettingsForm,
@@ -52,6 +53,21 @@ export default async function AdminSettingsPage() {
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
   ]);
+  // Branding fields are not on the session (it carries only what the gate
+  // needs), so they are read here.
+  const { data: org } = await supabase
+    .from("organizations")
+    .select(
+      "name, slug, about, website, industry, city, brand_color, listed_publicly, logo_path, cover_path"
+    )
+    .eq("id", session.org.id)
+    .maybeSingle();
+
+  const publicUrl = (path: string | null) =>
+    path
+      ? supabase.storage.from("org-assets").getPublicUrl(path).data.publicUrl
+      : null;
+
   const memberRows = membersRes.data;
   if (membersRes.error)
     console.error("members query failed:", membersRes.error.message);
@@ -72,6 +88,32 @@ export default async function AdminSettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold">{t.title}</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{ar.branding.title}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {ar.branding.subtitle}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <BrandingForm
+            rootDomain={process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? null}
+            values={{
+              name: org?.name ?? session.org.name,
+              slug: org?.slug ?? session.org.slug,
+              about: org?.about ?? "",
+              website: org?.website ?? "",
+              industry: org?.industry ?? "",
+              city: org?.city ?? "",
+              brandColor: org?.brand_color ?? "",
+              listedPublicly: org?.listed_publicly ?? true,
+              logoUrl: publicUrl(org?.logo_path ?? null),
+              coverUrl: publicUrl(org?.cover_path ?? null),
+            }}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
