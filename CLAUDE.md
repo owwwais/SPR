@@ -72,12 +72,13 @@ create them ahead of their milestone.
 ```
 srp/
 ├── app/
-│   ├── (marketing)/                 # ☐ S6: landing, pricing, fairness, legal
 │   ├── (public)/
-│   │   ├── page.tsx                 # landing + featured jobs
-│   │   ├── jobs/                    # list + [id] details + apply form
-│   │   ├── c/[slug]/                # ☐ S3: per-tenant careers page
-│   │   ├── companies/               # ☐ S6: company directory
+│   │   ├── page.tsx                 # marketing landing (S6)
+│   │   ├── pricing/ fairness/       # marketing (S6)
+│   │   ├── privacy/ terms/          # legal (S9-mini)
+│   │   ├── jobs/                    # marketplace grouped by company + [id] + apply
+│   │   ├── c/[slug]/                # per-tenant careers page (S3)
+│   │   ├── companies/               # company directory (S6)
 │   │   └── track/[ref]/             # applicant status tracking by reference code
 │   ├── (dashboard)/admin/           # TENANT workspace, scoped to one org
 │   │   ├── jobs/                    # FR-01 manage jobs
@@ -86,7 +87,9 @@ srp/
 │   │   ├── stats/                   # FR-09
 │   │   └── settings/                # org profile, retention, team (admin only)
 │   ├── (platform)/platform/         # ☐ S4: PLATFORM console (owner only)
-│   └── login/
+│   ├── login/ signup/ onboarding/   # auth + org creation (S2)
+│   ├── invite/[token]/              # invitation acceptance (S2)
+│   ├── sitemap.ts robots.ts         # SEO (S6)
 ├── components/
 ├── lib/
 │   ├── supabase/                    # client factories
