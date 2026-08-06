@@ -34,7 +34,7 @@ import {
   ScreeningAnswers,
 } from "@/lib/validations/screening";
 import { scoreBandClass } from "@/components/admin/score-badge";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ExtractedCV, ScoreBreakdown } from "@/lib/validations/evaluation";
 import { ar } from "@/lib/i18n/ar";
@@ -87,7 +87,7 @@ export default async function ApplicationPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireProfile();
+  const session = await requireMembership();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const sp = await searchParams;
@@ -99,9 +99,10 @@ export default async function ApplicationPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, screening_answers, interview_at, interview_qa, created_at, jobs(title)"
+      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, created_at, jobs(title)"
     )
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .maybeSingle();
   if (!application) notFound();
 
@@ -137,6 +138,7 @@ export default async function ApplicationPage({
         "fit_score, extracted, score_breakdown, justification, interview_questions, interview_notes, model, prompt_version, created_at"
       )
       .eq("application_id", id)
+      .eq("org_id", session.org.id)
       .maybeSingle();
     if (error) {
       console.error("evaluation fetch failed:", error.message);

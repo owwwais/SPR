@@ -1,10 +1,11 @@
 // housekeeping — daily maintenance (§4.2.4, D8), triggered by pg_cron:
 //   1) retry failed analyses (analysis_attempts < 3, capped per run)
-//   2) retention: delete applications older than settings.retention_months
-//      together with their CV files (Storage API) — the ONLY hard-delete
-//      path in the system (D9)
-//   3) sweep orphaned CV uploads older than the retention cutoff (e.g. from
-//      duplicate-rejected submissions, §4.2 upload-then-insert order)
+//   2) retention: per organization, delete applications older than that
+//      org's own retention_months together with their CV files (Storage
+//      API) — the ONLY hard-delete path in the system (D9)
+//   3) sweep orphaned CV uploads older than the retention cutoff, walking
+//      each tenant's cvs/{org_id}/ folder
+//   4) expire the submission throttle log (0008)
 // Idempotent and safe to invoke at any time; returns only counters.
 import { createClient } from "@supabase/supabase-js";
 
@@ -92,65 +93,81 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ---- 2) retention: applications + CV files older than the cutoff ----
-  const { data: settings } = await admin
-    .from("settings")
-    .select("retention_months")
-    .eq("id", 1)
-    .maybeSingle();
-  const months = settings?.retention_months ?? 12;
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - months);
-  const cutoffIso = cutoff.toISOString();
+  // ---- 2) retention, per organization ----
+  // Retention is a per-tenant setting now (0006 replaced the single settings
+  // row), so the cutoff has to be computed per organization rather than once
+  // for the whole database. Soft-deleted orgs are included deliberately: a
+  // cancelled customer's applicant data should age out, not linger.
+  const { data: organizations, error: orgsError } = await admin
+    .from("organizations")
+    .select("id, retention_months");
+  if (orgsError) logError(`organization lookup: ${orgsError.message}`);
 
-  const { data: expired, error: expiredError } = await admin
-    .from("applications")
-    .select("id, cv_path")
-    .lt("created_at", cutoffIso)
-    .limit(DELETE_BATCH);
-  if (expiredError) logError(`retention lookup: ${expiredError.message}`);
+  for (const organization of organizations ?? []) {
+    const months = organization.retention_months ?? 12;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const cutoffIso = cutoff.toISOString();
 
-  if (expired && expired.length > 0) {
-    const { error: removeError } = await admin.storage
-      .from("cvs")
-      .remove(expired.map((a) => a.cv_path));
-    if (removeError) {
-      logError(`cv removal: ${removeError.message}`);
-    } else {
-      result.deleted_files += expired.length;
-    }
-
-    // Cascades to ai_evaluations and status_history (FKs).
-    const { error: deleteError, count } = await admin
+    const { data: expired, error: expiredError } = await admin
       .from("applications")
-      .delete({ count: "exact" })
-      .in(
-        "id",
-        expired.map((a) => a.id)
-      );
-    if (deleteError) {
-      logError(`application deletion: ${deleteError.message}`);
-    } else {
-      result.deleted_applications += count ?? 0;
+      .select("id, cv_path")
+      .eq("org_id", organization.id)
+      .lt("created_at", cutoffIso)
+      .limit(DELETE_BATCH);
+    if (expiredError) {
+      logError(`retention lookup: ${expiredError.message}`);
+      continue;
     }
-  }
 
-  // ---- 3) orphaned CV files past the cutoff ----
-  const { data: objects, error: listError } = await admin.storage
-    .from("cvs")
-    .list("", { limit: 1000 });
-  if (listError) logError(`storage list: ${listError.message}`);
+    if (expired && expired.length > 0) {
+      const { error: removeError } = await admin.storage
+        .from("cvs")
+        .remove(expired.map((a) => a.cv_path));
+      if (removeError) {
+        logError(`cv removal: ${removeError.message}`);
+      } else {
+        result.deleted_files += expired.length;
+      }
 
-  const oldNames = (objects ?? [])
-    .filter((o) => o.created_at && o.created_at < cutoffIso)
-    .map((o) => o.name);
-  if (oldNames.length > 0) {
+      // Cascades to ai_evaluations and status_history (FKs).
+      const { error: deleteError, count } = await admin
+        .from("applications")
+        .delete({ count: "exact" })
+        .in(
+          "id",
+          expired.map((a) => a.id)
+        );
+      if (deleteError) {
+        logError(`application deletion: ${deleteError.message}`);
+      } else {
+        result.deleted_applications += count ?? 0;
+      }
+    }
+
+    // ---- 3) orphaned CV files in this org's folder ----
+    // Objects live at cvs/{org_id}/{application_id}.{ext} (0007), so the
+    // sweep lists each org's folder instead of the bucket root.
+    const { data: objects, error: listError } = await admin.storage
+      .from("cvs")
+      .list(organization.id, { limit: 1000 });
+    if (listError) {
+      logError(`storage list: ${listError.message}`);
+      continue;
+    }
+
+    const oldPaths = (objects ?? [])
+      .filter((o) => o.created_at && o.created_at < cutoffIso)
+      .map((o) => `${organization.id}/${o.name}`);
+    if (oldPaths.length === 0) continue;
+
     const { data: referenced } = await admin
       .from("applications")
       .select("cv_path")
-      .in("cv_path", oldNames);
+      .eq("org_id", organization.id)
+      .in("cv_path", oldPaths);
     const referencedSet = new Set((referenced ?? []).map((r) => r.cv_path));
-    const orphans = oldNames.filter((name) => !referencedSet.has(name));
+    const orphans = oldPaths.filter((path) => !referencedSet.has(path));
     if (orphans.length > 0) {
       const { error: orphanError } = await admin.storage
         .from("cvs")
@@ -162,6 +179,15 @@ Deno.serve(async (req) => {
       }
     }
   }
+
+  // ---- 4) throttle log ----
+  // Submission attempt hashes are an abuse control, not a record worth
+  // keeping (0008); a day is all the limits look back over.
+  const { error: throttleError } = await admin
+    .from("submission_attempts")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 24 * 60 * 60_000).toISOString());
+  if (throttleError) logError(`throttle cleanup: ${throttleError.message}`);
 
   console.log("housekeeping done:", JSON.stringify(result));
   return json(200, result);

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Briefcase, ChartColumn, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
 
@@ -12,21 +12,24 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminDashboardPage() {
-  const profile = await requireProfile();
+  const session = await requireMembership();
   const supabase = await createClient();
 
   const [applications, publishedJobs, awaiting] = await Promise.all([
     supabase
       .from("applications")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", session.org.id),
     supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
+      .eq("org_id", session.org.id)
       .eq("status", "published")
       .is("deleted_at", null),
     supabase
       .from("applications")
       .select("id", { count: "exact", head: true })
+      .eq("org_id", session.org.id)
       .in("analysis_status", ["pending", "processing"]),
   ]);
 
@@ -53,7 +56,7 @@ export default async function AdminDashboardPage() {
       <div>
         <h1 className="text-2xl font-bold">{ar.admin.dashboard}</h1>
         <p className="mt-1 text-muted-foreground">
-          {ar.admin.welcome}، {profile.full_name}
+          {ar.admin.welcome}، {session.fullName}
         </p>
       </div>
 

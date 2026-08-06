@@ -13,7 +13,7 @@ import {
   type SettingsState,
 } from "@/app/(dashboard)/admin/settings/actions";
 import { ar } from "@/lib/i18n/ar";
-import type { UserRole } from "@/types/database";
+import type { MemberRole } from "@/types/database";
 
 const initialState: SettingsState = { saved: false, error: null };
 
@@ -101,16 +101,19 @@ export function CompanySettingsForm({
 export function MemberRoleForm({
   memberId,
   currentRole,
+  canAssignOwner,
 }: {
   memberId: string;
-  currentRole: UserRole;
+  currentRole: MemberRole;
+  /** Only an owner may hand ownership to someone else (0006 policy). */
+  canAssignOwner: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     updateMemberRole.bind(null, memberId),
     initialState
   );
-  const [role, setRole] = useState<UserRole>(currentRole);
-  const [prevRole, setPrevRole] = useState<UserRole>(currentRole);
+  const [role, setRole] = useState<MemberRole>(currentRole);
+  const [prevRole, setPrevRole] = useState<MemberRole>(currentRole);
   if (prevRole !== currentRole) {
     setPrevRole(currentRole);
     setRole(currentRole);
@@ -121,12 +124,16 @@ export function MemberRoleForm({
       <select
         name="role"
         value={role}
-        onChange={(e) => setRole(e.target.value as UserRole)}
+        onChange={(e) => setRole(e.target.value as MemberRole)}
         className={selectClass}
         aria-label={ar.settingsPage.role}
       >
+        <option value="viewer">{ar.admin.roles.viewer}</option>
         <option value="hr">{ar.admin.roles.hr}</option>
         <option value="admin">{ar.admin.roles.admin}</option>
+        {(canAssignOwner || currentRole === "owner") && (
+          <option value="owner">{ar.admin.roles.owner}</option>
+        )}
       </select>
       <Button type="submit" variant="outline" size="sm" disabled={pending}>
         {pending ? ar.settingsPage.saving : ar.settingsPage.save}
@@ -141,7 +148,7 @@ export function MemberRoleForm({
   );
 }
 
-export function MemberRoleBadge({ role }: { role: UserRole }) {
+export function MemberRoleBadge({ role }: { role: MemberRole }) {
   return <Badge variant="secondary">{ar.admin.roles[role]}</Badge>;
 }
 

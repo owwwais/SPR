@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScoreBadge } from "@/components/admin/score-badge";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
 import { formatDate } from "@/lib/format";
@@ -51,7 +51,7 @@ export default async function ApplicantsPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ status?: string; page?: string; error?: string }>;
 }) {
-  await requireProfile();
+  const session = await requireMembership();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const sp = await searchParams;
@@ -67,6 +67,7 @@ export default async function ApplicantsPage({
     .from("jobs")
     .select("id,title")
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .maybeSingle();
   if (!job) notFound();
 
@@ -77,6 +78,7 @@ export default async function ApplicantsPage({
       "id, full_name, email, status, analysis_status, analysis_attempts, created_at, ai_evaluations(fit_score)",
       { count: "exact" }
     )
+    .eq("org_id", session.org.id)
     .eq("job_id", id)
     .order("ai_evaluations(fit_score)", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true })

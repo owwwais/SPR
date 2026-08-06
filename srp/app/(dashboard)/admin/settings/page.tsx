@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -20,38 +19,39 @@ import {
   MemberRoleBadge,
   MemberRoleForm,
 } from "@/components/admin/settings-forms";
-import { requireProfile } from "@/lib/auth";
+import { requireOrgAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
+import type { MemberRole } from "@/types/database";
 
 export const metadata: Metadata = {
   title: ar.settingsPage.title,
 };
 
-// Admin-only per the RLS matrix (§4.1).
+// Owner/admin only per the RLS matrix (§4.1); requireOrgAdmin redirects
+// anyone else back to the dashboard.
 export default async function AdminSettingsPage() {
-  const profile = await requireProfile();
-  if (profile.role !== "admin") redirect("/admin");
+  const session = await requireOrgAdmin();
 
   const supabase = await createClient();
-  const [settingsRes, profilesRes] = await Promise.all([
-    supabase
-      .from("settings")
-      .select("company_name, retention_months")
-      .eq("id", 1)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("id, full_name, role, created_at")
-      .order("created_at", { ascending: true }),
-  ]);
-  if (settingsRes.error)
-    console.error("settings query failed:", settingsRes.error.message);
-  if (profilesRes.error)
-    console.error("profiles query failed:", profilesRes.error.message);
+  // The team roster is memberships joined to identity — profiles no longer
+  // carries a role (D14).
+  const { data: memberRows, error: membersError } = await supabase
+    .from("memberships")
+    .select("user_id, role, created_at, profiles(id, full_name)")
+    .eq("org_id", session.org.id)
+    .order("created_at", { ascending: true });
+  if (membersError)
+    console.error("members query failed:", membersError.message);
 
-  const settings = settingsRes.data;
-  const members = profilesRes.data ?? [];
+  type MemberRow = {
+    user_id: string;
+    role: MemberRole;
+    profiles: { id: string; full_name: string } | null;
+  };
+  const members = ((memberRows ?? []) as unknown as MemberRow[]).filter(
+    (row) => row.profiles !== null
+  );
   const t = ar.settingsPage;
 
   return (
@@ -64,8 +64,8 @@ export default async function AdminSettingsPage() {
         </CardHeader>
         <CardContent>
           <CompanySettingsForm
-            companyName={settings?.company_name ?? ""}
-            retentionMonths={settings?.retention_months ?? 12}
+            companyName={session.org.name}
+            retentionMonths={session.org.retentionMonths}
           />
         </CardContent>
       </Card>
@@ -85,22 +85,23 @@ export default async function AdminSettingsPage() {
             </TableHeader>
             <TableBody>
               {members.map((member) => (
-                <TableRow key={member.id}>
+                <TableRow key={member.user_id}>
                   <TableCell className="font-medium">
-                    {member.full_name}{" "}
-                    {member.id === profile.id && (
+                    {member.profiles!.full_name}{" "}
+                    {member.user_id === session.userId && (
                       <span className="text-xs text-muted-foreground">
                         {t.you}
                       </span>
                     )}
                   </TableCell>
                   <TableCell>
-                    {member.id === profile.id ? (
+                    {member.user_id === session.userId ? (
                       <MemberRoleBadge role={member.role} />
                     ) : (
                       <MemberRoleForm
-                        memberId={member.id}
+                        memberId={member.user_id}
                         currentRole={member.role}
+                        canAssignOwner={session.role === "owner"}
                       />
                     )}
                   </TableCell>

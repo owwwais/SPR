@@ -48,7 +48,14 @@ function bearerToken(req: Request): string | null {
   return header.startsWith("Bearer ") ? header.slice(7) : null;
 }
 
-async function isStaffCaller(req: Request): Promise<boolean> {
+// Multi-tenancy turned "is the caller staff?" into "is the caller staff OF
+// THIS APPLICATION'S ORGANIZATION?". The old is_staff() check would have let
+// any customer's HR user force a re-run — and therefore spend AI quota — on
+// another customer's applicant.
+async function canManageApplication(
+  req: Request,
+  applicationId: string
+): Promise<boolean> {
   const token = bearerToken(req);
   if (!token) return false;
   if (token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return true;
@@ -58,7 +65,9 @@ async function isStaffCaller(req: Request): Promise<boolean> {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: `Bearer ${token}` } } }
     );
-    const { data } = await asCaller.rpc("is_staff");
+    const { data } = await asCaller.rpc("can_manage_application", {
+      p_application_id: applicationId,
+    });
     return data === true;
   } catch {
     return false;
@@ -133,9 +142,9 @@ Deno.serve(async (req) => {
   if (!application) return json(404, { error: "application not found" });
 
   if (application.analysis_status !== "pending") {
-    // done/failed/processing: only staff (dashboard re-run) or the service
-    // role (housekeeping cron) may proceed.
-    if (!payload.force || !(await isStaffCaller(req))) {
+    // done/failed/processing: only staff of this application's own org
+    // (dashboard re-run) or the service role (housekeeping cron) may proceed.
+    if (!payload.force || !(await canManageApplication(req, applicationId))) {
       return json(
         application.analysis_status === "processing" ? 409 : 403,
         { error: "re-run requires a staff caller with force" }
@@ -273,12 +282,14 @@ Deno.serve(async (req) => {
 
     await admin
       .from("applications")
-      .update({ analysis_status: "done" })
+      .update({ analysis_status: "done", analysis_error: null })
       .eq("id", applicationId);
 
     return json(200, { ok: true, fit_score: evaluation.fit_score });
   } catch (err) {
     // Error message only — never CV content or model output (D8, §8 privacy).
+    // D5 wants the reason persisted, not just logged: HR sees why a retry is
+    // worth pressing, and the platform console can group failures by cause.
     const message = err instanceof Error ? err.message : String(err);
     console.error("analysis failed:", message.slice(0, 500));
     await admin
@@ -286,6 +297,7 @@ Deno.serve(async (req) => {
       .update({
         analysis_status: "failed",
         analysis_attempts: application.analysis_attempts + 1,
+        analysis_error: message.slice(0, 500),
       })
       .eq("id", applicationId);
     return json(500, { error: "analysis failed" });

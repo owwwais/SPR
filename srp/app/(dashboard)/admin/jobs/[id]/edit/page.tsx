@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { JobForm } from "@/components/admin/job-form";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ScreeningQuestions } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
@@ -19,7 +19,7 @@ export default async function EditJobPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireProfile();
+  const session = await requireMembership();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
@@ -30,6 +30,7 @@ export default async function EditJobPage({
       "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,screening_questions,deleted_at"
     )
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .maybeSingle();
   if (!job || job.deleted_at) notFound();
 

@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteJobButton } from "@/components/admin/delete-job-button";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
 import { formatDate } from "@/lib/format";
@@ -38,7 +38,7 @@ export default async function AdminJobsPage({
 }: {
   searchParams: Promise<{ page?: string; status?: string; error?: string }>;
 }) {
-  await requireProfile();
+  const session = await requireMembership();
   const sp = await searchParams;
 
   const statusFilter = STATUSES.includes(sp.status as JobStatus)
@@ -57,6 +57,7 @@ export default async function AdminJobsPage({
     .select("id,title,department,type,status,closes_at,created_at", {
       count: "exact",
     })
+    .eq("org_id", session.org.id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

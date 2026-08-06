@@ -34,28 +34,63 @@ A recruitment website for a single company, with two faces:
 | D9 | Soft deletes on `jobs`. Applications are never hard-deleted except by the retention job. Every status change is recorded in `status_history`. |
 | D10 | Allowed dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `@google/genai` (Edge Function only), `zod`, `react-hook-form`, `mammoth` (DOCX text extraction, Edge Function only), `date-fns`, `recharts`, `lucide-react`, shadcn/ui deps, `resend`. **Ask before adding anything else.** No ORM, no state library, no i18n framework (single `ar.ts` dictionary). |
 
+### 2.1 SaaS Conversion Decisions (v2.0 — approved 2026-08-06)
+
+The product becomes a multi-tenant SaaS: many customer companies (**tenants**),
+one platform owner. Full rationale in `docs/SAAS_PLAN.md`.
+
+| # | Decision |
+|---|----------|
+| **D11** | **Tenancy = one database, one schema, `org_id` on every tenant-scoped row, isolation by RLS.** No schema-per-tenant, no database-per-tenant. |
+| **D12** | **`memberships` is the only source of truth for who belongs to which org.** Never trust JWT claims for tenancy — `user_metadata` is user-writable. Membership lookups go through `security definer` helpers. |
+| **D13** | **Platform admins live in their own table (`platform_admins`), never as a value in a tenant role enum.** A tenant must not be able to escalate to platform access even if a tenant-facing policy is wrong. |
+| **D14** | **A user may belong to more than one organization** (recruitment agencies; audited impersonation). `profiles` holds identity only; `memberships` holds (org, role). |
+| **D15** | **Applying is server-side only.** `anon` has no INSERT on `applications` and no INSERT on the `cvs` bucket. The public form posts to the `submit-application` Edge Function, which validates, rate-limits, uploads with the service role and inserts. |
+| **D16** | **AI quota is checked inside `analyze-application` before the Gemini call**, never in the UI. (Enforcement lands with billing in S5; the call site is prepared in S1.) |
+| **D17** | **Public tenant routing is path-first: `/c/{slug}`.** Subdomains rewrite to it in `proxy.ts`; custom domains are a paid-plan feature. |
+| **D18** | **`/admin` stays the tenant workspace. `/platform` is the platform console.** |
+| **D19** | Pricing = seats + a monthly analysis quota. The analysis is both the unit of value and the unit of cost. |
+| **D20** | Payment provider sits behind `lib/billing/provider.ts`. Manual bank transfer first, Moyasar next. |
+| **D21** | The public job marketplace (`/jobs`, `/companies`) is part of the product, not an add-on. |
+| **D22** | **Impersonation is a time-boxed, reason-required, fully audited session** (60 minutes), surfaced with a permanent banner. It grants access through `current_org_ids()`, so RLS stays the single gate. |
+| **D23** | Arabic only in v1. D10's "no i18n framework" still holds. |
+| **D24** | "No score without justification" and "the decision is always human" are **product promises**, not just internal rules. They get a public page and an exportable transparency report. |
+
+**The isolation invariant (the one rule that outranks convenience):**
+> Every query against a tenant-scoped table filters by `org_id` **in application code**
+> *and* is constrained by RLS. Two independent layers, always. A page that relies on
+> RLS alone is not acceptable, and neither is one that relies on the filter alone.
+
 ---
 
 ## 3. Repository Structure
 
+Target structure for v2.0. Sections marked ☐ are not built yet — do not
+create them ahead of their milestone.
+
 ```
 srp/
 ├── app/
+│   ├── (marketing)/                 # ☐ S6: landing, pricing, fairness, legal
 │   ├── (public)/
 │   │   ├── page.tsx                 # landing + featured jobs
 │   │   ├── jobs/                    # list + [id] details + apply form
+│   │   ├── c/[slug]/                # ☐ S3: per-tenant careers page
+│   │   ├── companies/               # ☐ S6: company directory
 │   │   └── track/[ref]/             # applicant status tracking by reference code
-│   ├── (dashboard)/admin/
+│   ├── (dashboard)/admin/           # TENANT workspace, scoped to one org
 │   │   ├── jobs/                    # FR-01 manage jobs
 │   │   ├── jobs/[id]/applicants/    # FR-06 ranked applicants
 │   │   ├── applications/[id]/       # applicant detail: CV, AI eval, questions, status
 │   │   ├── stats/                   # FR-09
-│   │   └── settings/                # retention, HR users (admin only)
+│   │   └── settings/                # org profile, retention, team (admin only)
+│   ├── (platform)/platform/         # ☐ S4: PLATFORM console (owner only)
 │   └── login/
 ├── components/
 ├── lib/
 │   ├── supabase/                    # client factories
 │   ├── validations/                 # zod schemas (shared: forms + edge)
+│   ├── auth.ts                      # requireMembership() — the tenancy gate
 │   └── i18n/ar.ts                   # ALL user-facing Arabic strings
 ├── supabase/
 │   ├── migrations/
@@ -63,37 +98,81 @@ srp/
 │   │   ├── analyze-application/     # Gemini call lives ONLY here
 │   │   │   ├── index.ts
 │   │   │   └── prompts.ts           # versioned prompts (see §7)
+│   │   ├── submit-application/      # D15: the ONLY write path for applicants
+│   │   ├── manage-users/            # team accounts (org-scoped)
+│   │   ├── housekeeping/            # cron: analysis retries + per-org retention
 │   │   └── send-email/              # Resend wrapper
+│   ├── scripts/                     # one-off operational scripts (service role)
+│   ├── tests/                       # RLS + tenant-isolation checks
 │   └── seed.sql
 └── types/database.ts                # generated
 ```
 
 ---
 
-## 4. Database Schema (Authoritative — migration `0001_init.sql`)
+## 4. Database Schema (Authoritative — `0001_init.sql` … `0006_multitenancy.sql`)
 
 ```sql
 create type job_status as enum ('draft','published','closed');
 create type job_type as enum ('full_time','part_time','contract','remote','internship');
 create type app_status as enum ('new','under_review','interview','accepted','rejected');
 create type analysis_status as enum ('pending','processing','done','failed');
-create type user_role as enum ('admin','hr');
 
+-- ---- tenancy (0006) ----
+create type org_status as enum ('trial','active','past_due','suspended','cancelled');
+create type member_role as enum ('owner','admin','hr','viewer');
+
+-- The tenant. Replaces the single-row `settings` table of v1.
+create table organizations (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,          -- careers URL + future subdomain
+  name text not null,
+  logo_path text, cover_path text, about text, website text,
+  industry text, city text, brand_color text,
+  status org_status not null default 'trial',
+  listed_publicly boolean not null default true,   -- shows in the marketplace
+  retention_months int not null default 12 check (retention_months between 1 and 60),
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+-- Identity only. The role lives on the membership (D14).
 create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  role user_role not null default 'hr',
   full_name text not null,
   created_at timestamptz not null default now()
 );
 
-create table settings (
-  id int primary key default 1 check (id = 1),   -- single row
-  company_name text not null default '',
-  retention_months int not null default 12 check (retention_months between 1 and 60)
+create table memberships (
+  org_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role member_role not null default 'hr',
+  created_at timestamptz not null default now(),
+  primary key (org_id, user_id)
+);
+
+-- D13: platform staff are NOT a tenant role.
+create table platform_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+-- D22: audited, time-boxed support access. Read by current_org_ids().
+create table impersonation_sessions (
+  id uuid primary key default gen_random_uuid(),
+  platform_user_id uuid not null references auth.users(id) on delete cascade,
+  org_id uuid not null references organizations(id) on delete cascade,
+  reason text not null,
+  expires_at timestamptz not null default now() + interval '60 minutes',
+  ended_at timestamptz,
+  created_at timestamptz not null default now()
 );
 
 create table jobs (
   id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
   title text not null,
   department text,
   location text,
@@ -111,6 +190,7 @@ create table jobs (
 
 create table applications (
   id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
   job_id uuid not null references jobs(id),
   ref_code text not null unique,                 -- short public tracking code
   full_name text not null,
@@ -124,12 +204,14 @@ create table applications (
   status app_status not null default 'new',
   analysis_status analysis_status not null default 'pending',
   analysis_attempts int not null default 0,
+  analysis_error text,                           -- D5: why the last run failed
   created_at timestamptz not null default now(),
   unique (job_id, email)                         -- FR-03: no duplicate applications
 );
 
 create table ai_evaluations (
   id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
   application_id uuid not null references applications(id) on delete cascade,
   model text not null,
   prompt_version text not null,
@@ -144,6 +226,7 @@ create table ai_evaluations (
 
 create table status_history (
   id bigint generated always as identity primary key,
+  org_id uuid not null references organizations(id) on delete cascade,
   application_id uuid not null references applications(id) on delete cascade,
   from_status app_status,
   to_status app_status not null,
@@ -152,28 +235,76 @@ create table status_history (
   created_at timestamptz not null default now()
 );
 
-create index on jobs(status) where deleted_at is null;
-create index on applications(job_id, status);
+create index on jobs(org_id, status) where deleted_at is null;
+create index on applications(org_id, job_id, status);
 create index on applications(analysis_status) where analysis_status in ('pending','failed');
+create index on memberships(user_id);   -- every RLS policy goes through this
 ```
+
+**Consistency guards.** `org_id` alone does not stop a bug from attaching an
+application to another org's job. Triggers enforce that
+`applications.org_id = jobs.org_id`, and that `ai_evaluations` /
+`status_history` inherit their application's `org_id`.
+
+**Helper functions** (all `security definer`, all `stable`):
+
+| Function | Meaning |
+|---|---|
+| `current_org_ids() → uuid[]` | Every org the caller may touch: their memberships, plus any live impersonation session (D22). **The single source of tenancy for RLS.** |
+| `is_org_member(org, roles[]) → bool` | Membership with an optional role filter, for write policies. |
+| `org_role(org) → member_role` | The caller's role in one org. |
+| `is_platform_admin() → bool` | Reads `platform_admins` only (D13). |
+| `can_manage_application(app) → bool` | Used by Edge Functions to authorize a re-run against the application's own org. |
+
+In policies, always call these wrapped in a subquery —
+`org_id = any ((select public.current_org_ids()))` — so Postgres evaluates
+them once per statement instead of once per row.
 
 ### 4.1 RLS Matrix (enable RLS on every table)
 
-| Table | anon (public) | hr | admin |
-|---|---|---|---|
-| jobs | select where `status='published' and deleted_at is null` | full CRUD (soft delete) | full |
-| applications | **insert only** (with published-job check) | select, update `status` only | full |
-| ai_evaluations | none | select | select |
-| status_history | select own via `ref_code` join (for tracking page) | select + insert | full |
-| profiles | none | select self | full |
-| settings | none | select | full |
-| Storage `cvs` bucket | insert only (size ≤ 5MB, mime whitelist) | read via signed URLs | full |
+Every tenant row is reachable only when `org_id = any (current_org_ids())`.
+Roles below are **within one organization**; a member of org A has no
+relationship at all to org B's rows.
 
-Status changes by HR must go through RPC `change_application_status(app_id, new_status, note)` which writes `status_history` and enqueues the applicant email. Direct `update` of `applications.status` is additionally guarded by a trigger that auto-inserts history (defense in depth).
+| Table | anon (public) | viewer | hr | admin | owner | platform_admin |
+|---|---|---|---|---|---|---|
+| organizations | select where `listed_publicly and status in ('trial','active') and deleted_at is null` | select own | select own | select + update own | + delete own | select all |
+| memberships | none | select own org | select own org | CRUD (cannot touch an `owner`) | full CRUD | select all |
+| profiles | none | select self + co-members | ↑ | ↑ | ↑ | select all |
+| jobs | select where `status='published' and deleted_at is null` **and the org is listed** | select | full CRUD (soft delete) | ↑ | ↑ | select all |
+| applications | **none — insert goes through `submit-application` (D15)** | select | select + status via RPC | ↑ | ↑ | select all |
+| ai_evaluations | none | select | select + update `interview_notes` only | ↑ | ↑ | select all |
+| status_history | own history via `track_application(ref_code)` RPC only | select | select + insert | ↑ | ↑ | select all |
+| platform_admins | none | none | none | none | none | full |
+| impersonation_sessions | none | none | none | none | none | full |
+| Storage `cvs` | **none** | read own org folder | ↑ | ↑ | ↑ | read (see below) |
+
+Notes that are not optional:
+
+- **`anon` cannot write anywhere.** `applications` inserts and CV uploads both
+  go through the `submit-application` Edge Function, which derives `org_id`
+  from the job — never from the client (D15).
+- CV objects are named `cvs/{org_id}/{application_id}.{ext}`; the storage
+  policy compares `(storage.foldername(name))[1]` against `current_org_ids()`.
+- Status changes by HR must go through RPC
+  `change_application_status(app_id, new_status, note)` which writes
+  `status_history` and enqueues the applicant email. Direct `update` of
+  `applications.status` is additionally guarded by a trigger that auto-inserts
+  history (defense in depth).
+- A platform admin reaches tenant data **only** through an active
+  impersonation session, which is reason-required, expires in 60 minutes and
+  is fully audited (D22). Being in `platform_admins` on its own grants
+  read of platform tables, not of tenant rows.
 
 ### 4.2 Analysis Pipeline (D4)
 
-1. Public form → server action: validate (zod) → upload CV to `cvs/{application_id}.{ext}` → insert `applications` (status `pending`) → invoke Edge Function `analyze-application` (fire-and-forget) → return `ref_code` to applicant + confirmation email.
+1. Public form → server action → **Edge Function `submit-application`** (D15):
+   rate-limit + optional Turnstile → resolve the job and derive `org_id` from
+   it → verify the job is published, open, and its org is `trial`/`active` →
+   validate (zod) → upload CV to `cvs/{org_id}/{application_id}.{ext}` with the
+   service role → insert `applications` (status `pending`) → invoke
+   `analyze-application` (fire-and-forget) → return `ref_code` to applicant +
+   confirmation email.
 2. Edge Function: set `processing` → download CV from Storage → if PDF: pass bytes to Gemini as `inlineData` (`application/pdf`); if DOCX: extract text with `mammoth`, pass as text → single Gemini call (§7) → zod-validate → upsert `ai_evaluations` → set `done`. On any error: increment `analysis_attempts`, set `failed`, log error message (never log CV content).
 3. Dashboard button "إعادة التحليل" re-invokes the function for `failed` (or after prompt upgrades).
 4. `pg_cron` daily: retry `failed` with `attempts < 3`; delete applications + CV files older than retention.
@@ -366,11 +497,32 @@ Call parameters: `model: "gemini-3.5-flash"`, `temperature: 0.2`, JSON mode + sc
 7. **M6 – Pipeline & emails:** FR-08 RPC + templates + history.
 8. **M7 – Stats + retention cron + hardening** (empty states, skeletons, mobile pass).
 
+### 9.1 SaaS conversion — short track (approved 2026-08-06)
+
+M0–M7 are complete. The conversion runs as its own milestone series; the
+approved short track ships a sellable product before any billing engine is
+built. Same rule: **stop for engineer approval after each.**
+
+1. **S1 – Tenancy & isolation.** Migrations `0006`/`0007`, helper functions,
+   full RLS rewrite, storage repathing, `submit-application`, and a
+   cross-tenant isolation test suite. Nothing here may be deferred.
+2. **S2 – Identity & onboarding.** Self-serve signup creating org + owner,
+   email verification, invitations, org switcher, the four roles.
+3. **S3 – Tenant workspace.** Explicit `org_id` scoping in every page and
+   action, branding settings, `/c/{slug}` careers page, per-org cache tags.
+4. **S6 – Landing & marketplace.** Marketing site, `/jobs` grouped by company,
+   `/companies`, `JobPosting` JSON-LD, sitemap.
+5. **S9-mini – Hardening.** Rate limits, Turnstile, backups, privacy policy.
+
+Deferred until the product has paying customers: **S4** (platform console),
+**S5** (billing and quota enforcement), **S7** (Notion design pass),
+**S8** (parity + differentiator features).
+
 ---
 
 ## 10. Forbidden Actions
 
-1. No features/tables/roles beyond this spec. No candidate accounts, no multi-company support, no chat features.
+1. No features/tables/roles beyond this spec. No candidate accounts, no chat features. (Multi-company support is now in scope per §2.1 — but only as specified there.)
 2. No new dependencies without approval (D10). No LangChain or AI framework wrappers — call `@google/genai` directly.
 3. Gemini key only in Edge Function env. Never in Next.js env vars (not even server-side ones), never in the repo.
 4. Never let the AI decide status. No auto-reject, no auto-shortlist. The word "advisory" must survive in the UI.
@@ -379,6 +531,13 @@ Call parameters: `model: "gemini-3.5-flash"`, `temperature: 0.2`, JSON mode + sc
 7. No English strings in the UI; no `ml-/mr-` physical classes.
 8. Do not "improve" the scoring rubric or the system prompt on your own — prompt changes require engineer approval and a `PROMPT_VERSION` bump.
 9. Do not mark a milestone complete with TODOs or mocked paths — report blockers.
+10. **Never widen tenant reach.** No query on a tenant table without an
+    explicit `org_id` filter, no policy using a bare `authenticated` check, no
+    trusting an `org_id` that arrived from the client — derive it from a row
+    you already authorized. If a feature seems to need cross-org reads, stop
+    and ask.
+11. Never grant `anon` insert/update/delete on any table or storage bucket.
+12. Never put platform-owner capability behind a tenant role.
 
 ## 11. Definition of Done (per milestone)
 

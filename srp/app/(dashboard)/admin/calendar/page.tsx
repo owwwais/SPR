@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScoreBadge } from "@/components/admin/score-badge";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { ar } from "@/lib/i18n/ar";
@@ -100,7 +100,7 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ m?: string }>;
 }) {
-  await requireProfile();
+  const session = await requireMembership();
   const sp = await searchParams;
 
   // Visible month (?m=YYYY-MM), defaulting to the current month.
@@ -120,6 +120,7 @@ export default async function CalendarPage({
     .select(
       "id, full_name, status, interview_at, interview_qa, jobs(title), ai_evaluations(fit_score, interview_questions)"
     )
+    .eq("org_id", session.org.id)
     .or("status.eq.interview,interview_at.not.is.null")
     .order("interview_at", { ascending: true, nullsFirst: false })
     .limit(300);

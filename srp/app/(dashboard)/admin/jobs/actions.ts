@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
+import { canWrite, requireMembership, type Session } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { jobSchema } from "@/lib/validations/job";
 import { ar } from "@/lib/i18n/ar";
@@ -33,6 +33,15 @@ function formError(parseError: { issues: Array<{ path: PropertyKey[] }> }) {
     : ar.adminJobs.errors.invalidInput;
 }
 
+// Every mutation here is guarded twice: this check, and the RLS policy that
+// requires is_org_member(org_id, owner|admin|hr). The isolation invariant
+// (§2.1) asks for both.
+async function requireJobWriter(): Promise<Session> {
+  const session = await requireMembership();
+  if (!canWrite(session.role)) redirect("/admin/jobs?error=forbidden");
+  return session;
+}
+
 // Public pages are ISR-cached (60s); refresh them immediately after HR edits.
 function revalidateJobPages(id?: string) {
   revalidatePath("/");
@@ -45,7 +54,7 @@ export async function createJob(
   _prev: JobFormState,
   formData: FormData
 ): Promise<JobFormState> {
-  const profile = await requireProfile();
+  const session = await requireJobWriter();
   const parsed = jobSchema.safeParse(formValues(formData));
   if (!parsed.success) {
     return { error: formError(parsed.error) };
@@ -54,7 +63,11 @@ export async function createJob(
   const supabase = await createClient();
   const { error } = await supabase
     .from("jobs")
-    .insert({ ...parsed.data, created_by: profile.id });
+    .insert({
+      ...parsed.data,
+      org_id: session.org.id,
+      created_by: session.userId,
+    });
   if (error) {
     console.error("createJob failed:", error.message);
     return { error: ar.adminJobs.errors.serverError };
@@ -69,7 +82,7 @@ export async function updateJob(
   _prev: JobFormState,
   formData: FormData
 ): Promise<JobFormState> {
-  await requireProfile();
+  const session = await requireJobWriter();
   const parsed = jobSchema.safeParse(formValues(formData));
   if (!parsed.success) {
     return { error: formError(parsed.error) };
@@ -80,6 +93,7 @@ export async function updateJob(
     .from("jobs")
     .update(parsed.data)
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .is("deleted_at", null);
   if (error) {
     console.error("updateJob failed:", error.message);
@@ -93,13 +107,14 @@ export async function updateJob(
 // FR-01: publishing requires non-empty requirements text (the AI matching
 // source). Also used to republish a closed job.
 export async function publishJob(id: string): Promise<void> {
-  await requireProfile();
+  const session = await requireJobWriter();
   const supabase = await createClient();
 
   const { data: job } = await supabase
     .from("jobs")
     .select("requirements, deleted_at")
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .maybeSingle();
   if (!job || job.deleted_at) redirect("/admin/jobs?error=notFound");
   if (job.requirements.trim().length === 0) {
@@ -109,7 +124,8 @@ export async function publishJob(id: string): Promise<void> {
   const { error } = await supabase
     .from("jobs")
     .update({ status: "published" })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("org_id", session.org.id);
   if (error) {
     console.error("publishJob failed:", error.message);
     redirect("/admin/jobs?error=serverError");
@@ -122,12 +138,13 @@ export async function publishJob(id: string): Promise<void> {
 // FR-01: closing hides the job publicly; new applications are blocked by
 // the RLS insert policy (published jobs only).
 export async function closeJob(id: string): Promise<void> {
-  await requireProfile();
+  const session = await requireJobWriter();
   const supabase = await createClient();
   const { error } = await supabase
     .from("jobs")
     .update({ status: "closed" })
     .eq("id", id)
+    .eq("org_id", session.org.id)
     .is("deleted_at", null);
   if (error) {
     console.error("closeJob failed:", error.message);
@@ -139,12 +156,13 @@ export async function closeJob(id: string): Promise<void> {
 
 // D9: soft delete only. Hard deletes happen solely in the retention job.
 export async function deleteJob(id: string): Promise<void> {
-  await requireProfile();
+  const session = await requireJobWriter();
   const supabase = await createClient();
   const { error } = await supabase
     .from("jobs")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("org_id", session.org.id);
   if (error) {
     console.error("deleteJob failed:", error.message);
     redirect("/admin/jobs?error=serverError");

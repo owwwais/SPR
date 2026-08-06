@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { JobForm } from "@/components/admin/job-form";
-import { requireProfile } from "@/lib/auth";
+import { requireMembership } from "@/lib/auth";
 import { ar } from "@/lib/i18n/ar";
 import { createJob } from "../actions";
 
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NewJobPage() {
-  await requireProfile();
+  await requireMembership();
 
   return (
     <div className="flex flex-col gap-6">
