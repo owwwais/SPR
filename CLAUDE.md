@@ -519,6 +519,14 @@ Deferred until the product has paying customers: **S4** (platform console),
 **S5** (billing and quota enforcement), **S7** (Notion design pass),
 **S8** (parity + differentiator features).
 
+**Status (2026-08-06): S1, S2, S3, S6 and S9-mini are complete and pushed.**
+Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
+`onboarding.sql` (23), `rls_check.sql` (42) — `npm run test:db` runs all
+three against a throwaway database. What remains before charging anyone:
+deploy S1 to production (`docs/S1_DEPLOY.md`), then S5 for billing — the
+pricing page publishes plans that are **not yet enforced**, since the quota
+check belongs inside `analyze-application` (D16).
+
 ---
 
 ## 10. Forbidden Actions
