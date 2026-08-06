@@ -55,6 +55,7 @@ one platform owner. Full rationale in `docs/SAAS_PLAN.md`.
 | **D22** | **Impersonation is a time-boxed, reason-required, fully audited session** (60 minutes), surfaced with a permanent banner. It grants access through `current_org_ids()`, so RLS stays the single gate. |
 | **D23** | Arabic only in v1. D10's "no i18n framework" still holds. |
 | **D24** | "No score without justification" and "the decision is always human" are **product promises**, not just internal rules. They get a public page and an exportable transparency report. |
+| **D25** | **The product is named حكيم (`hakeem`).** It lives as `PRODUCT_NAME` / `PRODUCT_SLUG` in `lib/i18n/ar.ts` and nowhere else — no page, email or migration may hard-code it. The name carries the positioning: a حكيم advises, it does not rule (D24). Root domain is read from `NEXT_PUBLIC_ROOT_DOMAIN` so subdomain routing (D17) is never coupled to a literal. |
 
 **The isolation invariant (the one rule that outranks convenience):**
 > Every query against a tenant-scoped table filters by `org_id` **in application code**

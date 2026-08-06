@@ -2,14 +2,24 @@
 // No English strings may appear in the UI. Technical terms (React, SQL, ...)
 // may stay in English inside Arabic sentences where unavoidable.
 
+// The product name, in exactly one place. Every surface — page titles, the
+// marketplace header, emails, the marketing site — reads it from here, so a
+// rebrand is this line and the domain, nothing else.
+export const PRODUCT_NAME = "حكيم";
+
+// Latin form, for slugs, the sender address and anything that cannot carry
+// Arabic script.
+export const PRODUCT_SLUG = "hakeem";
+
 export const ar = {
   meta: {
-    title: "بوابة التوظيف الذكية",
-    description: "تصفّح الوظائف المتاحة وقدّم طلبك بسهولة",
+    title: PRODUCT_NAME,
+    description:
+      "منصة توظيف تقرأ السير الذاتية بالذكاء الاصطناعي وترتّب المتقدمين بدرجة مبرَّرة — والقرار يبقى لك",
   },
 
   common: {
-    appName: "بوابة التوظيف الذكية",
+    appName: PRODUCT_NAME,
     loading: "جارٍ التحميل…",
     comingSoonTitle: "قيد الإنشاء",
     comingSoonBody: "هذه الصفحة قيد الإنشاء وستتوفر قريباً.",
