@@ -108,6 +108,74 @@ export async function createMember(
   return { saved: true, error: null };
 }
 
+const inviteSchema = z.object({
+  email: z.email().max(200),
+  role: z.enum(["owner", "admin", "hr", "viewer"]),
+});
+
+// The preferred way to add a colleague: they set their own password, and the
+// invitation is bound to their email address on acceptance. No admin ever
+// handles someone else's credentials.
+export async function inviteMember(
+  _prev: SettingsState,
+  formData: FormData
+): Promise<SettingsState> {
+  const session = await requireOrgAdmin();
+
+  const parsed = inviteSchema.safeParse({
+    email: formData.get("email"),
+    role: formData.get("role"),
+  });
+  if (!parsed.success) {
+    return { saved: false, error: ar.settingsPage.invite.invalid };
+  }
+  if (parsed.data.role === "owner" && session.role !== "owner") {
+    return { saved: false, error: ar.settingsPage.addMember.ownerOnly };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.functions.invoke("manage-users", {
+    body: { action: "invite", org_id: session.org.id, ...parsed.data },
+  });
+  if (error) {
+    console.error("inviteMember failed:", error.message);
+    return { saved: false, error: ar.settingsPage.invite.failed };
+  }
+  if (!data?.ok) {
+    return { saved: false, error: ar.settingsPage.invite.failed };
+  }
+  // The invitation exists either way; only delivery may have failed.
+  if (data.emailed === false) {
+    return { saved: false, error: ar.settingsPage.invite.createdNotEmailed };
+  }
+
+  revalidatePath("/admin/settings");
+  return { saved: true, error: null };
+}
+
+// Revoking keeps the row (and therefore the audit trail) but makes the token
+// unredeemable — accept_invitation only honours 'pending'.
+export async function revokeInvitation(
+  invitationId: string
+): Promise<SettingsState> {
+  const session = await requireOrgAdmin();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("invitations")
+    .update({ status: "revoked" })
+    .eq("id", invitationId)
+    .eq("org_id", session.org.id)
+    .eq("status", "pending");
+  if (error) {
+    console.error("revokeInvitation failed:", error.message);
+    return { saved: false, error: ar.settingsPage.invite.revokeFailed };
+  }
+
+  revalidatePath("/admin/settings");
+  return { saved: true, error: null };
+}
+
 const ROLES: MemberRole[] = ["owner", "admin", "hr", "viewer"];
 
 export async function updateMemberRole(

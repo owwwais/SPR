@@ -9,6 +9,7 @@ import {
 import { canAdminister, requireMembership } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
 import { NavLink } from "@/components/admin/nav-link";
+import { OrgSwitcher } from "@/components/admin/org-switcher";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ar } from "@/lib/i18n/ar";
@@ -23,10 +24,10 @@ export default async function AdminLayout({
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="flex flex-col gap-4 border-b bg-background p-4 md:min-h-full md:w-60 md:border-b-0 md:border-e">
-        <div className="flex items-center gap-2 px-3 font-semibold">
-          <Briefcase className="size-5 text-primary" aria-hidden />
-          <span className="truncate">{session.org.name}</span>
-        </div>
+        <OrgSwitcher
+          current={{ id: session.org.id, name: session.org.name }}
+          memberships={session.memberships}
+        />
         <nav className="flex flex-row gap-1 overflow-x-auto md:flex-col">
           <NavLink href="/admin" exact>
             <LayoutDashboard className="size-4" aria-hidden />

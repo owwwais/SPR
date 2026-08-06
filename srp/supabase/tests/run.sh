@@ -61,6 +61,10 @@ echo "══ tenant isolation ══"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
 
 echo
+echo "══ onboarding ══"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/onboarding.sql
+
+echo
 echo "══ role capabilities ══"
 # rls_check reports expected-failure cases as NOTICE lines; surface any FAIL.
 output=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_check.sql 2>&1)

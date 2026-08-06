@@ -5,7 +5,8 @@ export type EmailKind =
   | "application_received"
   | "interview_invited"
   | "accepted"
-  | "rejected";
+  | "rejected"
+  | "invitation";
 
 type TemplateInput = {
   fullName: string;
@@ -13,6 +14,9 @@ type TemplateInput = {
   refCode: string;
   trackUrl: string | null;
   companyName: string;
+  /** invitation only: the one-time accept link and the offered role. */
+  inviteUrl?: string | null;
+  roleLabel?: string;
 };
 
 type Template = { subject: string; html: string };
@@ -81,6 +85,26 @@ export function buildEmail(
            <p>يسعدنا إبلاغك بقبولك لوظيفة <strong>${input.jobTitle}</strong>. 🎉</p>
            <p>سيتواصل معك فريق التوظيف قريباً لاستكمال إجراءات التعيين والتفاصيل التالية.</p>
            <p>نتطلع لانضمامك إلينا!</p>`,
+          input.companyName
+        ),
+      };
+    }
+    case "invitation": {
+      // Sent to a colleague, not an applicant: no ref code, no tracking link.
+      const button = input.inviteUrl
+        ? `<p style="margin:24px 0"><a href="${input.inviteUrl}" style="display:inline-block;background:#2383e2;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px">قبول الدعوة</a></p>
+           <p style="color:#6b7280;font-size:12px">أو انسخ هذا الرابط إلى المتصفح:<br><span dir="ltr" style="font-family:monospace;word-break:break-all">${input.inviteUrl}</span></p>`
+        : "";
+      return {
+        subject: `دعوة للانضمام إلى فريق ${input.companyName}`,
+        html: layout(
+          "دعوة للانضمام",
+          `<p>مرحباً،</p>
+           <p>تمت دعوتك للانضمام إلى فريق التوظيف في <strong>${input.companyName}</strong>${
+             input.roleLabel ? ` بصلاحية <strong>${input.roleLabel}</strong>` : ""
+           }.</p>
+           ${button}
+           <p style="color:#6b7280;font-size:12px">تنتهي صلاحية هذه الدعوة خلال سبعة أيام. إن لم تكن تتوقع هذه الرسالة فتجاهلها.</p>`,
           input.companyName
         ),
       };

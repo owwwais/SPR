@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Briefcase } from "lucide-react";
-import { getSession } from "@/lib/auth";
-import { LoginForm } from "./login-form";
+import { getUser } from "@/lib/auth";
+import { SignupForm } from "./signup-form";
 import {
   Card,
   CardContent,
@@ -14,19 +14,13 @@ import {
 import { ar } from "@/lib/i18n/ar";
 
 export const metadata: Metadata = {
-  title: ar.auth.loginTitle,
+  title: ar.auth.signupTitle,
 };
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
-  const { next } = await searchParams;
-  const session = await getSession();
-  // Same-site paths only — see safeNext() in actions.ts.
-  const target = next?.startsWith("/") && !next.startsWith("//") ? next : null;
-  if (session) redirect(target ?? "/admin");
+export default async function SignupPage() {
+  // Already signed in: the next unfinished step is naming the company, and
+  // requireMembership() forwards on from there if that is done too.
+  if (await getUser()) redirect("/onboarding");
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
@@ -35,12 +29,12 @@ export default async function LoginPage({
         <span>{ar.common.appName}</span>
       </Link>
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle>{ar.auth.loginTitle}</CardTitle>
-          <CardDescription>{ar.auth.loginSubtitle}</CardDescription>
+        <CardHeader>
+          <CardTitle>{ar.auth.signupTitle}</CardTitle>
+          <CardDescription>{ar.auth.signupSubtitle}</CardDescription>
         </CardHeader>
         <CardContent>
-          <LoginForm next={target ?? undefined} />
+          <SignupForm />
         </CardContent>
       </Card>
     </div>

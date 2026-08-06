@@ -1,13 +1,15 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Mail, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   createMember,
+  inviteMember,
+  revokeInvitation,
   updateMemberRole,
   updateSettings,
   type SettingsState,
@@ -229,5 +231,93 @@ export function AddMemberForm() {
         )}
       </div>
     </form>
+  );
+}
+
+// The preferred way to add a colleague (S2): they set their own password and
+// the invitation is bound to their email address on acceptance, so no admin
+// ever handles someone else's credentials.
+export function InviteMemberForm({
+  canAssignOwner,
+}: {
+  canAssignOwner: boolean;
+}) {
+  const [state, formAction, pending] = useActionState(
+    inviteMember,
+    initialState
+  );
+  const t = ar.settingsPage.invite;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <div>
+        <h3 className="font-semibold">{t.title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{t.hint}</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="invite_email">{t.email}</Label>
+          <Input
+            id="invite_email"
+            name="email"
+            type="email"
+            required
+            maxLength={200}
+            dir="ltr"
+            className="text-start"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="invite_role">{t.role}</Label>
+          <select
+            id="invite_role"
+            name="role"
+            defaultValue="hr"
+            className={selectClass}
+          >
+            <option value="viewer">{ar.admin.roles.viewer}</option>
+            <option value="hr">{ar.admin.roles.hr}</option>
+            <option value="admin">{ar.admin.roles.admin}</option>
+            {canAssignOwner && (
+              <option value="owner">{ar.admin.roles.owner}</option>
+            )}
+          </select>
+        </div>
+        <Button type="submit" disabled={pending}>
+          <Mail className="size-4" aria-hidden />
+          {pending ? t.sending : t.submit}
+        </Button>
+      </div>
+      {!pending && state.saved && (
+        <span className="flex items-center gap-1 text-sm text-emerald-600">
+          <Check className="size-4" aria-hidden />
+          {t.sent}
+        </span>
+      )}
+      {!pending && state.error && (
+        <span className="text-sm text-destructive">{state.error}</span>
+      )}
+    </form>
+  );
+}
+
+export function RevokeInvitationButton({ id }: { id: string }) {
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      onClick={async () => {
+        setPending(true);
+        await revokeInvitation(id);
+        setPending(false);
+      }}
+    >
+      <X className="size-3.5" aria-hidden />
+      {ar.settingsPage.invite.revoke}
+    </Button>
   );
 }

@@ -56,8 +56,20 @@ export async function updateSession(request: NextRequest) {
   if (!user && pathname.startsWith("/admin")) {
     return redirectTo("/login");
   }
-  if (user && pathname === "/login") {
-    return redirectTo("/admin");
+  // /onboarding needs a session but NOT a membership — that is exactly the
+  // state it exists to resolve, so it is not treated like /admin here.
+  if (!user && pathname === "/onboarding") {
+    return redirectTo("/login");
+  }
+  if (user && (pathname === "/login" || pathname === "/signup")) {
+    // An explicit ?next (an invitation link, say) is the user's destination
+    // and outranks this convenience redirect; the page honours it itself.
+    if (!request.nextUrl.searchParams.has("next")) {
+      // Where they belong depends on whether they have a workspace yet, which
+      // this layer deliberately does not know: /onboarding forwards on to
+      // /admin when a membership exists (D7 — the real gate is server-side).
+      return redirectTo("/onboarding");
+    }
   }
 
   return supabaseResponse;

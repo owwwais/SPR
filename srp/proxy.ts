@@ -10,5 +10,5 @@ export const config = {
   // never need session refresh — running the proxy there added a Supabase
   // Auth round trip to every public navigation, including ISR-cached hits.
   // The authoritative gate stays server-side in lib/auth.ts (D7).
-  matcher: ["/admin/:path*", "/login"],
+  matcher: ["/admin/:path*", "/login", "/signup", "/onboarding", "/invite/:path*"],
 };

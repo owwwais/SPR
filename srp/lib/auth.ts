@@ -1,7 +1,9 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { ACTIVE_ORG_COOKIE } from "@/lib/org-cookie";
 import type { MemberRole } from "@/types/database";
 
 // The tenancy gate (CLAUDE.md D11/D12). A session on its own means nothing
@@ -89,10 +91,13 @@ export const getSession = cache(async (): Promise<Session | null> => {
   ).filter((row) => row.organizations !== null && row.organizations.deleted_at === null);
   if (rows.length === 0) return null;
 
-  // Active-org selection arrives with the switcher in S2. Until then the
-  // earliest membership is the workspace — which, for every account that
-  // exists today, is the only organization they have.
-  const active = rows[0]!;
+  // The cookie only PICKS from memberships the database already returned
+  // (see lib/org-cookie.ts). A value naming an org the user does not belong
+  // to matches nothing and falls through to their first one, so tampering
+  // cannot widen reach — it can at most switch you to yourself.
+  const cookieStore = await cookies();
+  const requested = cookieStore.get(ACTIVE_ORG_COOKIE)?.value;
+  const active = rows.find((row) => row.org_id === requested) ?? rows[0]!;
   const org = active.organizations!;
 
   return {
@@ -115,12 +120,33 @@ export const getSession = cache(async (): Promise<Session | null> => {
   };
 });
 
-// Every /admin page and layout must go through this gate. A session with no
-// membership has no workspace to show, so it is treated exactly like being
-// signed out.
+// Signed in, but not necessarily belonging anywhere yet. This is the state
+// between confirming an email and creating (or joining) an organization, and
+// /onboarding is the only page that may render in it.
+export const getUser = cache(async () => {
+  if (!hasSupabaseEnv()) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
+
+export async function requireUser() {
+  const user = await getUser();
+  if (!user) redirect("/login");
+  return user;
+}
+
+// Every /admin page and layout must go through this gate. A signed-in user
+// with no membership is not shown an empty workspace — they are sent to
+// onboarding to create one.
 export async function requireMembership(): Promise<Session> {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) {
+    if (await getUser()) redirect("/onboarding");
+    redirect("/login");
+  }
   return session;
 }
 
