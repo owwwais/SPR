@@ -40,7 +40,10 @@ export default async function AdminSettingsPage() {
   const supabase = await createClient();
   // The team roster is memberships joined to identity — profiles no longer
   // carries a role (D14).
-  const [membersRes, invitesRes] = await Promise.all([
+  // All three need nothing but session.org.id, so they go out together. The
+  // branding read used to await after the other two and added a round trip
+  // to the page for no reason.
+  const [membersRes, invitesRes, orgRes] = await Promise.all([
     supabase
       .from("memberships")
       .select("user_id, role, created_at, profiles(id, full_name)")
@@ -52,16 +55,17 @@ export default async function AdminSettingsPage() {
       .eq("org_id", session.org.id)
       .eq("status", "pending")
       .order("created_at", { ascending: true }),
+    // Branding fields are not on the session (it carries only what the gate
+    // needs), so they are read here.
+    supabase
+      .from("organizations")
+      .select(
+        "name, slug, about, website, industry, city, brand_color, listed_publicly, logo_path, cover_path"
+      )
+      .eq("id", session.org.id)
+      .maybeSingle(),
   ]);
-  // Branding fields are not on the session (it carries only what the gate
-  // needs), so they are read here.
-  const { data: org } = await supabase
-    .from("organizations")
-    .select(
-      "name, slug, about, website, industry, city, brand_color, listed_publicly, logo_path, cover_path"
-    )
-    .eq("id", session.org.id)
-    .maybeSingle();
+  const org = orgRes.data;
 
   const publicUrl = (path: string | null) =>
     path
