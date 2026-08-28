@@ -6,6 +6,17 @@ import { z } from "zod";
 // Arabic copy. Issues are identified by their `path`; the Arabic wording
 // lives in lib/i18n/ar.ts and is applied by the caller.
 
+// Prefix of the public tracking code every applicant receives and types back
+// into /track. It is the product's Latin short form (PRODUCT_SLUG in
+// lib/i18n/ar.ts, kept as a separate literal because this module is imported
+// by Deno and must stay free of the Arabic dictionary). Codes already issued
+// under an older prefix keep working: lookup is an exact match on a stored
+// value, so only newly generated codes change.
+export const REF_CODE_PREFIX = "HKM";
+
+/** Placeholder shown to applicants, e.g. "HKM-XXXXXXXX". */
+export const REF_CODE_EXAMPLE = `${REF_CODE_PREFIX}-XXXXXXXX`;
+
 export const CV_MAX_BYTES = 5 * 1024 * 1024; // D8: 5MB cap
 
 // mime -> storage extension; keys must stay in sync with the DB check

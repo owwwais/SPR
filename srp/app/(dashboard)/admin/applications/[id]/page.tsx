@@ -117,13 +117,29 @@ export default async function ApplicationPage({
 
   const job = application.jobs as unknown as { title: string } | null;
 
-  // CV via short-lived signed URL only (D8): 10 minutes (§8).
-  const { data: signed } = await supabase.storage
-    .from("cvs")
-    .createSignedUrl(application.cv_path, 600);
-  const cvUrl = signed?.signedUrl ?? null;
+  // The signed URL and the evaluation both depend only on `application`, and
+  // on nothing from each other. Awaiting them in sequence put two round trips
+  // on the critical path — a Storage API call and a database query — where
+  // one suffices.
+  const [signedRes, evaluationRes] = await Promise.all([
+    // CV via short-lived signed URL only (D8): 10 minutes (§8).
+    supabase.storage.from("cvs").createSignedUrl(application.cv_path, 600),
+    // Fetched only when analysis completed; skipped without a round trip
+    // otherwise.
+    application.analysis_status === "done"
+      ? supabase
+          .from("ai_evaluations")
+          .select(
+            "fit_score, extracted, score_breakdown, justification, interview_questions, interview_notes, model, prompt_version, created_at"
+          )
+          .eq("application_id", id)
+          .eq("org_id", session.org.id)
+          .maybeSingle()
+      : null,
+  ]);
 
-  // Evaluation is fetched separately and only when analysis completed.
+  const cvUrl = signedRes.data?.signedUrl ?? null;
+
   let evaluation: z.infer<typeof StoredEvaluation> | null = null;
   let evaluationMeta: {
     model: string;
@@ -131,15 +147,8 @@ export default async function ApplicationPage({
     created_at: string;
     interview_notes: string | null;
   } | null = null;
-  if (application.analysis_status === "done") {
-    const { data: row, error } = await supabase
-      .from("ai_evaluations")
-      .select(
-        "fit_score, extracted, score_breakdown, justification, interview_questions, interview_notes, model, prompt_version, created_at"
-      )
-      .eq("application_id", id)
-      .eq("org_id", session.org.id)
-      .maybeSingle();
+  if (evaluationRes) {
+    const { data: row, error } = evaluationRes;
     if (error) {
       console.error("evaluation fetch failed:", error.message);
     } else if (row) {
