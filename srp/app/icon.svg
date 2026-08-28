@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="حكيم">
+  <!-- Placeholder brand mark: the initial of PRODUCT_NAME on the theme's
+       primary colour (oklch(0.205 0 0), see app/globals.css). It replaces the
+       Next.js scaffold favicon that shipped until now. Swap in a designed
+       icon when one exists — this file is the only place to change. -->
+  <rect width="64" height="64" rx="14" fill="#1c1c1c"/>
+  <text x="32" y="33" fill="#fafafa" font-size="40" font-weight="600"
+        text-anchor="middle" dominant-baseline="central"
+        font-family="'IBM Plex Sans Arabic','Noto Sans Arabic','Segoe UI',sans-serif">ح</text>
+</svg>

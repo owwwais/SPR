@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ar } from "@/lib/i18n/ar";
+import { REF_CODE_EXAMPLE } from "@/lib/validations/application";
 
 export const metadata: Metadata = {
   title: ar.track.title,
@@ -51,7 +52,7 @@ export default function TrackLookupPage() {
                 required
                 maxLength={40}
                 dir="ltr"
-                placeholder="SRP-XXXXXXXX"
+                placeholder={REF_CODE_EXAMPLE}
                 className="text-center font-mono uppercase"
               />
             </div>

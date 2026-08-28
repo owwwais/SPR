@@ -2,6 +2,10 @@
 // No English strings may appear in the UI. Technical terms (React, SQL, ...)
 // may stay in English inside Arabic sentences where unavoidable.
 
+// The tracking-code shape is defined once, next to the generator that mints
+// it, so the example shown to applicants can never drift from the real codes.
+import { REF_CODE_EXAMPLE } from "@/lib/validations/application";
+
 // The product name, in exactly one place. Every surface — page titles, the
 // marketplace header, emails, the marketing site — reads it from here, so a
 // rebrand is this line and the domain, nothing else.
@@ -425,8 +429,7 @@ export const ar = {
   },
 
   track: {
-    lookupHint:
-      "أدخل رمز المتابعة الذي استلمته عند التقديم (مثال: SRP-XXXXXXXX)",
+    lookupHint: `أدخل رمز المتابعة الذي استلمته عند التقديم (مثال: ${REF_CODE_EXAMPLE})`,
     codeLabel: "رمز المتابعة",
     lookupSubmit: "عرض الحالة",
     backToLookup: "البحث برمز آخر",

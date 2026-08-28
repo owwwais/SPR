@@ -80,9 +80,15 @@ export async function generateMetadata({
   const job = await getJob(id);
   if (!job) return { title: ar.nav.jobs };
   const company = (job as unknown as { organizations: Company }).organizations;
+  const title = `${job.title} — ${company.name}`;
+  const description = job.description.slice(0, 160);
+  // A job page is the link that actually gets shared — on WhatsApp, LinkedIn
+  // and X — and it previewed as a blank card until these tags existed.
   return {
-    title: `${job.title} — ${company.name}`,
-    description: job.description.slice(0, 160),
+    title,
+    description,
+    openGraph: { type: "article", title, description },
+    twitter: { card: "summary", title, description },
   };
 }
 

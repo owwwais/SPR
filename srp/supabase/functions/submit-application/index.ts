@@ -24,6 +24,7 @@ import {
   applicationSchema,
   CV_MAX_BYTES,
   CV_MIME_TYPES,
+  REF_CODE_PREFIX,
   type CvMime,
 } from "../../../lib/validations/application.ts";
 import {
@@ -64,7 +65,7 @@ function generateRefCode(): string {
   crypto.getRandomValues(bytes);
   let code = "";
   for (const byte of bytes) code += REF_ALPHABET[byte % REF_ALPHABET.length];
-  return `SRP-${code}`;
+  return `${REF_CODE_PREFIX}-${code}`;
 }
 
 async function sha256Hex(value: string): Promise<string> {
