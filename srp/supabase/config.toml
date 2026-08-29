@@ -258,21 +258,26 @@ otp_expiry = 3600
 #
 # `invite` is deliberately absent: team invitations go out through the
 # send-email Edge Function (Resend), not through Supabase Auth.
+#
+# content_path is resolved from the PROJECT ROOT (the directory holding
+# supabase/), not from inside supabase/ — so it reads ./supabase/templates/…
+# even though this file already lives in supabase/. Writing ./templates/…
+# fails every CLI command with ENOENT, deploys included.
 [auth.email.template.confirmation]
 subject = "تأكيد بريدك الإلكتروني"
-content_path = "./templates/confirm-signup.html"
+content_path = "./supabase/templates/confirm-signup.html"
 
 [auth.email.template.recovery]
 subject = "إعادة تعيين كلمة المرور"
-content_path = "./templates/recovery.html"
+content_path = "./supabase/templates/recovery.html"
 
 [auth.email.template.magic_link]
 subject = "رابط الدخول"
-content_path = "./templates/magic-link.html"
+content_path = "./supabase/templates/magic-link.html"
 
 [auth.email.template.email_change]
 subject = "تأكيد تغيير البريد الإلكتروني"
-content_path = "./templates/email-change.html"
+content_path = "./supabase/templates/email-change.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
