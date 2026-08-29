@@ -136,10 +136,14 @@ Deno.serve(async (req) => {
       log.fail("profile_lookup", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
         pg_code: lookupError.code,
       });
-      return json(500, { error: "not_configured" }, trace);
+      return json(500, { error: "not_configured", step: "profile_lookup" }, trace);
     }
     log.fail("profile_lookup", lookupError.message, { pg_code: lookupError.code });
-    return json(500, { error: "server_error" }, trace);
+    return json(500, {
+      error: "server_error",
+      step: "profile_lookup",
+      detail: lookupError.code ?? lookupError.message.slice(0, 200),
+    }, trace);
   }
   if (!profile) {
     log.fail("profile_lookup", "no profile for this verify_token — already used, or never existed");
@@ -178,6 +182,11 @@ Deno.serve(async (req) => {
     .eq("id", profile.id);
   log.step("processing");
 
+  // Tracked outside the try block so the catch below can say which stage
+  // was in flight when it threw, rather than "analysis" covering everything
+  // from a storage hiccup to a malformed model response under one label.
+  let lastStep = "cv_download";
+
   try {
     const { data: cvBlob, error: downloadError } = await admin.storage
       .from("talent-cvs")
@@ -186,6 +195,7 @@ Deno.serve(async (req) => {
       throw new Error(`CV download failed: ${downloadError?.message}`);
     }
     log.step("cv_downloaded");
+    lastStep = "extract_text";
 
     const parts: Array<
       { text: string } | { inlineData: { mimeType: string; data: string } }
@@ -205,6 +215,7 @@ Deno.serve(async (req) => {
       parts.push({ text: value.slice(0, MAX_CV_TEXT_CHARS) });
     }
 
+    lastStep = "model_call";
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
     log.step("model_call_start");
     const response = await ai.models.generateContent({
@@ -219,6 +230,7 @@ Deno.serve(async (req) => {
       },
     });
     log.step("model_call_done");
+    lastStep = "parse_model_response";
 
     const result = JSON.parse(response.text ?? "{}") as {
       is_cv?: boolean;
@@ -238,6 +250,7 @@ Deno.serve(async (req) => {
       throw new Error("uploaded file does not appear to be a CV");
     }
 
+    lastStep = "taxonomy_lookup";
     // Map the model's labels onto the shared vocabulary. Two systems
     // extracting free text would never agree — "تسويق رقمي" here and "Digital
     // Marketing" there are the same skill and would never match.
@@ -261,6 +274,7 @@ Deno.serve(async (req) => {
       else unmapped.push(raw.slice(0, 120));
     }
 
+    lastStep = "save_profile";
     await admin
       .schema("talent")
       .from("profiles")
@@ -308,19 +322,19 @@ Deno.serve(async (req) => {
     }, trace);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.fail("analysis", message.slice(0, 500));
-    // The trace id rides along in the stored error too (prefixed, short), so
-    // a person looking at their own failed page in talent_review_profile can
-    // quote something searchable back to us without needing log access
-    // themselves.
+    log.fail("analysis", message.slice(0, 500), { last_step: lastStep });
+    // The trace id AND the step ride along in the stored error too (a short
+    // prefix), so a person looking at their own failed page in
+    // talent_review_profile can quote something searchable back to us
+    // without needing log access themselves.
     await admin
       .schema("talent")
       .from("profiles")
       .update({
         analysis_status: "failed",
-        analysis_error: `[${trace}] ${message.slice(0, 490)}`,
+        analysis_error: `[${trace}/${lastStep}] ${message.slice(0, 480)}`,
       })
       .eq("id", profile.id);
-    return json(500, { error: "analysis_failed" }, trace);
+    return json(500, { error: "analysis_failed", step: lastStep }, trace);
   }
 });
