@@ -151,15 +151,30 @@ Deno.serve(async (req) => {
       );
     }
     // NOTE: force overrides 'processing' too, so a run stuck mid-flight
-    // (crashed instance) can be recovered by housekeeping; a genuine
-    // concurrent duplicate only costs one extra call — the upsert is
-    // idempotent per application.
+    // (crashed instance) can be recovered by housekeeping.
   }
 
-  await admin
-    .from("applications")
-    .update({ analysis_status: "processing" })
-    .eq("id", applicationId);
+  // Claim the row atomically. Reading the status above and writing
+  // 'processing' here used to be two statements, so two concurrent
+  // invocations both saw 'pending', both proceeded, and both paid for a model
+  // call. The RPC moves the row out of 'pending' in the same statement that
+  // tests it, so exactly one caller can win.
+  //
+  // The authorisation decision stays above — this only settles who gets to
+  // run, never whether they were allowed to ask.
+  const { data: claimed, error: claimError } = await admin.rpc(
+    "claim_application_for_analysis",
+    { p_application_id: applicationId, p_force: payload.force === true }
+  );
+  if (claimError) {
+    console.error("claim failed:", claimError.message);
+    return json(500, { error: "claim failed" });
+  }
+  if (claimed !== true) {
+    // Another invocation got there first. Not an error: the analysis this
+    // caller wanted is already under way.
+    return json(409, { error: "analysis already in progress" });
+  }
 
   try {
     const { data: cvBlob, error: downloadError } = await admin.storage
@@ -296,7 +311,7 @@ Deno.serve(async (req) => {
       .from("applications")
       .update({
         analysis_status: "failed",
-        analysis_attempts: application.analysis_attempts + 1,
+        // The attempt was already counted when the row was claimed.
         analysis_error: message.slice(0, 500),
       })
       .eq("id", applicationId);

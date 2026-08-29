@@ -4,19 +4,28 @@
 -- file deletion needs the Storage API and the retries need the service role.
 -- pg_cron only triggers it daily through pg_net.
 --
--- The anon key below is the public client key (already shipped to every
--- browser); the function performs no privileged action on behalf of the
--- caller and returns nothing sensitive — invoking it early is harmless.
+-- The target URL and the invoking key are read from database settings rather
+-- than written here. They used to be literals, which bound every environment
+-- that ran this migration to the production project — a `db reset` on a
+-- laptop would schedule a daily job against live data — and published the
+-- project ref to anyone reading the repository.
+--
+-- An operator sets them once per database:
+--   alter database postgres set app.housekeeping_url = 'https://<ref>.supabase.co/functions/v1/housekeeping';
+--   alter database postgres set app.housekeeping_key = '<anon key>';
+-- Without them the schedule is skipped with a notice instead of guessing.
 --
 -- Guarded so the migration also runs on vanilla Postgres (local test
 -- harness) where pg_cron/pg_net do not exist.
 
 do $$
 declare
-  v_url text := 'https://htwdasmuxfrdtfnrgkue.supabase.co/functions/v1/housekeeping';
-  v_anon_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0d2Rhc211eGZyZHRmbnJna3VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1OTE0NTQsImV4cCI6MjA5OTE2NzQ1NH0.-8pzXKIJ9uDvLjyESYSrWKD82md7S_iGxyZd-4hLTzQ';
+  v_url text := nullif(current_setting('app.housekeeping_url', true), '');
+  v_anon_key text := nullif(current_setting('app.housekeeping_key', true), '');
 begin
-  if exists (select 1 from pg_available_extensions where name = 'pg_cron')
+  if v_url is null or v_anon_key is null then
+    raise notice 'app.housekeeping_url / app.housekeeping_key not set — housekeeping schedule skipped';
+  elsif exists (select 1 from pg_available_extensions where name = 'pg_cron')
      and exists (select 1 from pg_available_extensions where name = 'pg_net') then
     create extension if not exists pg_cron;
     create extension if not exists pg_net;
