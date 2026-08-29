@@ -10,7 +10,23 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# talent (0017) is deliberately isolated at the SQL level — the isolation
+# invariant is "no direct join between public.* and talent.*", enforced by
+# public.talent_* security-definer wrappers being the only path anon/
+# authenticated callers have. Exposing the schema here does not weaken that:
+# every table in it has RLS enabled and denies anon/authenticated by default
+# except talent.skills' intentional public read, same posture as `public`
+# itself. It has to be listed regardless — the Edge Functions call
+# .schema("talent") directly via supabase-js, which always routes through
+# PostgREST even for the service-role key, and PostgREST rejects any schema
+# not on this list with PGRST106 before the request reaches Postgres or RLS.
+#
+# This list only configures the LOCAL dev stack (`supabase start`). The
+# hosted project's exposed-schema list is separate project-level API gateway
+# config with no migration equivalent — see the "Expose talent schema" job
+# in .github/workflows/supabase-deploy.yml, which sets it via the Management
+# API and must be run once, by hand, after 0017 is deployed there.
+schemas = ["public", "graphql_public", "talent"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
