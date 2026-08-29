@@ -82,15 +82,42 @@
 
 ## الجزء الثالث: ما تفعله أنت — بالتسلسل
 
+> ### 🖥️ لا تحتاج جهازاً ولا CLI — كل شيء من المتصفح
+>
+> أضفتُ `.github/workflows/supabase-deploy.yml` لينشر GitHub نيابةً عنك:
+>
+> | | متى يعمل | لماذا |
+> |---|---|---|
+> | **الدوال الطرفية** | تلقائياً عند كل دفع إلى `main` | النشر متكرّر بلا أثر، وأي خطأ يُصلَح بدفعة جديدة |
+> | **هجرات قاعدة البيانات** | **بزرّ يدوي فقط** (Actions ← Run workflow ← ضع علامة) | تُغيّر البيانات وبعضها لا رجعة فيه — لا يصحّ أن يشغّلها دمج عابر |
+>
+> و`.github/workflows/checks.yml` يشغّل البناء والفحص والاختبارات على كل PR،
+> فترى أي كسر **قبل** الدمج لا بعده.
+>
+> **أسرار GitHub المطلوبة** (Settings ← Secrets and variables ← Actions ← New repository secret):
+>
+> | السرّ | من أين |
+> |---|---|
+> | `SUPABASE_ACCESS_TOKEN` | supabase.com/dashboard/account/tokens ← *Generate new token* |
+> | `SUPABASE_PROJECT_REF` | معرّف مشروعك — في رابط لوحة التحكم بعد `/project/` |
+> | `SUPABASE_DB_PASSWORD` | كلمة مرور قاعدة البيانات — Settings ← Database (للهجرات فقط) |
+>
+> **وأسرار الدوال** (`SITE_URL`, `THROTTLE_SALT`, `TURNSTILE_SECRET_KEY`)
+> **لا تحتاج CLI إطلاقاً** — تُضاف من لوحة Supabase:
+> **Project Settings ← Edge Functions ← Secrets ← Add new secret**.
+>
+> والهجرات يمكن تطبيقها بديلاً من **SQL Editor** في اللوحة: افتح ملف الهجرة من
+> GitHub، انسخ محتواه، ألصقه، شغّله — بالترتيب من `0012` إلى `0017`.
+
 ### 🔴 المرحلة 1 — قبل أي نشر (30 دقيقة)
 
 **1. راجع الكود ثم ادمج الـPR.** الفرع `claude/audit-august-2026-pajah5`.
 
 **2. طبّق الهجرات على بيئة تجريبية أولاً — لا الإنتاج.**
-```bash
-supabase db push
-```
-ستطبّق `0012` → `0017`. راجع `0013` تحديداً: يضيف عموداً ويعيد تعبئته.
+**من GitHub:** Actions ← *Deploy Supabase* ← Run workflow ← ضع علامة على
+«Also apply pending database migrations» ← Run.
+**أو من اللوحة:** SQL Editor ← الصق كل ملف هجرة بالترتيب `0012` → `0017`.
+راجع `0013` تحديداً: يضيف عموداً ويعيد تعبئته.
 
 **3. اضبط إعدادات مهمة التنظيف** — **بدونها لن تعمل مهمة الحذف اليومية** (التزام `D8`):
 ```sql
@@ -100,13 +127,26 @@ alter database postgres set app.housekeeping_key = '<anon key>';
 ```
 ثم أعد تشغيل `0012`. **`0012` سيصرخ `WARNING` إن لم تفعل** — وهذا مقصود.
 
-**4. انشر الدوال الطرفية:**
-```bash
-supabase functions deploy submit-application analyze-application send-email
-supabase functions deploy talent-upload talent-analyze
-```
+**4. انشر الدوال الطرفية:** لا شيء لتفعله — **تُنشَر تلقائياً** عند دمج هذا
+الـPR في `main`. تابع التقدّم في تبويب **Actions**.
 
-**5. اضبط أسرار الدوال الجديدة:** `SITE_URL` · `THROTTLE_SALT` · و`TURNSTILE_SECRET_KEY` (**مطلوب فعلياً الآن** — منصة المواهب تفشل مغلقة بدونه).
+**5. اضبط أسرار الدوال — ومن أين تأتي كل واحدة:**
+
+| السرّ | من أين | ملاحظة |
+|---|---|---|
+| `SITE_URL` | **أنت تكتبه** — نطاق موقعك، مثل `https://hakeem.sa` | بلا `/` في آخره. تُبنى منه روابط التحقق في البريد؛ خطؤه يعني رابطاً معطّلاً في كل رسالة |
+| `THROTTLE_SALT` | **تولّده أنت**: `openssl rand -hex 32` | ملح تجزئة عناوين IP والبُرد. لا يُشتق من مكان — أي سلسلة عشوائية طويلة تكفي. **غيّره ⇒ تُصفَّر عدادات الحدّ** |
+| `TURNSTILE_SECRET_KEY` | **من Cloudflare** — لوحة التحكم ← Turnstile ← Add site. مجاني | تأخذ مفتاحين: **Site Key** (عام، يذهب لـVercel باسم `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) و**Secret Key** (سرّي، يذهب لـSupabase) |
+| `GEMINI_API_KEY` | Google AI Studio | موجود مسبقاً — تأكّد فقط أنه من **الطبقة المدفوعة** (البند 12) |
+| `RESEND_API_KEY` | لوحة Resend | موجود مسبقاً |
+
+**من اللوحة (بلا CLI):** Project Settings ← Edge Functions ← Secrets ← Add new secret.
+و`NEXT_PUBLIC_TURNSTILE_SITE_KEY` يُضاف في **Vercel** لا في Supabase (فهو عام ويحتاجه المتصفح).
+
+> **`THROTTLE_SALT` بلا طرفية:** أي سلسلة عشوائية طويلة تكفي — مثلاً من
+> `https://www.random.org/strings/` (32 خانة، حروف وأرقام). لا يُشتق من أي خدمة.
+
+> ⚠️ **Turnstile مطلوب فعلياً الآن:** منصة المواهب **تفشل مغلقة** بدونه — أي أن الرفع سيُرفض. (نموذج التقديم للوظائف يفشل مفتوحاً عمداً، حتى لا يُحرَم متقدّم حقيقي من فرصة بسبب عطل عندنا.)
 
 **6. أنشئ دلو `talent-cvs`** — تنشئه `0017`، تأكّد فقط أنه **خاص** (`public = false`).
 

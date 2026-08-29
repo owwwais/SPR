@@ -26,12 +26,12 @@ import {
   CV_MIME_TYPES,
   REF_CODE_PREFIX,
   type CvMime,
-} from "../../../lib/validations/application.ts";
+} from "../_shared/application.ts";
 import {
   ScreeningAnswers,
   ScreeningQuestions,
   type ScreeningAnswerType,
-} from "../../../lib/validations/screening.ts";
+} from "../_shared/screening.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

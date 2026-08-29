@@ -44,6 +44,15 @@ export default function PublicLayout({
             >
               {f.fairness}
             </Link>
+            {/* The companion product had no link from anywhere, so it was
+                reachable only by typing the URL. It sits with the other
+                public destinations, not hidden in the footer. */}
+            <Link
+              href="/talent"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {ar.talent.navLabel}
+            </Link>
           </nav>
 
           <div className="ms-auto flex items-center gap-2">
@@ -93,6 +102,12 @@ export default function PublicLayout({
               className="text-muted-foreground hover:text-foreground"
             >
               {f.pricing}
+            </Link>
+            <Link
+              href="/talent"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {ar.talent.navLabel}
             </Link>
           </nav>
 

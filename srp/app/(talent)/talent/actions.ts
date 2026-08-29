@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createPublicClient } from "@/lib/supabase/public";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 import { ar } from "@/lib/i18n/ar";
 
 // The talent journey has no session by design — no password, no account — so
@@ -73,4 +74,64 @@ export async function deleteProfile(token: string) {
     return;
   }
   redirect("/talent?deleted=1");
+}
+
+export type UploadState = { error: string | null; sent: boolean };
+
+// Mirrors the apply flow: the browser never calls the Edge Function itself.
+// Supabase verifies a JWT on every function by default, so a direct fetch
+// carrying only `apikey` is rejected with 401 — and routing through the
+// server keeps the key out of a request the page composes.
+export async function uploadCv(
+  _prev: UploadState,
+  formData: FormData
+): Promise<UploadState> {
+  const t = ar.talent.errors;
+  const fail = (error: string): UploadState => ({ error, sent: false });
+
+  const cv = formData.get("cv");
+  if (!(cv instanceof File) || cv.size === 0) return fail(t.cvRequired);
+  if (cv.size > 5 * 1024 * 1024) return fail(t.cvSize);
+
+  let response: Response;
+  try {
+    const { url, anonKey } = getSupabaseEnv();
+    response = await fetch(`${url}/functions/v1/talent-upload`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${anonKey}`,
+        // Content-Type deliberately unset: fetch derives the multipart
+        // boundary from the FormData body.
+      },
+      body: formData,
+    });
+  } catch (err) {
+    console.error(
+      "talent-upload unreachable:",
+      err instanceof Error ? err.message : err
+    );
+    return fail(t.server);
+  }
+
+  let body: { ok?: boolean; error?: string; field?: string };
+  try {
+    body = await response.json();
+  } catch {
+    return fail(t.server);
+  }
+
+  if (response.ok && body.ok) return { error: null, sent: true };
+
+  // Machine-readable codes on the wire, Arabic here — the same split the
+  // recruitment form uses.
+  const messages: Record<string, string> = {
+    rate_limited: t.rateLimited,
+    captcha_failed: t.server,
+    email_failed: t.server,
+    cv: t.cvRequired,
+    cv_type: t.cvType,
+    cv_size: t.cvSize,
+    email: t.invalidEmail,
+  };
+  return fail(messages[body.field ?? ""] ?? messages[body.error ?? ""] ?? t.server);
 }
