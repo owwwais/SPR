@@ -282,6 +282,9 @@ export type Database = {
           analysis_status: AnalysisStatus;
           analysis_attempts: number;
           analysis_error: string | null;
+          // 0013: trigger-maintained copy of ai_evaluations.fit_score, so the
+          // ranked list can be served from an index.
+          fit_score: number | null;
           screening_answers: Json;
           interview_at: string | null;
           interview_qa: Json;
@@ -303,6 +306,7 @@ export type Database = {
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
           analysis_error?: string | null;
+          fit_score?: number | null;
           screening_answers?: Json;
           interview_at?: string | null;
           interview_qa?: Json;
@@ -313,6 +317,7 @@ export type Database = {
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
           analysis_error?: string | null;
+          fit_score?: number | null;
           interview_at?: string | null;
           interview_qa?: Json;
         };
@@ -484,6 +489,16 @@ export type Database = {
       };
       slug_available: {
         Args: { p_slug: string };
+        Returns: boolean;
+      };
+      // 0013: dashboard aggregates computed in the database.
+      org_stats: {
+        Args: { p_org: string };
+        Returns: unknown;
+      };
+      // 0012: atomic claim, service role only.
+      claim_application_for_analysis: {
+        Args: { p_application_id: string; p_force?: boolean };
         Returns: boolean;
       };
     };
