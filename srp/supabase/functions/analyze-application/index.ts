@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
   const { data: application, error: appError } = await admin
     .from("applications")
     .select(
-      "id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, screening_answers, interview_qa, jobs(title, type, location, min_years_experience, skills, requirements, description)"
+      "id, org_id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, screening_answers, interview_qa, jobs(title, type, location, min_years_experience, skills, requirements, description)"
     )
     .eq("id", applicationId)
     .maybeSingle();
@@ -175,6 +175,57 @@ Deno.serve(async (req) => {
     // caller wanted is already under way.
     return json(409, { error: "analysis already in progress" });
   }
+
+  // D16: the quota is checked HERE, before anything is spent, and never in
+  // the UI — a caller that skips the dashboard must still hit the ceiling.
+  // /pricing sells 25, 150 and 750 analyses a month; until now nothing
+  // enforced any of them.
+  //
+  // The unit is claimed rather than merely counted, so two analyses racing
+  // for the last one cannot both win. If the run fails before reaching the
+  // model, it is handed back below.
+  const { data: quota, error: quotaError } = await admin.rpc(
+    "consume_analysis_quota",
+    { p_org: application.org_id }
+  );
+  if (quotaError) {
+    console.error("quota check failed:", quotaError.message);
+    await admin
+      .from("applications")
+      .update({ analysis_status: "failed", analysis_error: "quota check failed" })
+      .eq("id", applicationId);
+    return json(500, { error: "quota check failed" });
+  }
+  const quotaResult = quota as {
+    allowed: boolean;
+    reason?: string;
+    used?: number;
+    quota?: number | null;
+  };
+  if (!quotaResult.allowed) {
+    // Not an error the applicant caused, and their row stays readable: HR can
+    // still open the CV by hand (D4 — applying never fails because of AI).
+    console.error(
+      `analysis refused: ${quotaResult.reason} (${quotaResult.used}/${quotaResult.quota})`
+    );
+    await admin
+      .from("applications")
+      .update({
+        analysis_status: "failed",
+        analysis_error: "monthly analysis quota exhausted",
+      })
+      .eq("id", applicationId);
+    return json(429, { error: "quota exceeded" });
+  }
+
+  // From here on the unit is spent unless we give it back explicitly.
+  let quotaConsumed = true;
+  let reachedModel = false;
+  const releaseQuota = async () => {
+    if (!quotaConsumed) return;
+    quotaConsumed = false;
+    await admin.rpc("release_analysis_quota", { p_org: application.org_id });
+  };
 
   try {
     const { data: cvBlob, error: downloadError } = await admin.storage
@@ -246,6 +297,10 @@ Deno.serve(async (req) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
+    // Past this line the money is gone whatever happens, so the quota unit
+    // stays consumed. Everything before it — a missing CV, an unreadable
+    // DOCX — cost nothing and is refunded in the catch below.
+    reachedModel = true;
     const startedAt = Date.now();
     const response = await ai.models.generateContent({
       model: MODEL,
@@ -307,6 +362,9 @@ Deno.serve(async (req) => {
     // worth pressing, and the platform console can group failures by cause.
     const message = err instanceof Error ? err.message : String(err);
     console.error("analysis failed:", message.slice(0, 500));
+    // Nothing was sent to the model, so nothing was spent: hand the unit back
+    // rather than charging the customer for our own failure to read a file.
+    if (!reachedModel) await releaseQuota();
     await admin
       .from("applications")
       .update({

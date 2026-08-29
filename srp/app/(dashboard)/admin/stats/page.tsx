@@ -57,10 +57,22 @@ export default async function AdminStatsPage() {
   // and shown as fact. Measured on 8,000 applications, the old query returned
   // 5,000 rows and about 766 kB; org_stats returns one row of roughly 2.6 kB
   // with the real totals.
-  const { data, error } = await supabase.rpc("org_stats", {
-    p_org: session.org.id,
-  });
+  const [statsRes, quotaRes] = await Promise.all([
+    supabase.rpc("org_stats", { p_org: session.org.id }),
+    supabase.rpc("org_quota", { p_org: session.org.id }),
+  ]);
+  const { data, error } = statsRes;
   if (error) console.error("org_stats failed:", error.message);
+  if (quotaRes.error) console.error("org_quota failed:", quotaRes.error.message);
+
+  // D16 enforces the ceiling inside analyze-application; showing it here is
+  // what stops exhaustion from arriving as a surprise pile of failed
+  // analyses the customer cannot explain.
+  const quota = (quotaRes.data as {
+    used: number;
+    quota: number | null;
+    remaining: number | null;
+  } | null) ?? { used: 0, quota: null, remaining: null };
 
   const stats = (data as OrgStats | null) ?? {
     totals: {
@@ -107,6 +119,43 @@ export default async function AdminStatsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold">{ar.stats.title}</h1>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-sm text-muted-foreground">
+              {ar.quota.title}
+            </span>
+            <span className="text-2xl font-bold tabular-nums">
+              {quota.quota === null
+                ? ar.quota.unlimited
+                : `${quota.used} ${ar.quota.ofTotal} ${quota.quota} ${ar.quota.unit}`}
+            </span>
+          </div>
+          {quota.quota !== null && quota.remaining !== null && (
+            <span
+              className={
+                quota.remaining === 0
+                  ? "text-sm font-medium text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {quota.remaining === 0
+                ? ar.quota.exhaustedTitle
+                : `${ar.quota.remaining}: ${quota.remaining}`}
+            </span>
+          )}
+        </CardContent>
+      </Card>
+
+      {quota.remaining === 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+          <p className="text-sm font-medium">{ar.quota.exhaustedTitle}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {ar.quota.exhaustedBody}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {kpis.map((kpi) => (

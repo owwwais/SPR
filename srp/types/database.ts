@@ -496,6 +496,11 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
+      // 0014: quota, read-only for members.
+      org_quota: {
+        Args: { p_org: string };
+        Returns: unknown;
+      };
       // 0012: atomic claim, service role only.
       claim_application_for_analysis: {
         Args: { p_application_id: string; p_force?: boolean };
