@@ -17,6 +17,20 @@ export const metadata: Metadata = {
 export default async function JobsPage() {
   const grouped = await getMarketplaceJobs();
 
+  // null is a failed lookup, not an empty marketplace. Saying "no jobs" when
+  // the query broke tells visitors something false and costs the customer
+  // applicants.
+  if (grouped === null) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-20 text-center">
+        <h1 className="text-xl font-semibold">{ar.errors.unavailableTitle}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {ar.errors.unavailableBody}
+        </p>
+      </main>
+    );
+  }
+
   const groups: CompanyGroup[] = grouped.map(({ company, jobs }) => ({
     company: {
       id: company.id,

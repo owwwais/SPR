@@ -536,6 +536,17 @@ export const ar = {
     },
   },
 
+  errors: {
+    notFoundTitle: "الصفحة غير موجودة",
+    notFoundBody: "الرابط الذي فتحته غير صحيح أو أن الصفحة حُذفت.",
+    serverTitle: "حدث خطأ غير متوقع",
+    serverBody: "سجّلنا الخطأ ونعمل عليه. جرّب تحديث الصفحة أو العودة لاحقاً.",
+    retry: "إعادة المحاولة",
+    unavailableTitle: "تعذّر تحميل البيانات",
+    unavailableBody: "المشكلة مؤقتة وليست عندك — لا يعني هذا أنه لا توجد وظائف. حدّث الصفحة بعد قليل.",
+    home: "العودة للرئيسية",
+  },
+
   talent: {
     // Public-facing name of the companion product.
     name: "ملفّي",
