@@ -1,0 +1,72 @@
+# Deploys Supabase from GitHub, because the repository is worked on through
+# github.com and there is no local machine running the CLI.
+#
+# The split is deliberate:
+#
+#   Edge Functions  -> automatic on push to main.
+#                      Deploying is idempotent and a mistake is undone by
+#                      pushing the previous code again.
+#
+#   Migrations      -> manual button only (Actions -> Run workflow).
+#                      They alter data and several are not reversible, so a
+#                      merge should never run one on its own.
+name: Deploy Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "srp/supabase/functions/**"
+      - ".github/workflows/supabase-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      migrations:
+        description: "Also apply pending database migrations"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two deploys race against the same project.
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  functions:
+    name: Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # No function name deploys every function under supabase/functions.
+      # Directories starting with _ are skipped by the CLI, so _shared travels
+      # with each bundle without being deployed as a function itself.
+      - name: Deploy functions
+        working-directory: srp
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+  migrations:
+    name: Database migrations
+    runs-on: ubuntu-latest
+    # Only ever on the manual button, and only when the box is ticked.
+    if: github.event_name == 'workflow_dispatch' && inputs.migrations
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Apply migrations
+        working-directory: srp
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase db push

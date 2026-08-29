@@ -1,0 +1,60 @@
+# The gate that used to live on a developer's machine. Runs on every pull
+# request so a broken branch is visible before it is merged, not after.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build, typecheck, lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: srp/package-lock.json
+
+      - name: Install
+        working-directory: srp
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: srp
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: srp
+        run: npx eslint
+
+      - name: Build
+        working-directory: srp
+        run: npm run build
+
+      # Production dependencies only: a vulnerability in a build tool does not
+      # ship to users, and failing on one would block every PR for noise.
+      - name: Audit production dependencies
+        working-directory: srp
+        run: npm audit --omit=dev --audit-level=high
+
+  database:
+    name: Database tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suite builds its own throwaway Postgres, so no service container
+      # and no credentials are needed.
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+
+      - name: Run RLS and tenant-isolation suites
+        working-directory: srp
+        run: PGBIN=/usr/lib/postgresql/16/bin npm run test:db

@@ -1,65 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Turnstile } from "@/components/jobs/turnstile";
+import { uploadCv, type UploadState } from "@/app/(talent)/talent/actions";
 import { ar } from "@/lib/i18n/ar";
 
-const FUNCTION_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/talent-upload`;
+const initial: UploadState = { error: null, sent: false };
 
 export function UploadForm() {
   const t = ar.talent;
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [state, formAction, pending] = useActionState(uploadCv, initial);
 
-  if (sent) {
+  if (state.sent) {
     return (
-      <div className="rounded-lg border bg-muted/20 p-6 text-center">
+      <div className="rounded-lg border bg-background p-6 text-center">
         <h2 className="font-semibold">{t.checkEmailTitle}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{t.checkEmailBody}</p>
       </div>
     );
   }
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setPending(true);
-    try {
-      const res = await fetch(FUNCTION_URL, {
-        method: "POST",
-        body: new FormData(event.currentTarget),
-        headers: {
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-        },
-      });
-      const body = (await res.json()) as { ok?: boolean; error?: string; field?: string };
-      if (res.ok && body.ok) {
-        setSent(true);
-        return;
-      }
-      // Machine-readable codes on the wire, Arabic here (same split as the
-      // recruitment form).
-      const map: Record<string, string> = {
-        rate_limited: t.errors.rateLimited,
-        cv: t.errors.cvRequired,
-        cv_type: t.errors.cvType,
-        cv_size: t.errors.cvSize,
-        email: t.errors.invalidEmail,
-      };
-      setError(map[body.field ?? ""] ?? map[body.error ?? ""] ?? t.errors.server);
-    } catch {
-      setError(t.errors.server);
-    } finally {
-      setPending(false);
-    }
-  }
-
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+    <form action={formAction} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <Label htmlFor="cv">{t.cv}</Label>
         <Input
@@ -80,7 +45,7 @@ export function UploadForm() {
 
       <Turnstile siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null} />
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
       <Button type="submit" disabled={pending}>
         {pending ? t.submitting : t.submit}
