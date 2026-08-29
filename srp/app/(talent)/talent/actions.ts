@@ -76,7 +76,15 @@ export async function deleteProfile(token: string) {
   redirect("/talent?deleted=1");
 }
 
-export type UploadState = { error: string | null; sent: boolean };
+export type UploadState = {
+  error: string | null;
+  sent: boolean;
+  // Carried through to the UI so a rejection is reportable rather than a
+  // dead end: "طلبي رُفض" tells nobody anything; "رمز 5f3a1c9b0e، السبب
+  // captcha_failed" is a log search.
+  code?: string;
+  requestId?: string;
+};
 
 // Mirrors the apply flow: the browser never calls the Edge Function itself.
 // Supabase verifies a JWT on every function by default, so a direct fetch
@@ -87,7 +95,10 @@ export async function uploadCv(
   formData: FormData
 ): Promise<UploadState> {
   const t = ar.talent.errors;
-  const fail = (error: string): UploadState => ({ error, sent: false });
+  const fail = (
+    error: string,
+    extra?: { code?: string; requestId?: string }
+  ): UploadState => ({ error, sent: false, ...extra });
 
   const cv = formData.get("cv");
   if (!(cv instanceof File) || cv.size === 0) return fail(t.cvRequired);
@@ -113,25 +124,43 @@ export async function uploadCv(
     return fail(t.server);
   }
 
-  let body: { ok?: boolean; error?: string; field?: string };
+  let body: {
+    ok?: boolean;
+    error?: string;
+    field?: string;
+    request_id?: string;
+  };
   try {
     body = await response.json();
-  } catch {
+  } catch (err) {
+    console.error(
+      "talent-upload returned a non-JSON body:",
+      err instanceof Error ? err.message : err
+    );
     return fail(t.server);
   }
 
   if (response.ok && body.ok) return { error: null, sent: true };
 
   // Machine-readable codes on the wire, Arabic here — the same split the
-  // recruitment form uses.
+  // recruitment form uses. captcha_failed and not_configured get their own
+  // wording rather than folding into the generic message: they point at two
+  // different, checkable causes (see docs/HANDOVER-2026-08.md) rather than
+  // "something went wrong, try again", which was true of every failure here
+  // before and told nobody which one they were looking at.
   const messages: Record<string, string> = {
     rate_limited: t.rateLimited,
-    captcha_failed: t.server,
+    captcha_failed: t.captchaFailed,
+    not_configured: t.notConfigured,
     email_failed: t.server,
     cv: t.cvRequired,
     cv_type: t.cvType,
     cv_size: t.cvSize,
     email: t.invalidEmail,
   };
-  return fail(messages[body.field ?? ""] ?? messages[body.error ?? ""] ?? t.server);
+  const code = body.field ?? body.error;
+  return fail(messages[code ?? ""] ?? t.server, {
+    code: body.error,
+    requestId: body.request_id,
+  });
 }

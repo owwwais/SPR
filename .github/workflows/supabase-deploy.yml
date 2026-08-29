@@ -17,6 +17,12 @@ on:
     branches: [main]
     paths:
       - "srp/supabase/functions/**"
+      # config.toml and the auth templates are read by the CLI on every
+      # deploy, so a change to either can break or fix one without touching a
+      # function. Leaving them out meant a config fix merged to main and no
+      # deploy ran.
+      - "srp/supabase/config.toml"
+      - "srp/supabase/templates/**"
       - ".github/workflows/supabase-deploy.yml"
   workflow_dispatch:
     inputs:
