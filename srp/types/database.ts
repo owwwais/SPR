@@ -496,6 +496,11 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
+      // 0015: D24 evidence document for one application.
+      application_transparency_report: {
+        Args: { p_application: string };
+        Returns: unknown;
+      };
       // 0014: quota, read-only for members.
       org_quota: {
         Args: { p_org: string };

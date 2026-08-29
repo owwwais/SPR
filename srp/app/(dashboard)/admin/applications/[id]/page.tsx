@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CircleCheck,
   ExternalLink,
+  FileDown,
   Flag,
   Loader2,
   RefreshCw,
@@ -311,9 +312,28 @@ export default async function ApplicationPage({
           <Card>
             <CardContent className="flex flex-col gap-6">
               {/* §10.4: the advisory framing must always be visible. */}
-              <p className="text-sm text-muted-foreground">
-                {t.advisoryDisclaimer}
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  {t.advisoryDisclaimer}
+                </p>
+                {/* D24's evidence document. A plain link, not an action: it
+                    is a GET that produces a file, so it needs no client
+                    component and works with the middle-click and
+                    open-in-new-tab a reviewer will reach for. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={
+                    <a
+                      href={`/admin/applications/${id}/transparency`}
+                      download
+                    />
+                  }
+                >
+                  <FileDown className="size-4" aria-hidden />
+                  {ar.transparency.export}
+                </Button>
+              </div>
 
               {(application.analysis_status === "pending" ||
                 application.analysis_status === "processing") && (
