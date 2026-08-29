@@ -53,7 +53,9 @@ export function UploadForm() {
               logs for this exact string lands on the failing request. */}
           {state.requestId && (
             <p className="text-xs text-muted-foreground" dir="ltr">
-              {t.requestIdLabel}: {state.code ?? "error"} · {state.requestId}
+              {t.requestIdLabel}: {state.code ?? "error"}
+              {state.step ? `/${state.step}` : ""} · {state.requestId}
+              {state.detail ? ` · ${state.detail}` : ""}
             </p>
           )}
         </div>

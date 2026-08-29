@@ -81,9 +81,13 @@ export type UploadState = {
   sent: boolean;
   // Carried through to the UI so a rejection is reportable rather than a
   // dead end: "طلبي رُفض" tells nobody anything; "رمز 5f3a1c9b0e، السبب
-  // captcha_failed" is a log search.
+  // captcha_failed" is a log search. step/detail only ever accompany
+  // server_error/not_configured — never captcha_failed — since they are
+  // internal step names and error codes, not anything sensitive.
   code?: string;
   requestId?: string;
+  step?: string;
+  detail?: string;
 };
 
 // Mirrors the apply flow: the browser never calls the Edge Function itself.
@@ -97,7 +101,7 @@ export async function uploadCv(
   const t = ar.talent.errors;
   const fail = (
     error: string,
-    extra?: { code?: string; requestId?: string }
+    extra?: { code?: string; requestId?: string; step?: string; detail?: string }
   ): UploadState => ({ error, sent: false, ...extra });
 
   const cv = formData.get("cv");
@@ -129,6 +133,8 @@ export async function uploadCv(
     error?: string;
     field?: string;
     request_id?: string;
+    step?: string;
+    detail?: string;
   };
   try {
     body = await response.json();
@@ -162,5 +168,7 @@ export async function uploadCv(
   return fail(messages[code ?? ""] ?? t.server, {
     code: body.error,
     requestId: body.request_id,
+    step: body.step,
+    detail: body.detail,
   });
 }

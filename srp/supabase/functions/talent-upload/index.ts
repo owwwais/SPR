@@ -202,10 +202,14 @@ Deno.serve(async (req) => {
       log.fail("throttle_check", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
         pg_code: throttleError.code,
       });
-      return json(500, { error: "not_configured" }, trace);
+      return json(500, { error: "not_configured", step: "throttle_check" }, trace);
     }
     log.fail("throttle_check", throttleError.message, { pg_code: throttleError.code });
-    return json(500, { error: "server_error" }, trace);
+    return json(500, {
+      error: "server_error",
+      step: "throttle_check",
+      detail: throttleError.code ?? throttleError.message.slice(0, 200),
+    }, trace);
   }
   if (throttle) {
     log.step("rate_limited");
@@ -228,10 +232,14 @@ Deno.serve(async (req) => {
       log.fail("profile_lookup", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
         pg_code: lookupError.code,
       });
-      return json(500, { error: "not_configured" }, trace);
+      return json(500, { error: "not_configured", step: "profile_lookup" }, trace);
     }
     log.fail("profile_lookup", lookupError.message, { pg_code: lookupError.code });
-    return json(500, { error: "server_error" }, trace);
+    return json(500, {
+      error: "server_error",
+      step: "profile_lookup",
+      detail: lookupError.code ?? lookupError.message.slice(0, 200),
+    }, trace);
   }
 
   const verifyToken = randomToken();
@@ -244,11 +252,18 @@ Deno.serve(async (req) => {
     .from("talent-cvs")
     .upload(cvPath, cv, { contentType: cv.type, upsert: true });
   if (uploadError) {
-    // A missing bucket looks like this too (StorageApiError, "Bucket not
-    // found") — the same migrations-not-applied cause as above, since 0017
-    // is what creates the talent-cvs bucket.
     log.fail("cv_upload", uploadError.message);
-    return json(500, { error: "server_error" }, trace);
+    // A missing bucket surfaces here too (StorageApiError, "Bucket not
+    // found") — the same migrations-not-applied cause as the schema checks
+    // above, since 0017 is what creates the talent-cvs bucket. Storage
+    // errors do not carry a Postgres/PostgREST code, so this is caught by
+    // message text rather than isSchemaMissingError.
+    const bucketMissing = uploadError.message.toLowerCase().includes("bucket not found");
+    return json(500, {
+      error: bucketMissing ? "not_configured" : "server_error",
+      step: "cv_upload",
+      detail: uploadError.message.slice(0, 200),
+    }, trace);
   }
   log.step("cv_stored", { path: cvPath });
 
@@ -273,7 +288,11 @@ Deno.serve(async (req) => {
     );
   if (upsertError) {
     log.fail("profile_upsert", upsertError.message, { pg_code: upsertError.code });
-    return json(500, { error: "server_error" }, trace);
+    return json(500, {
+      error: "server_error",
+      step: "profile_upsert",
+      detail: upsertError.code ?? upsertError.message.slice(0, 200),
+    }, trace);
   }
   log.step("profile_saved", { unchanged });
 
