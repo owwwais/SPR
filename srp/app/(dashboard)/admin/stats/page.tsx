@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ChartColumn } from "lucide-react";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
 import {
   Card,
@@ -30,113 +30,132 @@ export const metadata: Metadata = {
   title: ar.stats.title,
 };
 
-const APP_STATUSES: AppStatus[] = [
-  "new",
-  "under_review",
-  "interview",
-  "accepted",
-  "rejected",
-];
+
+// Shape returned by the org_stats() RPC (migration 0013). The aggregation
+// runs in the database; this page only formats it.
+type OrgStats = {
+  totals: {
+    applications: number;
+    avg_fit_score: number | null;
+    awaiting_analysis: number;
+    failed_analyses: number;
+  };
+  published_jobs: number;
+  per_job: { name: string; count: number; avg: number | null }[];
+  funnel: { status: AppStatus; count: number }[];
+  over_time: { date: string; count: number }[];
+};
 
 export default async function AdminStatsPage() {
   const session = await requireMembership();
   const supabase = await createClient();
 
-  // One organization's volumes: aggregate in the server component (§8
-  // pagination applies to lists; stats read a bounded snapshot).
-  const [appsRes, jobsRes] = await Promise.all([
-    supabase
-      .from("applications")
-      .select("job_id, status, analysis_status, created_at, ai_evaluations(fit_score)")
-      .eq("org_id", session.org.id)
-      .limit(5000),
-    supabase
-      .from("jobs")
-      .select("id, title, status")
-      .eq("org_id", session.org.id)
-      .is("deleted_at", null),
+  // One call, one small document. This page used to fetch up to 5,000
+  // application rows and aggregate them in JavaScript, which was both wrong
+  // and wasteful: an organization past that ceiling had the remainder
+  // silently dropped, so every figure here was computed on a truncated set
+  // and shown as fact. Measured on 8,000 applications, the old query returned
+  // 5,000 rows and about 766 kB; org_stats returns one row of roughly 2.6 kB
+  // with the real totals.
+  const [statsRes, quotaRes] = await Promise.all([
+    supabase.rpc("org_stats", { p_org: session.org.id }),
+    supabase.rpc("org_quota", { p_org: session.org.id }),
   ]);
-  if (appsRes.error) console.error("stats applications query failed:", appsRes.error.message);
-  if (jobsRes.error) console.error("stats jobs query failed:", jobsRes.error.message);
-  const applications = appsRes.data ?? [];
-  const jobs = jobsRes.data ?? [];
+  const { data, error } = statsRes;
+  if (error) console.error("org_stats failed:", error.message);
+  if (quotaRes.error) console.error("org_quota failed:", quotaRes.error.message);
 
-  // KPIs
-  const scores = applications
-    .map((a) => a.ai_evaluations?.fit_score)
-    .filter((s): s is number => typeof s === "number");
-  const avgScore =
-    scores.length > 0
-      ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
-      : null;
-  const kpis = [
-    { label: ar.stats.totalApplications, value: String(applications.length) },
-    {
-      label: ar.stats.publishedJobs,
-      value: String(jobs.filter((j) => j.status === "published").length),
+  // D16 enforces the ceiling inside analyze-application; showing it here is
+  // what stops exhaustion from arriving as a surprise pile of failed
+  // analyses the customer cannot explain.
+  const quota = (quotaRes.data as {
+    used: number;
+    quota: number | null;
+    remaining: number | null;
+  } | null) ?? { used: 0, quota: null, remaining: null };
+
+  const stats = (data as OrgStats | null) ?? {
+    totals: {
+      applications: 0,
+      avg_fit_score: null,
+      awaiting_analysis: 0,
+      failed_analyses: 0,
     },
+    published_jobs: 0,
+    per_job: [],
+    funnel: [],
+    over_time: [],
+  };
+
+  const kpis = [
+    { label: ar.stats.totalApplications, value: String(stats.totals.applications) },
+    { label: ar.stats.publishedJobs, value: String(stats.published_jobs) },
     {
       label: `${ar.stats.avgFitScore} (${ar.evaluation.advisory})`,
-      value: avgScore === null ? "—" : String(avgScore),
+      value:
+        stats.totals.avg_fit_score === null
+          ? "—"
+          : String(stats.totals.avg_fit_score),
     },
-    {
-      label: ar.stats.awaitingAnalysis,
-      value: String(
-        applications.filter(
-          (a) =>
-            a.analysis_status === "pending" || a.analysis_status === "processing"
-        ).length
-      ),
-    },
-    {
-      label: ar.stats.failedAnalyses,
-      value: String(
-        applications.filter((a) => a.analysis_status === "failed").length
-      ),
-    },
+    { label: ar.stats.awaitingAnalysis, value: String(stats.totals.awaiting_analysis) },
+    { label: ar.stats.failedAnalyses, value: String(stats.totals.failed_analyses) },
   ];
 
-  // Per-job: application count + average fit score (FR-09)
-  const perJob = jobs
-    .map((job) => {
-      const jobApps = applications.filter((a) => a.job_id === job.id);
-      const jobScores = jobApps
-        .map((a) => a.ai_evaluations?.fit_score)
-        .filter((s): s is number => typeof s === "number");
-      return {
-        name: job.title,
-        count: jobApps.length,
-        avg:
-          jobScores.length > 0
-            ? Math.round(
-                jobScores.reduce((sum, s) => sum + s, 0) / jobScores.length
-              )
-            : null,
-      };
-    })
-    .sort((a, b) => b.count - a.count);
+  const perJob = stats.per_job;
+  const totalApplications = stats.totals.applications;
 
-  // Status funnel
-  const funnel = APP_STATUSES.map((status) => ({
-    name: ar.status[status],
-    count: applications.filter((a) => a.status === status).length,
+  // The database returns every status and every one of the last 30 days,
+  // including the empty ones, so there are no gaps to fill here.
+  const funnel = stats.funnel.map((row) => ({
+    name: ar.status[row.status],
+    count: row.count,
   }));
 
-  // Applications over the last 30 days (gaps filled with zeros)
-  const today = new Date();
-  const overTime = Array.from({ length: 30 }, (_, i) => {
-    const day = subDays(today, 29 - i);
-    const key = format(day, "yyyy-MM-dd");
-    return {
-      date: format(day, "d MMM", { locale: arSA }),
-      count: applications.filter((a) => a.created_at.slice(0, 10) === key)
-        .length,
-    };
-  });
+  const overTime = stats.over_time.map((row) => ({
+    date: format(new Date(row.date), "d MMM", { locale: arSA }),
+    count: row.count,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold">{ar.stats.title}</h1>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-sm text-muted-foreground">
+              {ar.quota.title}
+            </span>
+            <span className="text-2xl font-bold tabular-nums">
+              {quota.quota === null
+                ? ar.quota.unlimited
+                : `${quota.used} ${ar.quota.ofTotal} ${quota.quota} ${ar.quota.unit}`}
+            </span>
+          </div>
+          {quota.quota !== null && quota.remaining !== null && (
+            <span
+              className={
+                quota.remaining === 0
+                  ? "text-sm font-medium text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {quota.remaining === 0
+                ? ar.quota.exhaustedTitle
+                : `${ar.quota.remaining}: ${quota.remaining}`}
+            </span>
+          )}
+        </CardContent>
+      </Card>
+
+      {quota.remaining === 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+          <p className="text-sm font-medium">{ar.quota.exhaustedTitle}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {ar.quota.exhaustedBody}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {kpis.map((kpi) => (
@@ -151,7 +170,7 @@ export default async function AdminStatsPage() {
         ))}
       </div>
 
-      {applications.length === 0 ? (
+      {totalApplications === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-20 text-center">
           <ChartColumn className="size-10 text-muted-foreground" aria-hidden />
           <h2 className="text-lg font-semibold">{ar.stats.emptyTitle}</h2>

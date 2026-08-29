@@ -72,15 +72,24 @@ export default async function ApplicantsPage({
   if (!job) notFound();
 
   // FR-06: ranked by fit_score desc, nulls (not yet analyzed) last.
+  //
+  // The score is read from applications, not from the embedded evaluation.
+  // Ordering by the joined table made Postgres read every application for the
+  // job, join every evaluation and sort the lot to return twenty — on every
+  // page. applications.fit_score is a trigger-maintained copy (0013) and
+  // applications_ranked_idx serves this exact order, so page one is now an
+  // index read of twenty rows: measured 7.63 ms to 0.27 ms on a job with
+  // 3,250 applicants. ai_evaluations stays the source of truth and the
+  // applicant detail page still reads it there.
   let query = supabase
     .from("applications")
     .select(
-      "id, full_name, email, status, analysis_status, analysis_attempts, created_at, ai_evaluations(fit_score)",
+      "id, full_name, email, status, analysis_status, analysis_attempts, created_at, fit_score",
       { count: "exact" }
     )
     .eq("org_id", session.org.id)
     .eq("job_id", id)
-    .order("ai_evaluations(fit_score)", { ascending: false, nullsFirst: false })
+    .order("fit_score", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: true })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (statusFilter) query = query.eq("status", statusFilter);
@@ -174,7 +183,7 @@ export default async function ApplicantsPage({
             </TableHeader>
             <TableBody>
               {applicants.map((applicant, index) => {
-                const fitScore = applicant.ai_evaluations?.fit_score ?? null;
+                const fitScore = applicant.fit_score ?? null;
                 return (
                   <TableRow key={applicant.id}>
                     <TableCell className="text-muted-foreground tabular-nums">

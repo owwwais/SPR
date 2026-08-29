@@ -207,3 +207,29 @@ export async function saveInterviewNotes(
   revalidatePath(`/admin/applications/${applicationId}`);
   return { saved: true, error: null };
 }
+
+// Nitaqat reporting. Recorded by a human, at offer stage, about a hire —
+// never inferred from a CV and never an input to the fit score. The score
+// ignores nationality by rule (fairness rule 4), and a system that quietly
+// extracted it to fill this in would be breaking its own published promise.
+export async function setSaudizationCounting(
+  applicationId: string,
+  counts: boolean | null
+): Promise<{ ok: boolean }> {
+  const session = await requireMembership();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("applications")
+    .update({ counts_toward_saudization: counts })
+    .eq("id", applicationId)
+    .eq("org_id", session.org.id);
+
+  if (error) {
+    console.error("setSaudizationCounting failed:", error.message);
+    return { ok: false };
+  }
+
+  revalidatePath(`/admin/applications/${applicationId}`);
+  return { ok: true };
+}

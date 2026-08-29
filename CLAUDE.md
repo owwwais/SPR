@@ -32,7 +32,7 @@ A recruitment website for a single company, with two faces:
 | D7 | Authorization = **RLS on every table**. Public (anon) role can: read published jobs, insert applications, upload to the CV bucket. Everything else requires an authenticated HR/admin user. |
 | D8 | CVs are sensitive personal data: private Storage bucket (`cvs`), served to HR via short-lived signed URLs only. A scheduled cleanup deletes CVs + applications older than `retention_months` (setting, default 12). Applicant data is never used for model training and never logged in full. |
 | D9 | Soft deletes on `jobs`. Applications are never hard-deleted except by the retention job. Every status change is recorded in `status_history`. |
-| D10 | Allowed dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `@google/genai` (Edge Function only), `zod`, `react-hook-form`, `mammoth` (DOCX text extraction, Edge Function only), `date-fns`, `recharts`, `lucide-react`, shadcn/ui deps, `resend`. **Ask before adding anything else.** No ORM, no state library, no i18n framework (single `ar.ts` dictionary). |
+| D10 | Allowed dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `@google/genai` (Edge Function only), `zod`, `react-hook-form`, `mammoth` (DOCX text extraction, Edge Function only), `date-fns`, `recharts`, `lucide-react`, `@base-ui/react` (the UI primitives the shadcn components are built on — recorded 2026-08-29 after an audit found it in use but unlisted), `resend`. `shadcn` itself is a CLI and belongs in `devDependencies`. **Ask before adding anything else.** No ORM, no state library, no i18n framework (single `ar.ts` dictionary). |
 
 ### 2.1 SaaS Conversion Decisions (v2.0 — approved 2026-08-06)
 
@@ -522,7 +522,31 @@ Deferred until the product has paying customers: **S4** (platform console),
 **S5** (billing and quota enforcement), **S7** (Notion design pass),
 **S8** (parity + differentiator features).
 
-**Status (2026-08-06): S1, S2, S3, S6 and S9-mini are complete and pushed.**
+**Status (2026-08-29): S1, S2, S3, S6 and S9-mini complete. The August audit
+round then executed its own findings — see `docs/EXECUTION-PLAN-2026-08.md`
+for the batches and the engineering decisions taken.**
+
+What that round added, beyond fixes: the analysis quota is now enforced
+inside `analyze-application` (D16, migration `0014`) using the allowances the
+pricing page already advertised; `applications.fit_score` is a
+trigger-maintained copy so ranking reads an index instead of joining and
+sorting every applicant (`0013`); statistics aggregate in the database rather
+than truncating at 5,000 rows and reporting the remainder as fact; the
+transparency report D24 promises exists as an export (`0015`); blind
+screening anonymises a CV before evaluation, per organisation and off by
+default (`0016`); and a Saudization indicator records — by hand, at offer
+stage, never inferred and never an input to the score — whether a hire counts
+toward Nitaqat.
+
+**The talent platform** (`docs/TALENT-PLATFORM-DESIGN.md`) ships its MVP in
+schema `talent` (`0017`): upload, email verification that gates the paid
+analysis, a review screen, two separate consents, and an unguessable public
+page. Matching and invitations are deliberately absent. **The rule that keeps
+the two products separable: nothing joins `public.*` to `talent.*` directly.
+The schema is not exposed through the API; a handful of `public.talent_*`
+wrappers are its entire surface.**
+
+**Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
 `onboarding.sql` (23), `rls_check.sql` (42) — `npm run test:db` runs all
 three against a throwaway database. What remains before charging anyone:

@@ -47,6 +47,49 @@ export async function updateSettings(
   return { saved: true, error: null };
 }
 
+// Blind screening and the Nitaqat fields. Admin-only, like the rest of this
+// file, and deliberately one action: both are organisation-level compliance
+// settings that an admin sets once.
+const complianceSchema = z.object({
+  blind_screening: z.boolean(),
+  nitaqat_band: z
+    .enum(["platinum", "green_high", "green_mid", "green_low", "yellow", "red"])
+    .nullable(),
+  saudization_target: z.number().min(0).max(100).nullable(),
+});
+
+export async function updateCompliance(
+  _prev: SettingsState,
+  formData: FormData
+): Promise<SettingsState> {
+  const session = await requireOrgAdmin();
+
+  const rawBand = String(formData.get("nitaqat_band") ?? "");
+  const rawTarget = String(formData.get("saudization_target") ?? "").trim();
+
+  const parsed = complianceSchema.safeParse({
+    blind_screening: formData.get("blind_screening") === "on",
+    nitaqat_band: rawBand === "" ? null : rawBand,
+    saudization_target: rawTarget === "" ? null : Number(rawTarget),
+  });
+  if (!parsed.success) {
+    return { saved: false, error: ar.settingsPage.failed };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update(parsed.data)
+    .eq("id", session.org.id);
+  if (error) {
+    console.error("updateCompliance failed:", error.message);
+    return { saved: false, error: ar.settingsPage.failed };
+  }
+
+  revalidatePath("/admin/settings");
+  return { saved: true, error: null };
+}
+
 const newMemberSchema = z.object({
   full_name: z.string().trim().min(2).max(120),
   email: z.email().max(200),

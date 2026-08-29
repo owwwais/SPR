@@ -6,7 +6,11 @@
 //   SITE_URL        optional, enables the tracking link in emails
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { buildEmail, type EmailKind } from "./templates.ts";
+import {
+  buildEmail,
+  buildTalentVerifyEmail,
+  type EmailKind,
+} from "./templates.ts";
 
 // Applicant templates: the recipient is derived from the application row, so
 // these are safe to invoke with the anon key from a server action.
@@ -50,6 +54,8 @@ Deno.serve(async (req) => {
     application_id?: string;
     invitation_id?: string;
     token?: string;
+    email?: string;
+    url?: string;
   };
   try {
     payload = await req.json();
@@ -65,6 +71,36 @@ Deno.serve(async (req) => {
   const resendKeyEarly = Deno.env.get("RESEND_API_KEY");
   const fromAddress = Deno.env.get("EMAIL_FROM") ?? "onboarding@resend.dev";
   const siteUrlEarly = Deno.env.get("SITE_URL")?.replace(/\/$/, "") ?? null;
+
+  // ---- talent_verify: the companion product's address check ----
+  // Service role only, like every other kind here: the caller is
+  // talent-upload, never a browser.
+  if (kind === "talent_verify") {
+    if (!isServiceRoleCaller(req)) {
+      return json(403, { error: "service role only" });
+    }
+    const to = payload.email;
+    const verifyUrl = payload.url;
+    if (!to || !verifyUrl) {
+      return json(400, { error: "email and url required" });
+    }
+    if (!resendKeyEarly) {
+      console.error("RESEND_API_KEY is not configured");
+      return json(500, { error: "email not configured" });
+    }
+    const { subject, html } = buildTalentVerifyEmail(verifyUrl);
+    const { error: sendError } = await new Resend(resendKeyEarly).emails.send({
+      from: fromAddress,
+      to,
+      subject,
+      html,
+    });
+    if (sendError) {
+      console.error("resend send failed:", sendError.message);
+      return json(502, { error: "send failed" });
+    }
+    return json(200, { ok: true });
+  }
 
   // ---- invitation: colleague, not applicant ----
   if (kind === "invitation") {

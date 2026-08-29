@@ -76,17 +76,63 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
+// The rate-limit key, and therefore the thing that decides whether the limits
+// in record_submission_attempt mean anything at all.
+//
+// Proxies APPEND to X-Forwarded-For, so the header reads
+//   <whatever the caller sent>, <hop 1>, ..., <the edge we actually trust>
+// Reading the leftmost value — the obvious choice, and what this did until
+// now — reads a value the caller wrote. Sending a random X-Forwarded-For per
+// request therefore earned a fresh limit bucket every time, which defeated
+// the per-IP limits completely and left the AI spend unbounded.
+//
+// The rightmost entry is the one our own infrastructure appended and is the
+// only one a caller cannot forge. Prefer the platform's own header when it is
+// present, and fall back to that last hop.
 function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for") ?? "";
-  return forwarded.split(",")[0]!.trim() || "unknown";
+  const direct =
+    req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip");
+  if (direct?.trim()) return direct.trim();
+
+  const hops = (req.headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  return hops.length > 0 ? hops[hops.length - 1]! : "unknown";
 }
 
 // Optional: only enforced once a site key is configured (S9-mini). Absent
 // configuration must not block submissions, or a misconfigured deploy
 // silently rejects every applicant.
+// cv.type is whatever the browser attached to the File — a value the caller
+// controls. Checking it alone lets any 5MB payload through labelled as a PDF,
+// to be stored and then handed to the model. Read the actual leading bytes.
+//   PDF  -> "%PDF"
+//   DOCX -> a ZIP container, "PK\x03\x04"
+async function sniffMime(file: File): Promise<CvMime | null> {
+  const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (head.length < 4) return null;
+  if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) {
+    return "application/pdf";
+  }
+  if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  return null;
+}
+
 async function turnstileOk(token: string | null): Promise<boolean> {
   const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
-  if (!secret) return true;
+  if (!secret) {
+    // Deploying without a secret disables the captcha silently, which is how
+    // an environment ends up with no bot protection and nobody noticing.
+    // Still allow the submission — refusing every applicant over a missing
+    // env var is worse — but never let it pass unremarked.
+    console.error(
+      "TURNSTILE_SECRET_KEY is not configured — captcha verification DISABLED"
+    );
+    return true;
+  }
   if (!token) return false;
   try {
     const res = await fetch(
@@ -188,6 +234,16 @@ Deno.serve(async (req) => {
     });
   }
   if (!(cv.type in CV_MIME_TYPES)) {
+    return fail(400, {
+      error: "invalid_input",
+      field_errors: { cv: "type" },
+    });
+  }
+  // The declared type has to agree with what the file actually is; a mismatch
+  // means the label was wrong or deliberately misleading, and either way we do
+  // not store it or spend an analysis on it.
+  const sniffed = await sniffMime(cv);
+  if (sniffed === null || sniffed !== cv.type) {
     return fail(400, {
       error: "invalid_input",
       field_errors: { cv: "type" },

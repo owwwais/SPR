@@ -45,7 +45,7 @@ export function assetUrl(path: string | null): string | null {
  * Every published job from every listed company, grouped by company and
  * ordered by how recently each company posted.
  */
-export async function getMarketplaceJobs(): Promise<CompanyWithJobs[]> {
+export async function getMarketplaceJobs(): Promise<CompanyWithJobs[] | null> {
   try {
     const supabase = createPublicClient();
     const { data, error } = await supabase
@@ -63,7 +63,10 @@ export async function getMarketplaceJobs(): Promise<CompanyWithJobs[]> {
 
     if (error) {
       console.error("marketplace query failed:", error.message);
-      return [];
+      // Distinguished from an empty result on purpose: telling a visitor
+      // there are no jobs when the query failed is a lie that costs the
+      // customer applicants.
+      return null;
     }
 
     const rows = (data ?? []) as unknown as JobRow[];
@@ -91,7 +94,8 @@ export async function getMarketplaceJobs(): Promise<CompanyWithJobs[]> {
       "marketplace unavailable:",
       err instanceof Error ? err.message : err
     );
-    return [];
+    // null means "we could not tell", never "there is nothing".
+    return null;
   }
 }
 
