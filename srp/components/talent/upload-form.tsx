@@ -45,7 +45,19 @@ export function UploadForm() {
 
       <Turnstile siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null} />
 
-      {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+      {state.error && (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-destructive">{state.error}</p>
+          {/* Visible on purpose: without a reference, "it doesn't work" is
+              the entire report we get. With it, a search in the function's
+              logs for this exact string lands on the failing request. */}
+          {state.requestId && (
+            <p className="text-xs text-muted-foreground" dir="ltr">
+              {t.requestIdLabel}: {state.code ?? "error"} · {state.requestId}
+            </p>
+          )}
+        </div>
+      )}
 
       <Button type="submit" disabled={pending}>
         {pending ? t.submitting : t.submit}

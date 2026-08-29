@@ -15,6 +15,7 @@ import { GoogleGenAI, ThinkingLevel, Type, type Schema } from "@google/genai";
 import mammoth from "mammoth";
 import { Buffer } from "node:buffer";
 import { encodeBase64 as base64Encode } from "jsr:@std/encoding/base64";
+import { newTraceId, makeLogger, isSchemaMissingError } from "../_shared/trace.ts";
 import {
   TALENT_SYSTEM_PROMPT,
   TALENT_PROMPT_VERSION,
@@ -82,8 +83,8 @@ const SCHEMA: Schema = {
   ],
 };
 
-function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
+function json(status: number, body: Record<string, unknown>, trace?: string): Response {
+  return new Response(JSON.stringify(trace ? { ...body, request_id: trace } : body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
@@ -100,17 +101,23 @@ const norm = (s: string) =>
     .trim();
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
+  const trace = newTraceId();
+  const log = makeLogger("talent-analyze", trace);
+  log.step("received");
+
+  if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, trace);
 
   let payload: { verify_token?: string };
   try {
     payload = await req.json();
-  } catch {
-    return json(400, { error: "invalid_input" });
+  } catch (err) {
+    log.fail("parse_body", err instanceof Error ? err.message : String(err));
+    return json(400, { error: "invalid_input" }, trace);
   }
   const token = payload.verify_token;
   if (!token || !/^[0-9a-f]{32}$/.test(token)) {
-    return json(400, { error: "invalid_input" });
+    log.fail("validate_token", "missing or malformed verify_token");
+    return json(400, { error: "invalid_input" }, trace);
   }
 
   const admin = createClient(
@@ -125,16 +132,27 @@ Deno.serve(async (req) => {
     .eq("verify_token", token)
     .maybeSingle();
   if (lookupError) {
-    console.error("profile lookup failed:", lookupError.message);
-    return json(500, { error: "server_error" });
+    if (isSchemaMissingError(lookupError)) {
+      log.fail("profile_lookup", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
+        pg_code: lookupError.code,
+      });
+      return json(500, { error: "not_configured" }, trace);
+    }
+    log.fail("profile_lookup", lookupError.message, { pg_code: lookupError.code });
+    return json(500, { error: "server_error" }, trace);
   }
-  if (!profile) return json(404, { error: "expired" });
+  if (!profile) {
+    log.fail("profile_lookup", "no profile for this verify_token — already used, or never existed");
+    return json(404, { error: "expired" }, trace);
+  }
+  log.step("profile_found", { profile_id: profile.id, status: profile.analysis_status });
 
   const sentAt = profile.verify_sent_at
     ? new Date(profile.verify_sent_at).getTime()
     : 0;
   if (Date.now() - sentAt > VERIFY_TTL_HOURS * 3600 * 1000) {
-    return json(410, { error: "expired" });
+    log.fail("ttl_check", "verification link expired", { sent_at: profile.verify_sent_at });
+    return json(410, { error: "expired" }, trace);
   }
 
   // Verification is recorded before the analysis, so a failed model call does
@@ -144,11 +162,13 @@ Deno.serve(async (req) => {
     .from("profiles")
     .update({ email_verified_at: new Date().toISOString() })
     .eq("id", profile.id);
+  log.step("email_verified");
 
   // Already analysed — the same file re-uploaded, or the link clicked twice.
   // Return the review token rather than paying again.
   if (profile.analysis_status === "done") {
-    return json(200, { ok: true, public_token: profile.public_token });
+    log.step("already_done");
+    return json(200, { ok: true, public_token: profile.public_token }, trace);
   }
 
   await admin
@@ -156,6 +176,7 @@ Deno.serve(async (req) => {
     .from("profiles")
     .update({ analysis_status: "processing" })
     .eq("id", profile.id);
+  log.step("processing");
 
   try {
     const { data: cvBlob, error: downloadError } = await admin.storage
@@ -164,6 +185,7 @@ Deno.serve(async (req) => {
     if (downloadError || !cvBlob) {
       throw new Error(`CV download failed: ${downloadError?.message}`);
     }
+    log.step("cv_downloaded");
 
     const parts: Array<
       { text: string } | { inlineData: { mimeType: string; data: string } }
@@ -184,6 +206,7 @@ Deno.serve(async (req) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
+    log.step("model_call_start");
     const response = await ai.models.generateContent({
       model: MODEL,
       contents: [{ role: "user", parts }],
@@ -195,6 +218,7 @@ Deno.serve(async (req) => {
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
     });
+    log.step("model_call_done");
 
     const result = JSON.parse(response.text ?? "{}") as {
       is_cv?: boolean;
@@ -276,22 +300,27 @@ Deno.serve(async (req) => {
       await admin.rpc("talent_record_unmapped_skill", { p_label: raw });
     }
 
+    log.step("done", { matched: matched.size, unmapped: unmapped.length });
     return json(200, {
       ok: true,
       public_token: profile.public_token,
       unmapped: unmapped.length,
-    });
+    }, trace);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("talent analysis failed:", message.slice(0, 500));
+    log.fail("analysis", message.slice(0, 500));
+    // The trace id rides along in the stored error too (prefixed, short), so
+    // a person looking at their own failed page in talent_review_profile can
+    // quote something searchable back to us without needing log access
+    // themselves.
     await admin
       .schema("talent")
       .from("profiles")
       .update({
         analysis_status: "failed",
-        analysis_error: message.slice(0, 500),
+        analysis_error: `[${trace}] ${message.slice(0, 490)}`,
       })
       .eq("id", profile.id);
-    return json(500, { error: "analysis_failed" });
+    return json(500, { error: "analysis_failed" }, trace);
   }
 });

@@ -14,6 +14,7 @@
 // TURNSTILE_SECRET_KEY and THROTTLE_SALT.
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { newTraceId, makeLogger, isSchemaMissingError } from "../_shared/trace.ts";
 
 const CV_MIME_TYPES = {
   "application/pdf": "pdf",
@@ -28,8 +29,8 @@ const uploadSchema = z.object({
   email: z.email().max(200).transform((v) => v.toLowerCase()),
 });
 
-function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
+function json(status: number, body: Record<string, unknown>, trace?: string): Response {
+  return new Response(JSON.stringify(trace ? { ...body, request_id: trace } : body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
@@ -71,10 +72,23 @@ async function sniffMime(file: File): Promise<CvMime | null> {
 // Unlike the recruitment form, this one fails CLOSED without a captcha:
 // nothing is lost by refusing a bot here, whereas refusing a job applicant
 // costs a real person a real opportunity.
-async function turnstileOk(token: string | null): Promise<boolean> {
+//
+// Returns a reason alongside ok/not-ok because "rejected" has three very
+// different causes that all looked identical to the caller before this:
+//   not_configured   TURNSTILE_SECRET_KEY unset on this function -> passes
+//   no_token          the browser sent nothing. Almost always means
+//                      NEXT_PUBLIC_TURNSTILE_SITE_KEY was never set on
+//                      Vercel (or set but not redeployed), so the widget in
+//                      components/jobs/turnstile.tsx rendered nothing and no
+//                      token was ever produced.
+//   verify_failed     Cloudflare rejected the token, or the network call to
+//                      siteverify itself failed.
+async function turnstileCheck(
+  token: string | null
+): Promise<{ ok: boolean; reason: string }> {
   const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
-  if (!secret) return true;
-  if (!token) return false;
+  if (!secret) return { ok: true, reason: "not_configured" };
+  if (!token) return { ok: false, reason: "no_token" };
   try {
     const res = await fetch(
       "https://challenges.cloudflare.com/turnstile/v0/siteverify",
@@ -84,14 +98,20 @@ async function turnstileOk(token: string | null): Promise<boolean> {
         body: new URLSearchParams({ secret, response: token }),
       }
     );
-    const body = (await res.json()) as { success?: boolean };
-    return body.success === true;
+    const body = (await res.json()) as {
+      success?: boolean;
+      "error-codes"?: string[];
+    };
+    if (body.success === true) return { ok: true, reason: "verified" };
+    return {
+      ok: false,
+      reason: `verify_failed:${(body["error-codes"] ?? []).join(",") || "rejected"}`,
+    };
   } catch (err) {
-    console.error(
-      "turnstile unavailable:",
-      err instanceof Error ? err.message : err
-    );
-    return false;
+    return {
+      ok: false,
+      reason: `verify_failed:${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
@@ -104,36 +124,56 @@ function randomToken(): string {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
+  const trace = newTraceId();
+  const log = makeLogger("talent-upload", trace);
+  log.step("received");
+
+  if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, trace);
 
   let form: FormData;
   try {
     form = await req.formData();
-  } catch {
-    return json(400, { error: "invalid_input" });
+  } catch (err) {
+    log.fail("parse_form", err instanceof Error ? err.message : String(err));
+    return json(400, { error: "invalid_input" }, trace);
   }
 
-  if (!(await turnstileOk(String(form.get("cf-turnstile-response") ?? "")))) {
-    return json(400, { error: "captcha_failed" });
+  const captchaToken = String(form.get("cf-turnstile-response") ?? "") || null;
+  const turnstile = await turnstileCheck(captchaToken);
+  log.step("turnstile", { ok: turnstile.ok, reason: turnstile.reason });
+  if (!turnstile.ok) {
+    // The reason (no_token vs verify_failed vs a Cloudflare error code) is
+    // deliberately kept out of the client response — telling a bot which
+    // check it failed helps it adapt. It is one log line away for a human:
+    // search this trace id in the function's logs.
+    return json(400, { error: "captcha_failed" }, trace);
   }
 
   const parsed = uploadSchema.safeParse({ email: form.get("email") });
   if (!parsed.success) {
-    return json(400, { error: "invalid_input", field: "email" });
+    log.fail("validate_email", "invalid email");
+    return json(400, { error: "invalid_input", field: "email" }, trace);
   }
   const email = parsed.data.email;
 
   const cv = form.get("cv");
   if (!(cv instanceof File) || cv.size === 0) {
-    return json(400, { error: "invalid_input", field: "cv" });
+    log.fail("validate_cv", "no file or empty file");
+    return json(400, { error: "invalid_input", field: "cv" }, trace);
   }
   if (cv.size > CV_MAX_BYTES) {
-    return json(400, { error: "invalid_input", field: "cv_size" });
+    log.fail("validate_cv", "over size limit", { bytes: cv.size });
+    return json(400, { error: "invalid_input", field: "cv_size" }, trace);
   }
   const sniffed = await sniffMime(cv);
   if (sniffed === null || !(cv.type in CV_MIME_TYPES) || sniffed !== cv.type) {
-    return json(400, { error: "invalid_input", field: "cv_type" });
+    log.fail("validate_cv", "declared type does not match file contents", {
+      declared: cv.type,
+      sniffed,
+    });
+    return json(400, { error: "invalid_input", field: "cv_type" }, trace);
   }
+  log.step("input_valid", { email_domain: email.split("@")[1], cv_bytes: cv.size });
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -151,22 +191,48 @@ Deno.serve(async (req) => {
     { p_ip_hash: ipHash, p_email_hash: emailHash }
   );
   if (throttleError) {
-    console.error("throttle failed:", throttleError.message);
-    return json(500, { error: "server_error" });
+    if (isSchemaMissingError(throttleError)) {
+      // The function this call needs (talent.record_upload_attempt via the
+      // public.talent_record_upload_attempt wrapper) does not exist. This is
+      // not a runtime failure — migrations 0012 through 0017 have not been
+      // applied to this database yet, so nothing past this point can work
+      // either. Loud on purpose: this is the single most likely cause of
+      // "every upload is rejected" right after the functions are first
+      // deployed.
+      log.fail("throttle_check", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
+        pg_code: throttleError.code,
+      });
+      return json(500, { error: "not_configured" }, trace);
+    }
+    log.fail("throttle_check", throttleError.message, { pg_code: throttleError.code });
+    return json(500, { error: "server_error" }, trace);
   }
-  if (throttle) return json(429, { error: "rate_limited" });
+  if (throttle) {
+    log.step("rate_limited");
+    return json(429, { error: "rate_limited" }, trace);
+  }
 
   const bytes = await cv.arrayBuffer();
   const cvHash = await sha256Hex(bytes);
 
   // Same file, same result. Re-analysing it would spend a second call for an
   // answer we already have, and would tell the person nothing new.
-  const { data: existing } = await admin
+  const { data: existing, error: lookupError } = await admin
     .schema("talent")
     .from("profiles")
     .select("id, public_token, cv_sha256, analysis_status")
     .eq("email", email)
     .maybeSingle();
+  if (lookupError) {
+    if (isSchemaMissingError(lookupError)) {
+      log.fail("profile_lookup", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
+        pg_code: lookupError.code,
+      });
+      return json(500, { error: "not_configured" }, trace);
+    }
+    log.fail("profile_lookup", lookupError.message, { pg_code: lookupError.code });
+    return json(500, { error: "server_error" }, trace);
+  }
 
   const verifyToken = randomToken();
   const publicToken = existing?.public_token ?? randomToken();
@@ -178,9 +244,13 @@ Deno.serve(async (req) => {
     .from("talent-cvs")
     .upload(cvPath, cv, { contentType: cv.type, upsert: true });
   if (uploadError) {
-    console.error("talent CV upload failed:", uploadError.message);
-    return json(500, { error: "server_error" });
+    // A missing bucket looks like this too (StorageApiError, "Bucket not
+    // found") — the same migrations-not-applied cause as above, since 0017
+    // is what creates the talent-cvs bucket.
+    log.fail("cv_upload", uploadError.message);
+    return json(500, { error: "server_error" }, trace);
   }
+  log.step("cv_stored", { path: cvPath });
 
   const unchanged = existing?.cv_sha256 === cvHash;
 
@@ -202,14 +272,21 @@ Deno.serve(async (req) => {
       { onConflict: "id" }
     );
   if (upsertError) {
-    console.error("profile upsert failed:", upsertError.message);
-    return json(500, { error: "server_error" });
+    log.fail("profile_upsert", upsertError.message, { pg_code: upsertError.code });
+    return json(500, { error: "server_error" }, trace);
   }
+  log.step("profile_saved", { unchanged });
 
   // The link carries the verify token, not the profile id: clicking it is
   // what proves the address, and the public token must not travel until the
   // person has decided to publish.
   const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+  if (!siteUrl) {
+    // Not fatal to the upload — the row and file are saved — but the link in
+    // the email the person is about to receive will be broken
+    // (https:///talent/verify/…), so flag it loudly rather than silently.
+    log.fail("site_url", "SITE_URL is not set — the verification link will be malformed");
+  }
   const verifyUrl = `${siteUrl}/talent/verify/${verifyToken}`;
 
   const { error: mailError } = await admin.functions.invoke("send-email", {
@@ -218,9 +295,10 @@ Deno.serve(async (req) => {
   if (mailError) {
     // The profile exists and the link is valid; only delivery failed. Say so
     // rather than pretending the upload did not happen.
-    console.error("verification email failed:", mailError.message);
-    return json(502, { error: "email_failed" });
+    log.fail("send_email", mailError.message);
+    return json(502, { error: "email_failed" }, trace);
   }
 
-  return json(200, { ok: true });
+  log.step("done");
+  return json(200, { ok: true }, trace);
 });

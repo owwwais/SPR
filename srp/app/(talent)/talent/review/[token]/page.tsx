@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export type ReviewProfile = {
   status: string;
   analysis_status: string;
+  analysis_error: string | null;
   full_name: string | null;
   headline: string | null;
   city: string | null;
@@ -61,14 +62,26 @@ export default async function TalentReviewPage({
   // page under someone's name is worse than not publishing one, so there is
   // no publish button in that state.
   if (profile.analysis_status !== "done") {
+    const failed = profile.analysis_status === "failed";
     return (
       <main className="mx-auto max-w-xl px-4 py-20 text-center">
         <h1 className="text-xl font-semibold">
-          {profile.analysis_status === "failed" ? t.errors.server : t.analyzing}
+          {failed ? t.errors.server : t.analyzing}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {profile.analysis_status === "failed" ? "" : t.analyzingBody}
+          {failed ? "" : t.analyzingBody}
         </p>
+        {/* analysis_error already carries a [trace-id] prefix written by
+            talent-analyze — the same id its own logs are searchable by, so
+            this is reportable rather than a dead end. */}
+        {failed && profile.analysis_error && (
+          <p
+            className="mx-auto mt-4 max-w-md rounded-lg border bg-muted/30 p-3 text-start text-xs text-muted-foreground"
+            dir="ltr"
+          >
+            {profile.analysis_error}
+          </p>
+        )}
       </main>
     );
   }
