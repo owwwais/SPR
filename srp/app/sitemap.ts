@@ -29,6 +29,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/companies`, lastModified: now, priority: 0.8 },
     { url: `${base}/pricing`, lastModified: now, priority: 0.7 },
     { url: `${base}/fairness`, lastModified: now, priority: 0.7 },
+    // The talent product's own entry point. Individual profiles are NOT
+    // listed: they are their owner's to share, and several ask for noindex.
+    { url: `${base}/talent`, lastModified: now, priority: 0.8 },
     { url: `${base}/privacy`, lastModified: now, priority: 0.3 },
     { url: `${base}/terms`, lastModified: now, priority: 0.3 },
   ];

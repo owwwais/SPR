@@ -51,6 +51,24 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* A slim band for the other audience. This page sells to employers,
+          but a job seeker landing here should find their door rather than
+          bounce — and the companion product had no entry point at all. Kept
+          deliberately light so it does not compete with the hero. */}
+      <section className="border-y bg-primary/5">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 px-4 py-4 text-center">
+          <span className="text-sm">{ar.talent.seekerBanner}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/talent" />}
+          >
+            {ar.talent.seekerBannerCta}
+          </Button>
+        </div>
+      </section>
+
       {/* Problem */}
       <section className="border-t bg-muted/30">
         <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-16">
