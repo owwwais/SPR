@@ -54,7 +54,11 @@ begin
       -- reproduced or challenged later.
       'model', e.model,
       'prompt_version', e.prompt_version,
-      'evaluated_at', e.created_at
+      'evaluated_at', e.created_at,
+      -- Whether identity was stripped before scoring (0016). This is the
+      -- strongest single line in the document for an employer defending a
+      -- decision, so it is stated explicitly rather than left implicit.
+      'blind_screening', e.blind
     ) end,
     -- The human trail. changed_by null means the system recorded it (the
     -- initial 'new'), and that is stated rather than left to be guessed.

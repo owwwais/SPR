@@ -30,6 +30,7 @@ import {
 } from "@/components/admin/interview-questions";
 import { InterviewManager } from "@/components/admin/interview-manager";
 import { StatusChanger } from "@/components/admin/status-changer";
+import { SaudizationControl } from "@/components/admin/saudization-control";
 import {
   InterviewQa,
   ScreeningAnswers,
@@ -100,7 +101,7 @@ export default async function ApplicationPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, created_at, jobs(title)"
+      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, counts_toward_saudization, created_at, jobs(title)"
     )
     .eq("id", id)
     .eq("org_id", session.org.id)
@@ -131,7 +132,7 @@ export default async function ApplicationPage({
       ? supabase
           .from("ai_evaluations")
           .select(
-            "fit_score, extracted, score_breakdown, justification, interview_questions, interview_notes, model, prompt_version, created_at"
+            "fit_score, extracted, score_breakdown, justification, interview_questions, interview_notes, model, prompt_version, blind, created_at"
           )
           .eq("application_id", id)
           .eq("org_id", session.org.id)
@@ -143,6 +144,7 @@ export default async function ApplicationPage({
 
   let evaluation: z.infer<typeof StoredEvaluation> | null = null;
   let evaluationMeta: {
+    blind: boolean;
     model: string;
     prompt_version: string;
     created_at: string;
@@ -157,6 +159,7 @@ export default async function ApplicationPage({
       if (parsed.success) {
         evaluation = parsed.data;
         evaluationMeta = {
+          blind: row.blind,
           model: row.model,
           prompt_version: row.prompt_version,
           created_at: row.created_at,
@@ -303,6 +306,17 @@ export default async function ApplicationPage({
                   currentStatus={application.status}
                 />
               </div>
+              {/* Only once the candidate is actually being hired. Asking
+                  earlier would put a nationality question next to a CV that
+                  is still being evaluated, which is exactly the adjacency the
+                  fairness rules exist to prevent. */}
+              {(application.status === "interview" ||
+                application.status === "accepted") && (
+                <SaudizationControl
+                  applicationId={application.id}
+                  value={application.counts_toward_saudization}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -320,19 +334,27 @@ export default async function ApplicationPage({
                     is a GET that produces a file, so it needs no client
                     component and works with the middle-click and
                     open-in-new-tab a reviewer will reach for. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  render={
-                    <a
-                      href={`/admin/applications/${id}/transparency`}
-                      download
-                    />
-                  }
-                >
-                  <FileDown className="size-4" aria-hidden />
-                  {ar.transparency.export}
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* The single strongest line an employer has when asked to
+                      justify a decision: identity was not visible when the
+                      score was produced. */}
+                  {evaluationMeta?.blind && (
+                    <Badge variant="secondary">{ar.blindScreening.badge}</Badge>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    render={
+                      <a
+                        href={`/admin/applications/${id}/transparency`}
+                        download
+                      />
+                    }
+                  >
+                    <FileDown className="size-4" aria-hidden />
+                    {ar.transparency.export}
+                  </Button>
+                </div>
               </div>
 
               {(application.analysis_status === "pending" ||

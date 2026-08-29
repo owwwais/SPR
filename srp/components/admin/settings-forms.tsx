@@ -12,6 +12,7 @@ import {
   revokeInvitation,
   updateMemberRole,
   updateSettings,
+  updateCompliance,
   type SettingsState,
 } from "@/app/(dashboard)/admin/settings/actions";
 import { ar } from "@/lib/i18n/ar";
@@ -93,6 +94,117 @@ export function CompanySettingsForm({
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>
           {pending ? t.saving : t.save}
+        </Button>
+        <Feedback state={state} pending={pending} />
+      </div>
+    </form>
+  );
+}
+
+// Blind screening + Nitaqat. Both are organisation-level compliance settings
+// an admin sets once, so they share one form and one save.
+export function ComplianceForm({
+  blindScreening,
+  nitaqatBand,
+  saudizationTarget,
+}: {
+  blindScreening: boolean;
+  nitaqatBand: string | null;
+  saudizationTarget: number | null;
+}) {
+  const [state, formAction, pending] = useActionState(
+    updateCompliance,
+    initialState
+  );
+  const [blind, setBlind] = useState(blindScreening);
+  const [band, setBand] = useState(nitaqatBand ?? "");
+  const [target, setTarget] = useState(
+    saudizationTarget === null ? "" : String(saudizationTarget)
+  );
+  const [prev, setPrev] = useState({
+    blindScreening,
+    nitaqatBand,
+    saudizationTarget,
+  });
+  if (
+    prev.blindScreening !== blindScreening ||
+    prev.nitaqatBand !== nitaqatBand ||
+    prev.saudizationTarget !== saudizationTarget
+  ) {
+    setPrev({ blindScreening, nitaqatBand, saudizationTarget });
+    setBlind(blindScreening);
+    setBand(nitaqatBand ?? "");
+    setTarget(saudizationTarget === null ? "" : String(saudizationTarget));
+  }
+
+  const b = ar.blindScreening;
+  const sa = ar.saudization;
+
+  return (
+    <form action={formAction} className="flex max-w-xl flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start gap-3">
+          <input
+            id="blind_screening"
+            name="blind_screening"
+            type="checkbox"
+            checked={blind}
+            onChange={(e) => setBlind(e.target.checked)}
+            className="mt-1 size-4"
+          />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="blind_screening">{b.enable}</Label>
+            <p className="text-xs text-muted-foreground">{b.body}</p>
+            {/* Stated plainly: it is the reason this is off by default. */}
+            <p className="text-xs font-medium text-amber-700">{b.cost}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t pt-5">
+        <h3 className="mb-1 text-sm font-semibold">{sa.title}</h3>
+        <p className="mb-4 text-xs text-muted-foreground">{sa.body}</p>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="nitaqat_band">{sa.band}</Label>
+            <select
+              id="nitaqat_band"
+              name="nitaqat_band"
+              value={band}
+              onChange={(e) => setBand(e.target.value)}
+              className="h-9 max-w-56 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <option value="">{sa.noBand}</option>
+              {(
+                Object.keys(sa.bands) as (keyof typeof sa.bands)[]
+              ).map((key) => (
+                <option key={key} value={key}>
+                  {sa.bands[key]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="saudization_target">{sa.target}</Label>
+            <Input
+              id="saudization_target"
+              name="saudization_target"
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              className="max-w-32"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={pending}>
+          {pending ? ar.settingsPage.saving : ar.settingsPage.save}
         </Button>
         <Feedback state={state} pending={pending} />
       </div>

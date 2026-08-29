@@ -17,6 +17,7 @@ import { BrandingForm } from "@/components/admin/branding-form";
 import {
   AddMemberForm,
   CompanySettingsForm,
+  ComplianceForm,
   InviteMemberForm,
   MemberRoleBadge,
   MemberRoleForm,
@@ -60,7 +61,7 @@ export default async function AdminSettingsPage() {
     supabase
       .from("organizations")
       .select(
-        "name, slug, about, website, industry, city, brand_color, listed_publicly, logo_path, cover_path"
+        "name, slug, about, website, industry, city, brand_color, listed_publicly, logo_path, cover_path, blind_screening, nitaqat_band, saudization_target"
       )
       .eq("id", session.org.id)
       .maybeSingle(),
@@ -127,6 +128,19 @@ export default async function AdminSettingsPage() {
           <CompanySettingsForm
             companyName={session.org.name}
             retentionMonths={session.org.retentionMonths}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{ar.blindScreening.title} · {ar.saudization.title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ComplianceForm
+            blindScreening={org?.blind_screening ?? false}
+            nitaqatBand={org?.nitaqat_band ?? null}
+            saudizationTarget={org?.saudization_target ?? null}
           />
         </CardContent>
       </Card>

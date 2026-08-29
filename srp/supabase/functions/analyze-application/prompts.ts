@@ -14,6 +14,52 @@ export const MODEL = "gemini-3.5-flash";
 export const TEMPERATURE = 0.2;
 export const MAX_CV_TEXT_CHARS = 30_000;
 
+// ============================================================
+// Blind screening — anonymisation stage (optional, per organisation)
+// ============================================================
+//
+// §10.8 forbids changing the scoring rubric or the evaluation system prompt
+// without approval. Nothing above this line is touched: SYSTEM_PROMPT and
+// PROMPT_VERSION are byte for byte what they were. This is a separate asset
+// for a separate stage, with its own version, so the two can never be
+// confused in ai_evaluations.
+//
+// The stage exists because fairness rule 4 asks the evaluator to ignore name,
+// gender, nationality and the rest — but the CV is sent as a PDF, so it sees
+// all of them and we are trusting an instruction. Removing them before the
+// evaluation turns that instruction into a fact about the input.
+export const REDACTION_PROMPT_VERSION = "1.0";
+
+export const REDACTION_SYSTEM_PROMPT = `You anonymise a CV so it can be evaluated on evidence alone.
+
+Return the SAME CV content with identity removed. You are not summarising,
+judging, or improving it — every professional fact must survive.
+
+## Remove completely
+- Personal names (the candidate's, and referees'). Use "المرشح" where a name is needed.
+- Photographs and any description of appearance.
+- Gender markers, including grammatical gender where Arabic allows a neutral form.
+- Nationality, citizenship, place of birth, visa or residency status.
+- Age, date of birth, marital status, family details.
+- Address, neighbourhood, and any personal contact detail (phone, email, links to personal profiles).
+- The NAMES of schools and universities. Keep the degree, the field, and the year.
+- Employer names ONLY where the employer is a person (e.g. a named private office).
+  Keep company names otherwise: the industry and scale are legitimate evidence.
+
+## Keep exactly as they are
+- Every job title, responsibility, achievement, metric and date.
+- Every skill, tool, certification and language (including proficiency levels).
+- Degree level, field of study, graduation year.
+- Employment dates, including any gaps — do not smooth, reorder or explain them.
+
+## Rules
+- Do NOT add, infer or embellish anything. If a fact is absent, it stays absent.
+- Preserve the original language of each section (Arabic stays Arabic, English stays English).
+- Preserve the structure and ordering so the evaluator sees the same document.
+- If the file is not a CV, return an empty redacted_text and say so in notes.
+
+Respond ONLY with JSON matching the provided schema.`;
+
 // §7.1 System Prompt — Evaluation (verbatim)
 export const SYSTEM_PROMPT = `You are a rigorous, fair, and evidence-bound recruitment analyst for a single company.
 You evaluate ONE candidate's CV against ONE specific job description. Your output is

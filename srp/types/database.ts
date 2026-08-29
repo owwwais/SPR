@@ -32,6 +32,14 @@ export type AppStatus =
   | "accepted"
   | "rejected";
 export type AnalysisStatus = "pending" | "processing" | "done" | "failed";
+export type NitaqatBand =
+  | "platinum"
+  | "green_high"
+  | "green_mid"
+  | "green_low"
+  | "yellow"
+  | "red";
+
 export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
 
 export type Database = {
@@ -51,6 +59,12 @@ export type Database = {
           brand_color: string | null;
           status: OrgStatus;
           listed_publicly: boolean;
+          // 0014/0016
+          plan_code: string;
+          monthly_analysis_quota: number | null;
+          blind_screening: boolean;
+          nitaqat_band: NitaqatBand | null;
+          saudization_target: number | null;
           retention_months: number;
           created_by: string | null;
           created_at: string;
@@ -69,6 +83,11 @@ export type Database = {
           brand_color?: string | null;
           status?: OrgStatus;
           listed_publicly?: boolean;
+          plan_code?: string;
+          monthly_analysis_quota?: number | null;
+          blind_screening?: boolean;
+          nitaqat_band?: NitaqatBand | null;
+          saudization_target?: number | null;
           retention_months?: number;
           created_by?: string | null;
           created_at?: string;
@@ -87,6 +106,11 @@ export type Database = {
           city?: string | null;
           brand_color?: string | null;
           listed_publicly?: boolean;
+          plan_code?: string;
+          monthly_analysis_quota?: number | null;
+          blind_screening?: boolean;
+          nitaqat_band?: NitaqatBand | null;
+          saudization_target?: number | null;
           retention_months?: number;
         };
         Relationships: [];
@@ -282,6 +306,7 @@ export type Database = {
           analysis_status: AnalysisStatus;
           analysis_attempts: number;
           analysis_error: string | null;
+          counts_toward_saudization: boolean | null;
           // 0013: trigger-maintained copy of ai_evaluations.fit_score, so the
           // ranked list can be served from an index.
           fit_score: number | null;
@@ -306,6 +331,7 @@ export type Database = {
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
           analysis_error?: string | null;
+          counts_toward_saudization?: boolean | null;
           fit_score?: number | null;
           screening_answers?: Json;
           interview_at?: string | null;
@@ -317,6 +343,7 @@ export type Database = {
           analysis_status?: AnalysisStatus;
           analysis_attempts?: number;
           analysis_error?: string | null;
+          counts_toward_saudization?: boolean | null;
           fit_score?: number | null;
           interview_at?: string | null;
           interview_qa?: Json;
@@ -345,6 +372,7 @@ export type Database = {
           application_id: string;
           model: string;
           prompt_version: string;
+          blind: boolean;
           extracted: Json;
           fit_score: number;
           score_breakdown: Json;
@@ -493,6 +521,11 @@ export type Database = {
       };
       // 0013: dashboard aggregates computed in the database.
       org_stats: {
+        Args: { p_org: string };
+        Returns: unknown;
+      };
+      // 0016: Saudization panel, read-only for members.
+      org_saudization: {
         Args: { p_org: string };
         Returns: unknown;
       };

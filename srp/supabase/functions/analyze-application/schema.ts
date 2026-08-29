@@ -110,3 +110,25 @@ export const RESPONSE_SCHEMA: Schema = {
     "confidence",
   ],
 };
+
+// Blind screening — anonymisation stage (0016). Separate from the evaluation
+// schema above because it is a separate call producing a different artefact.
+export const REDACTION_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    redacted_text: {
+      type: Type.STRING,
+      description:
+        "The CV with identity removed and every professional fact intact. Empty if the file is not a CV.",
+    },
+    removed: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description:
+        "Categories removed, e.g. name, photo, nationality. Categories only — never the removed values.",
+    },
+    notes: { type: Type.STRING, nullable: true },
+  },
+  required: ["redacted_text", "removed"],
+  propertyOrdering: ["redacted_text", "removed", "notes"],
+};

@@ -26,9 +26,11 @@ import {
   MODEL,
   PROMPT_VERSION,
   SYSTEM_PROMPT,
+  REDACTION_SYSTEM_PROMPT,
+  REDACTION_PROMPT_VERSION,
   TEMPERATURE,
 } from "./prompts.ts";
-import { RESPONSE_SCHEMA } from "./schema.ts";
+import { RESPONSE_SCHEMA, REDACTION_SCHEMA } from "./schema.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,7 +133,7 @@ Deno.serve(async (req) => {
   const { data: application, error: appError } = await admin
     .from("applications")
     .select(
-      "id, org_id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, screening_answers, interview_qa, jobs(title, type, location, min_years_experience, skills, requirements, description)"
+      "id, org_id, cv_path, cv_mime, cover_note, analysis_status, analysis_attempts, screening_answers, interview_qa, organizations(blind_screening), jobs(title, type, location, min_years_experience, skills, requirements, description)"
     )
     .eq("id", applicationId)
     .maybeSingle();
@@ -251,11 +253,92 @@ Deno.serve(async (req) => {
     );
     const interviewBlock = formatInterviewQa(application.interview_qa);
 
+    const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
+
+    // Blind screening (0016). When the organisation has it on, the CV is
+    // anonymised first and ONLY the redacted text reaches the evaluation —
+    // the original file never does, which is the whole point: sending the PDF
+    // would hand the model back the name and photo we just removed.
+    //
+    // Two calls instead of one, which is why this is opt-in and off by
+    // default. Everything below then takes the text path regardless of the
+    // original file type.
+    const blind =
+      (application.organizations as unknown as { blind_screening: boolean } | null)
+        ?.blind_screening === true;
+
+    let redactedText: string | null = null;
+    if (blind) {
+      reachedModel = true;
+      const redactionParts: Array<
+        { text: string } | { inlineData: { mimeType: string; data: string } }
+      > = [{ text: "Anonymise the attached CV per your instructions." }];
+
+      if (application.cv_mime === "application/pdf") {
+        redactionParts.push({
+          inlineData: {
+            mimeType: "application/pdf",
+            data: base64Encode(await cvBlob.arrayBuffer()),
+          },
+        });
+      } else if (application.cv_mime === DOCX_MIME) {
+        const { value } = await mammoth.extractRawText({
+          buffer: Buffer.from(await cvBlob.arrayBuffer()),
+        });
+        redactionParts.push({ text: value.slice(0, MAX_CV_TEXT_CHARS) });
+      } else {
+        throw new Error(`unsupported cv_mime: ${application.cv_mime}`);
+      }
+
+      const redaction = await ai.models.generateContent({
+        model: MODEL,
+        contents: [{ role: "user", parts: redactionParts }],
+        config: {
+          systemInstruction: REDACTION_SYSTEM_PROMPT,
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseSchema: REDACTION_SCHEMA,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
+      });
+
+      const parsed = JSON.parse(redaction.text ?? "{}") as {
+        redacted_text?: string;
+        removed?: string[];
+      };
+      if (!parsed.redacted_text || parsed.redacted_text.trim().length === 0) {
+        // Refusing here is deliberate. Falling back to the original file
+        // would silently evaluate the identity-bearing CV under a setting
+        // that promises the opposite.
+        throw new Error("redaction produced no usable text");
+      }
+      redactedText = parsed.redacted_text.slice(0, MAX_CV_TEXT_CHARS);
+      // Categories only — never the removed values (D8).
+      console.log(
+        `blind screening: removed ${(parsed.removed ?? []).length} categories, prompt=${REDACTION_PROMPT_VERSION}`
+      );
+    }
+
     const parts: Array<
       { text: string } | { inlineData: { mimeType: string; data: string } }
     > = [];
 
-    if (application.cv_mime === "application/pdf") {
+    if (redactedText !== null) {
+      parts.push({
+        text: buildUserMessage(
+          job,
+          // The cover note is the candidate's own prose and carries their
+          // name as often as not; it is dropped in blind mode rather than
+          // becoming the leak that undoes the redaction.
+          null,
+          "text",
+          redactedText,
+          false,
+          screeningBlock,
+          interviewBlock
+        ),
+      });
+    } else if (application.cv_mime === "application/pdf") {
       parts.push({
         text: buildUserMessage(
           job,
@@ -296,7 +379,6 @@ Deno.serve(async (req) => {
       throw new Error(`unsupported cv_mime: ${application.cv_mime}`);
     }
 
-    const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
     // Past this line the money is gone whatever happens, so the quota unit
     // stays consumed. Everything before it — a missing CV, an unreadable
     // DOCX — cost nothing and is refunded in the catch below.
@@ -334,6 +416,10 @@ Deno.serve(async (req) => {
         application_id: applicationId,
         model: MODEL,
         prompt_version: PROMPT_VERSION,
+        // Recorded per evaluation rather than read from the organisation
+        // later: the setting can change, and a score has to stay explainable
+        // as of when it was produced.
+        blind,
         extracted: evaluation.extracted,
         fit_score: evaluation.fit_score,
         score_breakdown: evaluation.score_breakdown,
