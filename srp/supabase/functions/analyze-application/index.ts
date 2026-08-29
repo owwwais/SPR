@@ -15,11 +15,11 @@ import { Buffer } from "node:buffer";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import mammoth from "mammoth";
-import { Evaluation, computeFitScore } from "../../../lib/validations/evaluation.ts";
+import { Evaluation, computeFitScore } from "../_shared/evaluation.ts";
 import {
   InterviewQa,
   ScreeningAnswers,
-} from "../../../lib/validations/screening.ts";
+} from "../_shared/screening.ts";
 import {
   buildUserMessage,
   MAX_CV_TEXT_CHARS,

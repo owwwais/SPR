@@ -106,7 +106,24 @@ supabase functions deploy submit-application analyze-application send-email
 supabase functions deploy talent-upload talent-analyze
 ```
 
-**5. اضبط أسرار الدوال الجديدة:** `SITE_URL` · `THROTTLE_SALT` · و`TURNSTILE_SECRET_KEY` (**مطلوب فعلياً الآن** — منصة المواهب تفشل مغلقة بدونه).
+**5. اضبط أسرار الدوال — ومن أين تأتي كل واحدة:**
+
+| السرّ | من أين | ملاحظة |
+|---|---|---|
+| `SITE_URL` | **أنت تكتبه** — نطاق موقعك، مثل `https://hakeem.sa` | بلا `/` في آخره. تُبنى منه روابط التحقق في البريد؛ خطؤه يعني رابطاً معطّلاً في كل رسالة |
+| `THROTTLE_SALT` | **تولّده أنت**: `openssl rand -hex 32` | ملح تجزئة عناوين IP والبُرد. لا يُشتق من مكان — أي سلسلة عشوائية طويلة تكفي. **غيّره ⇒ تُصفَّر عدادات الحدّ** |
+| `TURNSTILE_SECRET_KEY` | **من Cloudflare** — لوحة التحكم ← Turnstile ← Add site. مجاني | تأخذ مفتاحين: **Site Key** (عام، يذهب لـVercel باسم `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) و**Secret Key** (سرّي، يذهب لـSupabase) |
+| `GEMINI_API_KEY` | Google AI Studio | موجود مسبقاً — تأكّد فقط أنه من **الطبقة المدفوعة** (البند 12) |
+| `RESEND_API_KEY` | لوحة Resend | موجود مسبقاً |
+
+```bash
+supabase secrets set SITE_URL="https://<نطاقك>"
+supabase secrets set THROTTLE_SALT="$(openssl rand -hex 32)"
+supabase secrets set TURNSTILE_SECRET_KEY="<من Cloudflare>"
+```
+و`NEXT_PUBLIC_TURNSTILE_SITE_KEY` يُضاف في **Vercel** لا في Supabase (فهو عام ويحتاجه المتصفح).
+
+> ⚠️ **Turnstile مطلوب فعلياً الآن:** منصة المواهب **تفشل مغلقة** بدونه — أي أن الرفع سيُرفض. (نموذج التقديم للوظائف يفشل مفتوحاً عمداً، حتى لا يُحرَم متقدّم حقيقي من فرصة بسبب عطل عندنا.)
 
 **6. أنشئ دلو `talent-cvs`** — تنشئه `0017`، تأكّد فقط أنه **خاص** (`public = false`).
 
