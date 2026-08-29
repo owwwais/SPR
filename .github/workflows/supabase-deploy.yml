@@ -3,13 +3,22 @@
 #
 # The split is deliberate:
 #
-#   Edge Functions  -> automatic on push to main.
-#                      Deploying is idempotent and a mistake is undone by
-#                      pushing the previous code again.
+#   Edge Functions        -> automatic on push to main.
+#                            Deploying is idempotent and a mistake is undone
+#                            by pushing the previous code again.
 #
-#   Migrations      -> manual button only (Actions -> Run workflow).
-#                      They alter data and several are not reversible, so a
-#                      merge should never run one on its own.
+#   Migrations            -> manual button only (Actions -> Run workflow).
+#                            They alter data and several are not reversible,
+#                            so a merge should never run one on its own.
+#
+#   Expose talent schema  -> manual button only. This edits a PROJECT-LEVEL
+#                            API gateway setting (which Postgres schemas
+#                            PostgREST routes to at all) via the Supabase
+#                            Management API, not a database migration — no
+#                            migration can touch it, and it affects what the
+#                            live project's REST API exposes immediately.
+#                            One-time: run it once after the talent schema
+#                            (0017) is deployed, not on every push.
 name: Deploy Supabase
 
 on:
@@ -28,6 +37,10 @@ on:
     inputs:
       migrations:
         description: "Also apply pending database migrations"
+        type: boolean
+        default: false
+      expose_talent_schema:
+        description: "One-time: add 'talent' to the project's exposed API schemas"
         type: boolean
         default: false
 
@@ -76,3 +89,57 @@ jobs:
         run: |
           supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
           supabase db push
+
+  expose-talent-schema:
+    name: Expose talent schema to the Data API
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.expose_talent_schema
+    steps:
+      # migration 0017 created the talent schema deliberately UNEXPOSED —
+      # public.talent_* wrapper functions were meant to be its only reachable
+      # surface for anon/authenticated callers. But talent-upload and
+      # talent-analyze call .schema("talent") directly via supabase-js, which
+      # always goes through PostgREST regardless of using the service-role
+      # key — PostgREST checks its own "exposed schemas" allowlist before a
+      # request ever reaches Postgres or RLS. Without talent on that list,
+      # every one of those calls fails with PGRST106 ("schema must be one of
+      # the pre-configured schemas"), which is exactly the failure this step
+      # exists to fix.
+      #
+      # This is safe to expose: every table in the schema has RLS enabled,
+      # and only talent.skills grants anon/authenticated anything (an
+      # intentional public read of the shared skill taxonomy) — the same
+      # deny-by-default posture every table in `public` already relies on,
+      # not schema-hiding. The service role the Edge Functions use bypasses
+      # RLS as intended and never reaches the browser.
+      #
+      # config.toml's [api].schemas governs the LOCAL dev stack only — the
+      # hosted project's exposed-schema list is project-level API gateway
+      # config with no migration equivalent, set here via the Management API.
+      - name: Add talent to exposed schemas
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          current=$(curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest")
+          echo "current postgrest config: $current"
+
+          db_schema=$(echo "$current" | jq -er '.db_schema')
+
+          if echo ",$db_schema," | grep -q ",talent,"; then
+            echo "talent is already exposed — nothing to do."
+            exit 0
+          fi
+
+          new_schema="$db_schema,talent"
+          echo "adding talent -> $new_schema"
+
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"db_schema\": \"$new_schema\"}" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest"
+          echo
+          echo "done — PostgREST reloads its schema cache within a few seconds."
