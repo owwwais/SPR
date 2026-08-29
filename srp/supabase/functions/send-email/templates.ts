@@ -6,7 +6,9 @@ export type EmailKind =
   | "interview_invited"
   | "accepted"
   | "rejected"
-  | "invitation";
+  | "invitation"
+  // Talent platform: proves the address before any analysis is paid for.
+  | "talent_verify";
 
 type TemplateInput = {
   fullName: string;
@@ -17,6 +19,8 @@ type TemplateInput = {
   /** invitation only: the one-time accept link and the offered role. */
   inviteUrl?: string | null;
   roleLabel?: string;
+  /** talent_verify only: the 24-hour verification link. */
+  verifyUrl?: string | null;
 };
 
 type Template = { subject: string; html: string };
@@ -124,4 +128,30 @@ export function buildEmail(
       };
     }
   }
+}
+
+// Talent verification. Short on purpose: the person uploaded a CV seconds
+// ago and is waiting to continue, not reading a newsletter.
+export function buildTalentVerifyEmail(verifyUrl: string): Template {
+  return {
+    subject: "أكّد بريدك لإنشاء صفحتك المهنية",
+    html: layout(
+      "خطوة واحدة وتصبح صفحتك جاهزة",
+      `<p style="font-size:15px;line-height:1.8;color:#374151">
+         استلمنا سيرتك الذاتية. أكّد بريدك عبر الزر أدناه لنبدأ قراءتها، ثم
+         تراجع ما استخرجناه قبل النشر.
+       </p>
+       <p style="margin:24px 0">
+         <a href="${verifyUrl}"
+            style="display:inline-block;background:#1c1c1c;color:#fafafa;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">
+           أكّد بريدي
+         </a>
+       </p>
+       <p style="font-size:13px;color:#6b7280;line-height:1.8">
+         الرابط صالح 24 ساعة. إن لم تكن أنت من رفع السيرة، تجاهل هذه الرسالة
+         ولن يُنشَر أي شيء.
+       </p>`,
+      ""
+    ),
+  };
 }

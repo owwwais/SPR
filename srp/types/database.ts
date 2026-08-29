@@ -524,6 +524,40 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
+      // 0017: the talent schema is not exposed through the API; these
+      // wrappers in public are its entire surface.
+      talent_publish_profile: {
+        Args: {
+          p_token: string;
+          p_full_name: string | null;
+          p_headline: string | null;
+          p_city: string | null;
+          p_years: number | null;
+          p_about: string | null;
+          p_hidden_skills: string[];
+          p_consent_public: boolean;
+          p_consent_offers: boolean;
+          p_noindex: boolean;
+        };
+        Returns: unknown;
+      };
+      talent_review_profile: {
+        Args: { p_token: string };
+        Returns: unknown;
+      };
+      talent_set_visibility: {
+        Args: { p_token: string; p_visible: boolean };
+        Returns: unknown;
+      };
+      talent_delete_profile: {
+        Args: { p_token: string };
+        Returns: unknown;
+      };
+      // 0017: the only API path into the talent schema.
+      talent_public_profile: {
+        Args: { p_token: string };
+        Returns: unknown;
+      };
       // 0016: Saudization panel, read-only for members.
       org_saudization: {
         Args: { p_org: string };
