@@ -28,6 +28,7 @@ export const ar = {
     comingSoonTitle: "قيد الإنشاء",
     comingSoonBody: "هذه الصفحة قيد الإنشاء وستتوفر قريباً.",
     advisory: "استشاري",
+    skipToContent: "تخطَّ إلى المحتوى",
   },
 
   nav: {
@@ -35,6 +36,7 @@ export const ar = {
     jobs: "الوظائف",
     track: "تتبّع طلبك",
     hrLogin: "دخول الموظفين",
+    menu: "القائمة",
   },
 
   footer: {
@@ -59,6 +61,17 @@ export const ar = {
     ctaSecondary: "تصفّح وظائف الشركات",
     browseJobs: "تصفّح الوظائف",
     trustLine: "مبني للسوق العربي — واجهة عربية بالكامل وقراءة سير ذاتية بالعربية والإنجليزية",
+
+    // The specimen evaluation card: a concrete example of "a score with its
+    // justification" rather than a claim that one exists.
+    specimen: {
+      score: 82,
+      strengths: [
+        "خبرة أربع سنوات في React و TypeScript موثّقة بثلاثة مشاريع إنتاجية مذكورة في السيرة.",
+        "قاد فريقاً من ثلاثة مطوّرين، وهو ما تطلبه الوظيفة صراحةً.",
+      ],
+      gap: "لا تذكر السيرة خبرة في Next.js، وهي من المهارات المفضَّلة في الوصف الوظيفي.",
+    },
 
     problemTitle: "لماذا يتعثّر التوظيف اليوم",
     problems: [

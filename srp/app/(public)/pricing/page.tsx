@@ -33,7 +33,7 @@ export default function PricingPage() {
               key={plan.code}
               className={`flex flex-col gap-5 rounded-xl border p-6 ${
                 highlighted
-                  ? "border-primary bg-card shadow-sm"
+                  ? "border-primary bg-card ring-1 ring-primary"
                   : "bg-card"
               }`}
             >

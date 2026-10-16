@@ -90,7 +90,7 @@ export function StatusChanger({
           {pending ? t.updating : t.submit}
         </Button>
         {state.changed && !pending && (
-          <span className="flex items-center gap-1 text-sm text-emerald-600">
+          <span className="flex items-center gap-1 text-sm text-success">
             <Check className="size-4" aria-hidden />
             {t.updated}
           </span>

@@ -27,7 +27,7 @@ function Feedback({ state, pending }: { state: SettingsState; pending: boolean }
   if (pending) return null;
   if (state.saved)
     return (
-      <span className="flex items-center gap-1 text-sm text-emerald-600">
+      <span className="flex items-center gap-1 text-sm text-success">
         <Check className="size-4" aria-hidden />
         {ar.settingsPage.saved}
       </span>
@@ -156,7 +156,7 @@ export function ComplianceForm({
             <Label htmlFor="blind_screening">{b.enable}</Label>
             <p className="text-xs text-muted-foreground">{b.body}</p>
             {/* Stated plainly: it is the reason this is off by default. */}
-            <p className="text-xs font-medium text-amber-700">{b.cost}</p>
+            <p className="text-xs font-medium text-warning">{b.cost}</p>
           </div>
         </div>
       </div>
@@ -253,7 +253,7 @@ export function MemberRoleForm({
         {pending ? ar.settingsPage.saving : ar.settingsPage.save}
       </Button>
       {state.saved && !pending && (
-        <Check className="size-4 text-emerald-600" aria-hidden />
+        <Check className="size-4 text-success" aria-hidden />
       )}
       {state.error && !pending && (
         <span className="text-xs text-destructive">{state.error}</span>
@@ -333,7 +333,7 @@ export function AddMemberForm() {
           {pending ? t.creating : t.submit}
         </Button>
         {state.saved && !pending && (
-          <span className="flex items-center gap-1 text-sm text-emerald-600">
+          <span className="flex items-center gap-1 text-sm text-success">
             <Check className="size-4" aria-hidden />
             {t.created}
           </span>
@@ -401,7 +401,7 @@ export function InviteMemberForm({
         </Button>
       </div>
       {!pending && state.saved && (
-        <span className="flex items-center gap-1 text-sm text-emerald-600">
+        <span className="flex items-center gap-1 text-sm text-success">
           <Check className="size-4" aria-hidden />
           {t.sent}
         </span>

@@ -30,7 +30,7 @@ export default function LandingPage() {
           <Sparkles className="size-3.5 text-primary" aria-hidden />
           {t.trustLine}
         </span>
-        <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+        <h1 className="font-display text-4xl leading-tight font-bold text-balance sm:text-5xl">
           {t.heroTitle}
         </h1>
         <p className="max-w-2xl text-lg text-muted-foreground">
@@ -72,7 +72,7 @@ export default function LandingPage() {
       {/* Problem */}
       <section className="border-t bg-muted/30">
         <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-16">
-          <h2 className="text-center text-2xl font-bold">{t.problemTitle}</h2>
+          <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.problemTitle}</h2>
           <div className="grid gap-5 sm:grid-cols-3">
             {t.problems.map((problem) => (
               <div
@@ -89,7 +89,7 @@ export default function LandingPage() {
 
       {/* How it works — a real sequence, so the numbering carries meaning */}
       <section className="mx-auto flex max-w-5xl flex-col gap-10 px-4 py-16">
-        <h2 className="text-center text-2xl font-bold">{t.howTitle}</h2>
+        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.howTitle}</h2>
         <ol className="grid gap-8 sm:grid-cols-3">
           {t.how.map((step, index) => (
             <li key={step.title} className="flex flex-col gap-3">
@@ -111,7 +111,7 @@ export default function LandingPage() {
               <Scale className="size-3.5" aria-hidden />
               {ar.common.advisory}
             </span>
-            <h2 className="text-2xl font-bold text-balance">
+            <h2 className="font-display text-2xl font-semibold text-balance sm:text-3xl">
               {t.fairnessTitle}
             </h2>
             <p className="text-muted-foreground">{t.fairnessBody}</p>
@@ -143,8 +143,8 @@ export default function LandingPage() {
                 {ar.evaluation.fitScore}
               </span>
               <span className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold tabular-nums text-emerald-600">
-                  82
+                <span className="text-3xl font-bold tabular-nums text-success">
+                  {t.specimen.score}
                 </span>
                 <span className="text-sm text-muted-foreground">/ 100</span>
               </span>
@@ -153,30 +153,21 @@ export default function LandingPage() {
               <p className="text-xs font-medium text-muted-foreground">
                 {ar.evaluation.strengths}
               </p>
-              <p className="flex gap-2 text-sm">
-                <CheckCircle2
-                  className="mt-0.5 size-4 shrink-0 text-emerald-600"
-                  aria-hidden
-                />
-                خبرة أربع سنوات في React و TypeScript موثّقة بثلاثة مشاريع
-                إنتاجية مذكورة في السيرة.
-              </p>
-              <p className="flex gap-2 text-sm">
-                <CheckCircle2
-                  className="mt-0.5 size-4 shrink-0 text-emerald-600"
-                  aria-hidden
-                />
-                قاد فريقاً من ثلاثة مطوّرين، وهو ما تطلبه الوظيفة صراحةً.
-              </p>
+              {t.specimen.strengths.map((strength) => (
+                <p key={strength} className="flex gap-2 text-sm">
+                  <CheckCircle2
+                    className="mt-0.5 size-4 shrink-0 text-success"
+                    aria-hidden
+                  />
+                  {strength}
+                </p>
+              ))}
             </div>
             <div className="flex flex-col gap-2 border-t pt-4">
               <p className="text-xs font-medium text-muted-foreground">
                 {ar.evaluation.gaps}
               </p>
-              <p className="text-sm text-muted-foreground">
-                لا تذكر السيرة خبرة في Next.js، وهي من المهارات المفضَّلة في
-                الوصف الوظيفي.
-              </p>
+              <p className="text-sm text-muted-foreground">{t.specimen.gap}</p>
             </div>
           </div>
         </div>
@@ -184,7 +175,7 @@ export default function LandingPage() {
 
       {/* Features */}
       <section className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-16">
-        <h2 className="text-center text-2xl font-bold">{t.featuresTitle}</h2>
+        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.featuresTitle}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {t.features.map((feature) => (
             <div
@@ -216,7 +207,7 @@ export default function LandingPage() {
 
       {/* FAQ */}
       <section className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
-        <h2 className="text-center text-2xl font-bold">{t.faqTitle}</h2>
+        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.faqTitle}</h2>
         <div className="flex flex-col gap-3">
           {t.faq.map((item) => (
             <details
@@ -236,7 +227,7 @@ export default function LandingPage() {
       <section className="border-t">
         <div className="mx-auto flex max-w-3xl flex-col items-center gap-5 px-4 py-20 text-center">
           <ShieldCheck className="size-8 text-primary" aria-hidden />
-          <h2 className="text-2xl font-bold text-balance">{t.finalCtaTitle}</h2>
+          <h2 className="font-display text-2xl font-semibold text-balance sm:text-3xl">{t.finalCtaTitle}</h2>
           <p className="text-muted-foreground">{t.finalCtaBody}</p>
           <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
             {t.ctaPrimary}

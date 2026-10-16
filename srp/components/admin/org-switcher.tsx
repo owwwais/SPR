@@ -53,7 +53,7 @@ export function OrgSwitcher({
       {open && (
         <div
           role="menu"
-          className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-popover shadow-md"
+          className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border bg-popover shadow-raised"
         >
           <p className="px-3 pt-2 pb-1 text-xs text-muted-foreground">
             {ar.admin.switcher.label}

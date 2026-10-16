@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Briefcase } from "lucide-react";
 import { getSession, requireUser } from "@/lib/auth";
 import { OnboardingForm } from "./onboarding-form";
 import {
@@ -10,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandMark } from "@/components/brand-mark";
 import { ar } from "@/lib/i18n/ar";
 
 export const metadata: Metadata = {
@@ -24,9 +24,8 @@ export default async function OnboardingPage() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
-      <div className="flex items-center gap-2 font-semibold">
-        <Briefcase className="size-5 text-primary" aria-hidden />
-        <span>{ar.common.appName}</span>
+      <div>
+        <BrandMark />
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>

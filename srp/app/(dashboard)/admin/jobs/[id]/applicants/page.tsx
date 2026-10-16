@@ -308,7 +308,7 @@ function AnalysisIndicator({
   }
   return (
     <span className="flex items-center gap-1 text-sm text-muted-foreground">
-      <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
+      <CheckCircle2 className="size-4 text-success" aria-hidden />
     </span>
   );
 }
