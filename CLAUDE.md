@@ -601,7 +601,7 @@ with I0 and I1 running alongside P1.
 - **I0 – Contract & skeleton · I1 – Question bank · I2 – Text interview ·
   I3 – Evaluation & report · I4 – Code sandbox · I5 – Voice · I6 – Hardening.**
 
-**Status (2026-10-16): P0 and I0 complete** — see `docs/V3-PROGRESS.md`.
+**Status (2026-10-16): P0, I0 and P3 complete** (P3 pulled forward at the owner's request, with a larger root type size site-wide and Google sign-in) — see `docs/V3-PROGRESS.md`.
 Test suites: `tenant_isolation.sql` (53), `onboarding.sql` (23),
 `interview_isolation.sql` (31), `rls_check.sql`, and the agent's own
 `npm test` (34, including a byte-parity check of the shared contract).

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import {
@@ -11,6 +12,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
+import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { safeNext } from "@/lib/redirects";
 import { ar } from "@/lib/i18n/ar";
 
 export const metadata: Metadata = {
@@ -20,12 +24,12 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
   const session = await getSession();
-  // Same-site paths only — see safeNext() in actions.ts.
-  const target = next?.startsWith("/") && !next.startsWith("//") ? next : null;
+  // Same-site paths only (lib/redirects.ts).
+  const target = next ? safeNext(next, "") || null : null;
   if (session) redirect(target ?? "/admin");
 
   return (
@@ -33,12 +37,20 @@ export default async function LoginPage({
       <Link href="/">
         <BrandMark />
       </Link>
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle>{ar.auth.loginTitle}</CardTitle>
+          <CardTitle className="text-xl">{ar.auth.loginTitle}</CardTitle>
           <CardDescription>{ar.auth.loginSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-5">
+          {error === "oauth" && (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" aria-hidden />
+              <AlertDescription>{ar.auth.errors.oauth}</AlertDescription>
+            </Alert>
+          )}
+          <GoogleButton next={target ?? undefined} />
+          <AuthDivider />
           <LoginForm next={target ?? undefined} />
         </CardContent>
       </Card>

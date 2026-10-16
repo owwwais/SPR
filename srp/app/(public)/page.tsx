@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Building2,
-  CheckCircle2,
-  Scale,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { DecisionStory } from "@/components/marketing/decision-story";
+import { FeaturesBento } from "@/components/marketing/features-bento";
+import { FinalCta } from "@/components/marketing/final-cta";
+import { Hero } from "@/components/marketing/hero";
+import { InterviewShowcase } from "@/components/marketing/interview-showcase";
+import { SmoothScroll } from "@/components/marketing/smooth-scroll";
+import { Statement } from "@/components/marketing/statement";
+import { StrikeList } from "@/components/marketing/strike-list";
 import { Button } from "@/components/ui/button";
 import { ar } from "@/lib/i18n/ar";
 
@@ -16,187 +17,142 @@ export const metadata: Metadata = {
   description: ar.meta.description,
 };
 
-// The root is the product's marketing page (S6). Applicant-facing browsing
-// moved to /jobs, and a single company's careers page to /c/{slug}. Nothing
-// here reads the database, so it prerenders as static.
+// The marketing page (P3, docs/PLATFORM-V3-PLAN.md §4.3). Static: nothing
+// here reads the database. Motion lives in small client islands — GSAP
+// ScrollTrigger and React Bits components — and Lenis smooths the scroll
+// on this page only (D29). Every island renders its content without
+// JavaScript and honours prefers-reduced-motion (DESIGN.md A10).
 export default function LandingPage() {
   const t = ar.landing;
 
   return (
     <>
-      {/* Hero */}
-      <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 pt-20 pb-14 text-center sm:pt-28">
-        <span className="inline-flex items-center gap-2 rounded-full border bg-muted/60 px-3 py-1 text-xs text-muted-foreground">
-          <Sparkles className="size-3.5 text-primary" aria-hidden />
-          {t.trustLine}
-        </span>
-        <h1 className="font-display text-4xl leading-tight font-bold text-balance sm:text-5xl">
-          {t.heroTitle}
-        </h1>
-        <p className="max-w-2xl text-lg text-muted-foreground">
-          {t.heroSubtitle}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
-            {t.ctaPrimary}
-          </Button>
+      <SmoothScroll />
+
+      <Hero />
+
+      {/* Statement + the three problems, editorial rather than three cards */}
+      <section className="mx-auto flex max-w-6xl flex-col gap-20 px-4 py-28 sm:px-6 sm:py-36">
+        <Statement />
+        <div className="flex flex-col gap-10">
+          <h2 className="text-base font-medium text-primary">{t.problemTitle}</h2>
+          <ol className="grid gap-10 border-t pt-10 md:grid-cols-3 md:gap-12">
+            {t.problems.map((problem, index) => (
+              <li key={problem.title} className="flex flex-col gap-3">
+                <span className="font-display text-sm font-semibold text-muted-foreground tabular-nums">
+                  0{index + 1}
+                </span>
+                <h3 className="text-xl font-semibold sm:text-2xl">{problem.title}</h3>
+                <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  {problem.body}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <DecisionStory />
+
+      {/* Product */}
+      <section className="mx-auto flex max-w-7xl flex-col gap-14 px-4 py-28 sm:px-6 xl:px-10 sm:py-36">
+        <div className="flex max-w-3xl flex-col gap-5">
+          <p className="text-base font-medium text-primary">{t.featuresEyebrow}</p>
+          <h2 className="font-display text-4xl leading-[1.2] font-bold text-balance sm:text-5xl lg:text-6xl">
+            {t.featuresTitle}
+          </h2>
+          <p className="text-lg leading-relaxed text-muted-foreground sm:text-xl">
+            {t.featuresSubtitle}
+          </p>
+        </div>
+        <FeaturesBento />
+      </section>
+
+      {/* Virtual interview — coming */}
+      <section className="border-y bg-surface-soft/40">
+        <div className="mx-auto max-w-7xl px-4 py-28 sm:px-6 xl:px-10 sm:py-36">
+          <InterviewShowcase />
+        </div>
+      </section>
+
+      {/* Fairness — what actually differentiates the product */}
+      <section className="mx-auto grid max-w-7xl gap-12 px-4 py-28 sm:px-6 xl:px-10 sm:py-36 lg:grid-cols-[1fr_1fr] lg:gap-20">
+        <div className="flex flex-col gap-6">
+          <p className="text-base font-medium text-primary">{t.fairnessEyebrow}</p>
+          <h2 className="font-display text-5xl leading-[1.15] font-bold sm:text-6xl lg:text-7xl">
+            {t.fairnessTitle}
+          </h2>
+        </div>
+        <div className="flex flex-col gap-7">
+          <p className="text-lg leading-relaxed text-muted-foreground sm:text-xl">{t.fairnessBody}</p>
+          <StrikeList />
+          <p className="text-base text-muted-foreground">{t.fairnessNote}</p>
+          <Link
+            href="/fairness"
+            className="inline-flex w-fit items-center gap-1.5 text-base font-medium text-primary hover:underline"
+          >
+            {t.fairnessLink}
+            <ArrowLeft className="size-4" aria-hidden />
+          </Link>
+        </div>
+      </section>
+
+      {/* Job seekers — cards stack with CSS sticky, which Lenis leaves native */}
+      <section className="border-t bg-surface-soft/40">
+        <div className="mx-auto grid max-w-7xl gap-12 px-4 py-28 sm:px-6 xl:px-10 sm:py-36 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
+          <div className="flex flex-col gap-6 lg:sticky lg:top-32 lg:self-start">
+            <p className="text-base font-medium text-primary">{t.seekers.eyebrow}</p>
+            <h2 className="font-display text-4xl leading-[1.2] font-bold text-balance sm:text-5xl">
+              {t.seekers.title}
+            </h2>
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-12 w-fit px-6 text-base"
+              nativeButton={false}
+              render={<Link href="/talent" />}
+            >
+              {t.seekers.cta}
+            </Button>
+          </div>
+          <ol className="flex flex-col gap-6 lg:pb-[30vh]">
+            {t.seekers.steps.map((step, index) => (
+              <li
+                key={step.title}
+                className="flex flex-col gap-4 rounded-2xl border bg-card p-8 shadow-raised lg:sticky"
+                style={{ top: `${7 + index * 1.75}rem` }}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-display text-sm font-semibold text-primary tabular-nums">
+                    0{index + 1}
+                  </span>
+                  {step.soon && (
+                    <span className="rounded-sm bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
+                      {t.soon}
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-display text-2xl font-semibold sm:text-3xl">{step.title}</h3>
+                <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">{step.body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* Marketplace */}
+      <section className="border-t">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 py-16 sm:px-6 xl:px-10 md:flex-row md:items-center">
+          <div className="flex max-w-2xl flex-col gap-2">
+            <h2 className="text-2xl font-semibold sm:text-3xl">{t.marketplaceTitle}</h2>
+            <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
+              {t.marketplaceBody}
+            </p>
+          </div>
           <Button
             size="lg"
             variant="outline"
-            nativeButton={false}
-            render={<Link href="/jobs" />}
-          >
-            {t.ctaSecondary}
-          </Button>
-        </div>
-      </section>
-
-      {/* A slim band for the other audience. This page sells to employers,
-          but a job seeker landing here should find their door rather than
-          bounce — and the companion product had no entry point at all. Kept
-          deliberately light so it does not compete with the hero. */}
-      <section className="border-y bg-primary/5">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 px-4 py-4 text-center">
-          <span className="text-sm">{ar.talent.seekerBanner}</span>
-          <Button
-            size="sm"
-            variant="outline"
-            nativeButton={false}
-            render={<Link href="/talent" />}
-          >
-            {ar.talent.seekerBannerCta}
-          </Button>
-        </div>
-      </section>
-
-      {/* Problem */}
-      <section className="border-t bg-muted/30">
-        <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-16">
-          <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.problemTitle}</h2>
-          <div className="grid gap-5 sm:grid-cols-3">
-            {t.problems.map((problem) => (
-              <div
-                key={problem.title}
-                className="flex flex-col gap-2 rounded-lg border bg-card p-6"
-              >
-                <h3 className="font-semibold">{problem.title}</h3>
-                <p className="text-sm text-muted-foreground">{problem.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works — a real sequence, so the numbering carries meaning */}
-      <section className="mx-auto flex max-w-5xl flex-col gap-10 px-4 py-16">
-        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.howTitle}</h2>
-        <ol className="grid gap-8 sm:grid-cols-3">
-          {t.how.map((step, index) => (
-            <li key={step.title} className="flex flex-col gap-3">
-              <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground tabular-nums">
-                {index + 1}
-              </span>
-              <h3 className="font-semibold">{step.title}</h3>
-              <p className="text-sm text-muted-foreground">{step.body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* Fairness — the section that actually differentiates the product */}
-      <section className="border-y bg-muted/30">
-        <div className="mx-auto grid max-w-5xl gap-10 px-4 py-16 lg:grid-cols-2">
-          <div className="flex flex-col gap-5">
-            <span className="inline-flex w-fit items-center gap-2 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-              <Scale className="size-3.5" aria-hidden />
-              {ar.common.advisory}
-            </span>
-            <h2 className="font-display text-2xl font-semibold text-balance sm:text-3xl">
-              {t.fairnessTitle}
-            </h2>
-            <p className="text-muted-foreground">{t.fairnessBody}</p>
-            <ul className="flex flex-wrap gap-2">
-              {t.fairnessIgnored.map((item) => (
-                <li
-                  key={item}
-                  className="rounded-md border bg-background px-2.5 py-1 text-sm text-muted-foreground line-through decoration-destructive/60"
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <p className="text-sm text-muted-foreground">{t.fairnessNote}</p>
-            <Link
-              href="/fairness"
-              className="inline-flex w-fit items-center gap-1 text-sm font-medium text-primary hover:underline"
-            >
-              {t.fairnessLink}
-              <ArrowLeft className="size-4" aria-hidden />
-            </Link>
-          </div>
-
-          {/* A concrete specimen of what "a score with its justification"
-              looks like, rather than a claim that one exists. */}
-          <div className="flex flex-col gap-4 rounded-xl border bg-card p-6">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-muted-foreground">
-                {ar.evaluation.fitScore}
-              </span>
-              <span className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold tabular-nums text-success">
-                  {t.specimen.score}
-                </span>
-                <span className="text-sm text-muted-foreground">/ 100</span>
-              </span>
-            </div>
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                {ar.evaluation.strengths}
-              </p>
-              {t.specimen.strengths.map((strength) => (
-                <p key={strength} className="flex gap-2 text-sm">
-                  <CheckCircle2
-                    className="mt-0.5 size-4 shrink-0 text-success"
-                    aria-hidden
-                  />
-                  {strength}
-                </p>
-              ))}
-            </div>
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <p className="text-xs font-medium text-muted-foreground">
-                {ar.evaluation.gaps}
-              </p>
-              <p className="text-sm text-muted-foreground">{t.specimen.gap}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-16">
-        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.featuresTitle}</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {t.features.map((feature) => (
-            <div
-              key={feature.title}
-              className="flex flex-col gap-2 rounded-lg border p-5"
-            >
-              <h3 className="text-sm font-semibold">{feature.title}</h3>
-              <p className="text-sm text-muted-foreground">{feature.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Marketplace — the two-sided loop a global competitor cannot offer */}
-      <section className="border-y bg-muted/30">
-        <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 px-4 py-16 text-center">
-          <Building2 className="size-8 text-primary" aria-hidden />
-          <h2 className="text-2xl font-bold">{t.marketplaceTitle}</h2>
-          <p className="text-muted-foreground">{t.marketplaceBody}</p>
-          <Button
-            variant="outline"
+            className="h-12 px-6 text-base"
             nativeButton={false}
             render={<Link href="/companies" />}
           >
@@ -205,33 +161,24 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
-        <h2 className="font-display text-center text-2xl font-semibold sm:text-3xl">{t.faqTitle}</h2>
-        <div className="flex flex-col gap-3">
-          {t.faq.map((item) => (
-            <details
-              key={item.q}
-              className="rounded-lg border bg-card px-5 py-4"
-            >
-              <summary className="cursor-pointer list-none font-medium marker:content-none">
-                {item.q}
-              </summary>
-              <p className="mt-3 text-sm text-muted-foreground">{item.a}</p>
-            </details>
-          ))}
+      {/* FAQ — a readable two-column list instead of an accordion */}
+      <section className="border-t">
+        <div className="mx-auto flex max-w-6xl flex-col gap-14 px-4 py-28 sm:px-6">
+          <h2 className="font-display text-4xl font-bold sm:text-5xl">{t.faqTitle}</h2>
+          <dl className="grid gap-x-16 gap-y-12 md:grid-cols-2">
+            {t.faq.map((item) => (
+              <div key={item.q} className="flex flex-col gap-3">
+                <dt className="text-lg font-semibold sm:text-xl">{item.q}</dt>
+                <dd className="text-base leading-relaxed text-muted-foreground sm:text-lg">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
-      {/* Close */}
-      <section className="border-t">
-        <div className="mx-auto flex max-w-3xl flex-col items-center gap-5 px-4 py-20 text-center">
-          <ShieldCheck className="size-8 text-primary" aria-hidden />
-          <h2 className="font-display text-2xl font-semibold text-balance sm:text-3xl">{t.finalCtaTitle}</h2>
-          <p className="text-muted-foreground">{t.finalCtaBody}</p>
-          <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
-            {t.ctaPrimary}
-          </Button>
+      <section className="border-t bg-surface-soft/40">
+        <div className="mx-auto max-w-5xl px-4 py-28 sm:px-6 sm:py-40">
+          <FinalCta />
         </div>
       </section>
     </>

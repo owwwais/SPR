@@ -5,18 +5,13 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validations/auth";
 import { ACTIVE_ORG_COOKIE } from "@/lib/org-cookie";
+import { safeNext } from "@/lib/redirects";
 import { ar } from "@/lib/i18n/ar";
 
 export type LoginState = {
   error: string | null;
 };
 
-// Only same-site paths. An open redirect here would let an invitation link be
-// rewritten to bounce a freshly authenticated user somewhere hostile.
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = String(value ?? "");
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/admin";
-}
 
 export async function signIn(
   _prevState: LoginState,
@@ -43,7 +38,7 @@ export async function signIn(
   }
 
   // Outside try/catch: redirect() works by throwing.
-  redirect(safeNext(formData.get("next")));
+  redirect(safeNext(formData.get("next"), "/admin"));
 }
 
 export async function signOut(): Promise<void> {

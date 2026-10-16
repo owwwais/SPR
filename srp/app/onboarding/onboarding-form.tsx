@@ -23,7 +23,13 @@ function slugify(value: string) {
     .slice(0, 40);
 }
 
-export function OnboardingForm({ rootDomain }: { rootDomain: string | null }) {
+export function OnboardingForm({
+  rootDomain,
+  defaultFullName = "",
+}: {
+  rootDomain: string | null;
+  defaultFullName?: string;
+}) {
   const [state, formAction, pending] = useActionState(
     createOrganization,
     initialState
@@ -42,7 +48,13 @@ export function OnboardingForm({ rootDomain }: { rootDomain: string | null }) {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="full_name">{t.fullName}</Label>
-        <Input id="full_name" name="full_name" required maxLength={120} />
+        <Input
+          id="full_name"
+          name="full_name"
+          required
+          maxLength={120}
+          defaultValue={defaultFullName}
+        />
         {state.fieldErrors.full_name && (
           <p className="text-xs text-destructive">
             {state.fieldErrors.full_name}

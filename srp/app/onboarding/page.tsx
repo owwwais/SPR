@@ -16,9 +16,17 @@ export const metadata: Metadata = {
   title: ar.onboarding.title,
 };
 
+// A Google sign-in arrives with the person's name; offering it saves typing.
+// Display only — the name is submitted and validated like any other input,
+// and nothing about tenancy is ever read from user_metadata (D12).
+function googleName(metadata: Record<string, unknown> | undefined): string {
+  const value = metadata?.full_name ?? metadata?.name;
+  return typeof value === "string" ? value.slice(0, 120) : "";
+}
+
 // The one page that renders for a signed-in user with no membership yet.
 export default async function OnboardingPage() {
-  await requireUser();
+  const user = await requireUser();
   // Already has a workspace: nothing to set up.
   if (await getSession()) redirect("/admin");
 
@@ -35,6 +43,7 @@ export default async function OnboardingPage() {
         <CardContent>
           <OnboardingForm
             rootDomain={process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? null}
+            defaultFullName={googleName(user.user_metadata)}
           />
         </CardContent>
       </Card>

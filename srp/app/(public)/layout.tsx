@@ -24,7 +24,7 @@ export default function PublicLayout({
   return (
     <>
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-4 sm:px-6 xl:px-10">
           <Link href="/">
             <BrandMark />
           </Link>
@@ -91,7 +91,7 @@ export default function PublicLayout({
       </main>
 
       <footer className="border-t bg-surface-soft/50">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:grid-cols-2 sm:px-6 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 sm:px-6 xl:px-10 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div className="flex flex-col gap-3">
             <BrandMark size="sm" />
             <p className="max-w-xs text-sm text-muted-foreground">
@@ -140,7 +140,7 @@ export default function PublicLayout({
         </div>
 
         <div className="border-t">
-          <div className="mx-auto flex h-14 max-w-6xl items-center px-4 text-xs text-muted-foreground sm:px-6">
+          <div className="mx-auto flex h-14 max-w-7xl items-center px-4 text-xs text-muted-foreground sm:px-6 xl:px-10">
             <span>
               {ar.common.appName} — {f.rights}
             </span>

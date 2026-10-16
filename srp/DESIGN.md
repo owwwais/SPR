@@ -47,9 +47,11 @@ typography:
   # Arabic is the primary script. Line heights are deliberately taller than
   # Latin systems: Arabic carries ascenders, descenders and diacritics.
   # letterSpacing is 0 for every Arabic style — see Rule A2.
-  display-xl: { fontFamily: "Readex Pro", fontSize: 56px, fontWeight: 700, lineHeight: 1.25 }   # mobile 36px
-  display-lg: { fontFamily: "Readex Pro", fontSize: 44px, fontWeight: 700, lineHeight: 1.3 }    # mobile 32px
-  display-md: { fontFamily: "Readex Pro", fontSize: 34px, fontWeight: 600, lineHeight: 1.3 }    # mobile 28px
+  # Root font size is 17px, 18px from 1280px wide (2026-10-16: "make the
+  # content bigger"); sizes below are at a 16px rem and scale with the root.
+  display-xl: { fontFamily: "Readex Pro", fontSize: clamp(48px, 7.4vw, 100px), fontWeight: 700, lineHeight: 1.12 }  # hero
+  display-lg: { fontFamily: "Readex Pro", fontSize: 60px, fontWeight: 700, lineHeight: 1.15 }    # mobile 40px
+  display-md: { fontFamily: "Readex Pro", fontSize: 48px, fontWeight: 700, lineHeight: 1.2 }     # mobile 36px
   headline:   { fontFamily: "IBM Plex Sans Arabic", fontSize: 24px, fontWeight: 700, lineHeight: 1.4 }
   title:      { fontFamily: "IBM Plex Sans Arabic", fontSize: 18px, fontWeight: 600, lineHeight: 1.5 }
   body-lg:    { fontFamily: "IBM Plex Sans Arabic", fontSize: 18px, fontWeight: 400, lineHeight: 1.8 }
@@ -135,6 +137,11 @@ Three surfaces share these tokens:
 - Tabular figures (`tabular-nums`) for every number that can be compared:
   scores, counts, dates in tables, timers.
 - Long-form text: `body` at 1.75 line height, `max-w-[68ch]`.
+- **Root size is 17px, and 18px from 1280px** (`html { font-size }` in
+  `globals.css`). Everything rem-based scales with it; do not compensate by
+  shrinking components back.
+- Marketing body copy is `text-lg`–`text-xl`; section titles `text-4xl`–
+  `text-6xl`; the hero headline `clamp(3rem, 7.4vw, 6.25rem)`.
 - Hierarchy comes from size and weight, not from color. Headings are `ink`;
   secondary text is `muted`.
 
@@ -153,7 +160,7 @@ These outrank any generic design guidance, including the taste-skill skills in
 | **A6** | **Latin islands are explicit.** Emails, URLs, code, phone numbers: `dir="ltr"` with `text-start` inside the RTL flow. | Prevents punctuation jumping to the wrong end. |
 | **A7** | **No italics on Arabic.** Emphasise with weight or color. | Arabic has no true italic; synthetic slant looks broken. |
 | **A8** | **No uppercase / small-caps eyebrows.** Eyebrow labels use `caption` weight 500 in `muted` or `primary`. | Case does not exist in Arabic. |
-| **A9** | **Line height floors:** body ≥ 1.6, display ≥ 1.25. | Diacritics clip under tighter Latin defaults. |
+| **A9** | **Line height floors:** body ≥ 1.6, display ≥ 1.25. The hero headline alone runs at 1.12, and any reveal mask on Arabic must be open above and reach ≥ 0.4em below the baseline (`.word-mask` in `globals.css`). | Diacritics sit above the letters and descenders (ح ع م) run deep; a Latin-sized box clips both. |
 | **A10** | **`prefers-reduced-motion` is honoured everywhere.** GSAP via `gsap.matchMedia()`, Lenis disabled entirely, CSS reveals gated. | Accessibility. |
 | **A11** | **Lenis and GSAP live on marketing routes only.** The dashboard and seeker portal scroll natively. | Nested scroll containers and tables need native scroll (D29). |
 

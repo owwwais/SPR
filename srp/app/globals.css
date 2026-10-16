@@ -192,11 +192,64 @@
   }
   html {
     @apply font-sans;
+    /* Larger everywhere (owner request, 2026-10-16): Tailwind sizes and
+       spacing are rem-based, so raising the root scales text, controls and
+       gaps together instead of fixing pages one by one. 17px, then 18px on
+       wide screens (DESIGN.md §3). */
+    font-size: 106.25%;
+  }
+  @media (min-width: 80rem) {
+    html {
+      font-size: 112.5%;
+    }
   }
   ::selection {
     background: var(--primary-soft);
     color: var(--primary-soft-foreground);
   }
+}
+
+/* First-screen entrances that must not wait for JavaScript: a CSS animation
+   starts at first paint, so the hero copy counts toward LCP on time instead
+   of after hydration (PLATFORM-V3-PLAN §4.5). Delay via --enter-delay. */
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.enter {
+  animation: enter-rise 0.9s var(--motion-ease) both;
+  animation-delay: var(--enter-delay, 0s);
+}
+
+/* Word-by-word rise for the hero headline (components/marketing/
+   hero-headline.tsx). The mask is open above, so marks over the letters
+   (shadda, hamza) are never cut, and its box reaches 0.4em below the
+   baseline — Arabic descenders (ح ع م) run deep, and a tighter box clipped
+   their tails. The negative margin keeps the line box where it was. */
+@keyframes word-rise {
+  from {
+    transform: translateY(140%);
+  }
+  to {
+    transform: none;
+  }
+}
+.word-mask {
+  display: inline-block;
+  padding-bottom: 0.4em;
+  margin-bottom: -0.4em;
+  clip-path: inset(-1em -1em 0 -1em);
+}
+.word-rise {
+  display: inline-block;
+  animation: word-rise 1s var(--motion-ease) both;
+  animation-delay: var(--enter-delay, 0s);
 }
 
 /* DESIGN.md A10: motion is opt-out for anyone who asked the OS for less. */
