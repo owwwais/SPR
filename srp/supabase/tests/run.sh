@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run.sh — build a throwaway database, apply every migration and seed, then
-# run both SQL suites. Exits non-zero if any check fails, so CI can gate on it.
+# run every SQL suite. Exits non-zero if any check fails, so CI can gate on it.
 #
 #   supabase/tests/run.sh                     # spins up a local Postgres
 #   DATABASE_URL=postgres://…  supabase/tests/run.sh   # uses an existing one
@@ -34,7 +34,9 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   "${RUN[@]}" "$PGBIN/initdb -D $PGDATA -A trust -U postgres" >/dev/null
   "${RUN[@]}" "$PGBIN/pg_ctl -D $PGDATA -l $PGDATA/../pg.log -o '-k /tmp -p $PORT -c listen_addresses=' start" >/dev/null
   CLEANUP="$PGDATA"
-  trap '[[ -n "$CLEANUP" ]] && "${RUN[@]}" "'"$PGBIN"'/pg_ctl -D '"$PGDATA"' stop -m immediate" >/dev/null 2>&1 || true' EXIT
+  # Stop the instance and remove its directory: each run otherwise leaves
+  # ~40 MB behind in /tmp.
+  trap '[[ -n "$CLEANUP" ]] && "${RUN[@]}" "'"$PGBIN"'/pg_ctl -D '"$PGDATA"' stop -m immediate" >/dev/null 2>&1; rm -rf "'"$(dirname "$PGDATA")"'"' EXIT
 
   psql -h /tmp -p "$PORT" -U postgres -q -c "create database srp;" >/dev/null
   DATABASE_URL="postgres://postgres@/srp?host=/tmp&port=$PORT"
@@ -63,6 +65,10 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
 echo
 echo "══ onboarding ══"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/onboarding.sql
+
+echo
+echo "══ interview isolation ══"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/interview_isolation.sql
 
 echo
 echo "══ role capabilities ══"

@@ -432,6 +432,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# The interview agent authenticates its webhooks with an HMAC signature
+# (D30), not a Supabase JWT — it holds no Supabase credential at all. The
+# function verifies the signature itself before reading anything. Read by
+# `supabase functions deploy`, so it applies to the hosted project too.
+[functions.interview-webhook]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

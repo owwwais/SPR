@@ -293,8 +293,11 @@ application to another org's job. Triggers enforce that
 | `can_manage_application(app) → bool` | Used by Edge Functions to authorize a re-run against the application's own org. |
 
 In policies, always call these wrapped in a subquery —
-`org_id = any ((select public.current_org_ids()))` — so Postgres evaluates
-them once per statement instead of once per row.
+`org_id in (select unnest(public.current_org_ids()))` — so Postgres evaluates
+them once per statement instead of once per row. _(Corrected 2026-10-16: the
+`= any ((select …))` form previously written here does not compile — Postgres
+reads the parenthesised select as a subquery and compares `uuid` with
+`uuid[]`. Every migration since `0006` uses the `in (select unnest(…))` form.)_
 
 ### 4.1 RLS Matrix (enable RLS on every table)
 
@@ -597,6 +600,11 @@ with I0 and I1 running alongside P1.
 - **P4 – Internal redesign.** Existing company pages rebuilt to `DESIGN.md`.
 - **I0 – Contract & skeleton · I1 – Question bank · I2 – Text interview ·
   I3 – Evaluation & report · I4 – Code sandbox · I5 – Voice · I6 – Hardening.**
+
+**Status (2026-10-16): P0 and I0 complete** — see `docs/V3-PROGRESS.md`.
+Test suites: `tenant_isolation.sql` (53), `onboarding.sql` (23),
+`interview_isolation.sql` (31), `rls_check.sql`, and the agent's own
+`npm test` (34, including a byte-parity check of the shared contract).
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
