@@ -169,7 +169,7 @@ export function InterviewManager({
           {pending ? t.saving : t.save}
         </Button>
         {state.saved && !pending && (
-          <span className="flex items-center gap-1 text-sm text-emerald-600">
+          <span className="flex items-center gap-1 text-sm text-success">
             <Check className="size-4" aria-hidden />
             {t.saved}
           </span>

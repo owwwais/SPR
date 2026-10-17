@@ -1,12 +1,21 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import { IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
 import { ar } from "@/lib/i18n/ar";
 import "./globals.css";
 
+// 300 is gone: light weights weaken Arabic legibility, and nothing used it
+// (DESIGN.md §3). Each dropped weight is one font file fewer per visitor.
 const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-ibm-plex-arabic",
   subsets: ["arabic", "latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
+});
+
+// Display face for marketing headings only (`font-display`). A variable
+// font, so one file covers every weight.
+const readexPro = Readex_Pro({
+  variable: "--font-readex",
+  subsets: ["arabic", "latin"],
 });
 
 // Absolute URLs are required for og:image and friends. Without a configured
@@ -48,9 +57,17 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${ibmPlexSansArabic.variable} h-full antialiased`}
+      className={`${ibmPlexSansArabic.variable} ${readexPro.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <a
+          href="#main"
+          className="sr-only rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50"
+        >
+          {ar.common.skipToContent}
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Briefcase, MailX } from "lucide-react";
+import { MailX } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandMark } from "@/components/brand-mark";
 import { ar } from "@/lib/i18n/ar";
 import type { MemberRole } from "@/types/database";
 
@@ -53,9 +54,8 @@ async function getPreview(token: string): Promise<Preview | null> {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
-      <Link href="/" className="flex items-center gap-2 font-semibold">
-        <Briefcase className="size-5 text-primary" aria-hidden />
-        <span>{ar.common.appName}</span>
+      <Link href="/">
+        <BrandMark />
       </Link>
       <Card className="w-full max-w-md">{children}</Card>
     </div>

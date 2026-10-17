@@ -42,6 +42,29 @@ export type NitaqatBand =
 
 export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
 
+/** Mirrors the interview agent's lifecycle (0019). */
+export type InterviewStatus =
+  | "draft"
+  | "planning"
+  | "awaiting_review"
+  | "scheduled"
+  | "open"
+  | "in_progress"
+  | "submitted"
+  | "evaluating"
+  | "evaluated"
+  | "expired"
+  | "cancelled"
+  | "failed";
+
+/** The platform's record of a job's core question bank (0021). */
+export type JobBankStatus =
+  | "generating"
+  | "awaiting_review"
+  | "locked"
+  | "failed"
+  | "superseded";
+
 export type Database = {
   public: {
     Tables: {
@@ -62,6 +85,8 @@ export type Database = {
           // 0014/0016
           plan_code: string;
           monthly_analysis_quota: number | null;
+          // 0021 (D33): interviews per month. NULL = uncapped, 0 = none.
+          monthly_interview_quota: number | null;
           blind_screening: boolean;
           nitaqat_band: NitaqatBand | null;
           saudization_target: number | null;
@@ -313,6 +338,11 @@ export type Database = {
           screening_answers: Json;
           interview_at: string | null;
           interview_qa: Json;
+          // 0020 (D27): set only by submit-application for a seeker who applied
+          // with their stored profile. Nulled if they delete their seeker data;
+          // via_account stays true so the badge survives.
+          applicant_user_id: string | null;
+          via_account: boolean;
           created_at: string;
         };
         // org_id is omitted: the applications_set_org trigger derives it from
@@ -448,6 +478,76 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      // ---- 0019/0021: virtual interview, platform side (D30) ----
+      interview_assignments: {
+        Row: {
+          id: string;
+          org_id: string;
+          application_id: string;
+          external_interview_id: string | null;
+          status: InterviewStatus;
+          status_at: string;
+          modes: string[];
+          question_count: number;
+          duration_minutes: number;
+          candidate_result: "none" | "completion" | "summary";
+          paste_policy: "record" | "block";
+          opens_at: string | null;
+          closes_at: string | null;
+          config: Json;
+          last_error: string | null;
+          // 0021
+          job_bank_id: string | null;
+          bank_hash: string | null;
+          bank_locked_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        // Written only by the interview-gateway / interview-webhook
+        // functions as the service role; no client role may insert.
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      interview_reports: {
+        Row: {
+          id: string;
+          org_id: string;
+          assignment_id: string;
+          overall_score: number | null;
+          confidence: "high" | "medium" | "low" | null;
+          report: Json;
+          bank_hash: string | null;
+          model: string | null;
+          prompt_versions: Json | null;
+          received_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      interview_job_banks: {
+        Row: {
+          id: string;
+          org_id: string;
+          job_id: string;
+          external_bank_id: string | null;
+          version: number;
+          status: JobBankStatus;
+          bank_hash: string | null;
+          question_count: number;
+          approved_count: number;
+          last_error: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          locked_at: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -578,6 +678,74 @@ export type Database = {
         Args: { p_application_id: string; p_force?: boolean };
         Returns: boolean;
       };
+      // ---- 0020: seeker accounts (D26/D27) ----
+      // Routing hint only — which "hats" the signed-in user wears. Never an
+      // authorization input: requireMembership()/requireSeeker() decide.
+      my_hats: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      // The caller's own talent profile, or null. Columns chosen in SQL.
+      talent_my_profile: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      talent_save_my_contact: {
+        Args: {
+          p_full_name: string | null;
+          p_phone: string | null;
+          p_city: string | null;
+          p_preferences: Json;
+        };
+        Returns: unknown;
+      };
+      talent_save_my_review: {
+        Args: {
+          p_full_name: string | null;
+          p_headline: string | null;
+          p_city: string | null;
+          p_years: number | null;
+          p_about: string | null;
+          p_hidden_skills: string[];
+        };
+        Returns: unknown;
+      };
+      talent_set_my_consents: {
+        Args: {
+          p_consent_public: boolean;
+          p_consent_offers: boolean;
+          p_noindex: boolean;
+        };
+        Returns: unknown;
+      };
+      talent_legacy_profile_available: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      talent_link_legacy_profile: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      // The caller's own applications. Never any AI evaluation (FR-08 parity).
+      my_applications: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          id: string;
+          ref_code: string;
+          job_id: string;
+          job_title: string;
+          org_name: string;
+          org_slug: string;
+          status: AppStatus;
+          created_at: string;
+          history: Json;
+        }[];
+      };
+      // ---- 0021: interview question banks (I1) ----
+      can_manage_job: {
+        Args: { p_job_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       job_status: JobStatus;
@@ -587,6 +755,7 @@ export type Database = {
       member_role: MemberRole;
       org_status: OrgStatus;
       invite_status: InviteStatus;
+      interview_status: InterviewStatus;
     };
     CompositeTypes: Record<string, never>;
   };

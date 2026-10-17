@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Briefcase } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { SignupForm } from "./signup-form";
 import {
@@ -11,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandMark } from "@/components/brand-mark";
+import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { ar } from "@/lib/i18n/ar";
 
 export const metadata: Metadata = {
@@ -24,16 +25,19 @@ export default async function SignupPage() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
-      <Link href="/" className="flex items-center gap-2 font-semibold">
-        <Briefcase className="size-5 text-primary" aria-hidden />
-        <span>{ar.common.appName}</span>
+      <Link href="/">
+        <BrandMark />
       </Link>
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>{ar.auth.signupTitle}</CardTitle>
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-xl">{ar.auth.signupTitle}</CardTitle>
           <CardDescription>{ar.auth.signupSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-5">
+          {/* A Google account arrives with a verified email, so nothing paid
+              ever runs for an unproven address (D26). */}
+          <GoogleButton />
+          <AuthDivider />
           <SignupForm />
         </CardContent>
       </Card>

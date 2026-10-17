@@ -21,7 +21,9 @@ export default function TalentLayout({
           </span>
         </div>
       </header>
-      <div className="flex-1">{children}</div>
+      <div id="main" className="flex-1">
+        {children}
+      </div>
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">
         {ar.footer.rights} — {ar.common.appName}
       </footer>

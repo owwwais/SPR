@@ -404,7 +404,7 @@ export default async function ApplicationPage({
                       {evaluation.justification.confidence === "low" && (
                         <Badge
                           variant="outline"
-                          className="border-amber-500 text-amber-700 dark:text-amber-400"
+                          className="border-warning text-warning"
                         >
                           <TriangleAlert className="size-3" aria-hidden />
                           {t.confidenceLow}
@@ -458,7 +458,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.strengths}
                       icon={
                         <CircleCheck
-                          className="size-4 shrink-0 text-emerald-600"
+                          className="size-4 shrink-0 text-success"
                           aria-hidden
                         />
                       }
@@ -468,7 +468,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.gaps}
                       icon={
                         <CircleAlert
-                          className="size-4 shrink-0 text-amber-600"
+                          className="size-4 shrink-0 text-warning"
                           aria-hidden
                         />
                       }
@@ -478,7 +478,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.red_flags}
                       icon={
                         <Flag
-                          className="size-4 shrink-0 text-red-600"
+                          className="size-4 shrink-0 text-destructive"
                           aria-hidden
                         />
                       }

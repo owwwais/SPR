@@ -6,8 +6,13 @@
 //   3) sweep orphaned CV uploads older than the retention cutoff, walking
 //      each tenant's cvs/{org_id}/ folder
 //   4) expire the submission throttle log (0008)
+// Before an application is deleted, its virtual interview is erased on the
+// interview agent (D30, design §8.2), so retention reaches the separate
+// server too. An application whose erasure fails waits for the next run
+// rather than leaving an orphaned copy on the agent.
 // Idempotent and safe to invoke at any time; returns only counters.
 import { createClient } from "@supabase/supabase-js";
+import { agentClient } from "../_shared/interview-agent-client.ts";
 
 const RETRY_CAP = 10; // Gemini cost guard (§8)
 const DELETE_BATCH = 500;
@@ -30,6 +35,7 @@ Deno.serve(async (req) => {
     retried: 0,
     deleted_applications: 0,
     deleted_files: 0,
+    erased_interviews: 0,
     errors: 0,
   };
   const logError = (message: string) => {
@@ -120,23 +126,59 @@ Deno.serve(async (req) => {
       continue;
     }
 
+    // Interviews first: erase each on the agent, and hold back any
+    // application whose erasure did not go through.
+    const blocked = new Set<string>();
     if (expired && expired.length > 0) {
+      const { data: interviews, error: interviewsError } = await admin
+        .from("interview_assignments")
+        .select("application_id, external_interview_id")
+        .eq("org_id", organization.id)
+        .in("application_id", expired.map((a) => a.id))
+        .not("external_interview_id", "is", null);
+      if (interviewsError) {
+        logError(`interview lookup: ${interviewsError.message}`);
+        expired.forEach((a) => blocked.add(a.id));
+      } else if (interviews && interviews.length > 0) {
+        const agent = agentClient();
+        for (const interview of interviews) {
+          try {
+            if (!agent) throw new Error("interview agent not configured");
+            const res = await agent.call(
+              "DELETE",
+              `/v1/platform/interviews/${interview.external_interview_id}`
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            result.erased_interviews++;
+          } catch (err) {
+            blocked.add(interview.application_id);
+            logError(
+              `interview erasure ${interview.external_interview_id}: ${err instanceof Error ? err.message : err}`
+            );
+          }
+        }
+      }
+    }
+    const deletable = (expired ?? []).filter((a) => !blocked.has(a.id));
+
+    if (deletable.length > 0) {
       const { error: removeError } = await admin.storage
         .from("cvs")
-        .remove(expired.map((a) => a.cv_path));
+        .remove(deletable.map((a) => a.cv_path));
       if (removeError) {
         logError(`cv removal: ${removeError.message}`);
       } else {
-        result.deleted_files += expired.length;
+        result.deleted_files += deletable.length;
       }
 
-      // Cascades to ai_evaluations and status_history (FKs).
+      // Cascades to ai_evaluations, status_history and the interview
+      // records (FKs).
       const { error: deleteError, count } = await admin
         .from("applications")
         .delete({ count: "exact" })
         .in(
           "id",
-          expired.map((a) => a.id)
+          deletable.map((a) => a.id)
         );
       if (deleteError) {
         logError(`application deletion: ${deleteError.message}`);
