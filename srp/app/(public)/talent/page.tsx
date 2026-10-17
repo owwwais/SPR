@@ -195,7 +195,7 @@ function ApplyScene() {
   const s = m.scene;
   return (
     <div aria-hidden className="relative mx-auto w-full max-w-md select-none lg:mx-0">
-      <div className="absolute -inset-4 -z-10 rounded-2xl border border-dashed border-hairline-strong/0 bg-surface-sunken/50" />
+      <div className="absolute -inset-4 -z-10 rounded-2xl bg-surface-sunken/50" />
       <div className="flex flex-col gap-5 rounded-xl border bg-card p-6 shadow-raised">
         <p className="text-sm font-semibold">{s.jobLabel}</p>
 

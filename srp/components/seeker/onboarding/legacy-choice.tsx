@@ -21,7 +21,7 @@ export function LegacyChoice() {
   const t = ar.seekerOnboarding.legacy;
   const [startNew, setStartNew] = useState(false);
   const [state, linkAction, pending] = useActionState(
-    async (_prev: SeekerFormState) => linkLegacyProfile(),
+    async (): Promise<SeekerFormState> => linkLegacyProfile(),
     initialState
   );
 

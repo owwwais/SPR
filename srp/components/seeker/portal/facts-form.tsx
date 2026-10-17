@@ -102,7 +102,7 @@ export function FactsForm({
               inputMode="decimal"
               min={0}
               max={60}
-              step="0.5"
+              step="0.1"
               dir="ltr"
               className="text-start tabular-nums"
               defaultValue={years ?? ""}

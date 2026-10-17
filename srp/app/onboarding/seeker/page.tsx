@@ -108,7 +108,14 @@ export default async function SeekerOnboardingPage() {
       return (
         <Shell step="consents">
           <StepHeading title={t.consents.title} body={t.consents.body} />
-          <ConsentsStep redirectTo="/me" />
+          <ConsentsStep
+            redirectTo="/me"
+            defaults={{
+              consentPublic: profile.consent_public,
+              consentOffers: profile.consent_offers,
+              noindex: profile.noindex,
+            }}
+          />
         </Shell>
       );
     default:

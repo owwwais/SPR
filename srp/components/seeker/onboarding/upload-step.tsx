@@ -33,9 +33,10 @@ function checkFile(file: File): string | null {
 }
 
 function formatSize(bytes: number): string {
+  const t = ar.seekerOnboarding.upload;
   return bytes >= 1024 * 1024
-    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    ? t.sizeMb.replace("{size}", (bytes / (1024 * 1024)).toFixed(1))
+    : t.sizeKb.replace("{size}", String(Math.max(1, Math.round(bytes / 1024))));
 }
 
 // Step one of the CV-first onboarding (plan §2.3): a drop zone over a real
@@ -129,7 +130,7 @@ export function UploadStep({ again = false }: { again?: boolean }) {
           <span dir="ltr" className="min-w-0 truncate text-start font-medium">
             {file.name}
           </span>
-          <span dir="ltr" className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {formatSize(file.size)}
           </span>
         </p>

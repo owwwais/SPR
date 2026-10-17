@@ -128,7 +128,10 @@ export function ReviewStep({ profile }: { profile: ReviewProfile }) {
               inputMode="decimal"
               min={0}
               max={60}
-              step="0.5"
+              // One decimal, like the column (numeric(4,1)): the analysis
+              // may store 3.7, and a coarser step would make the browser
+              // refuse to submit the value it was given.
+              step="0.1"
               dir="ltr"
               className="text-start tabular-nums"
               defaultValue={profile.years_experience ?? ""}

@@ -432,6 +432,7 @@ as $$
 declare
   v_id uuid;
   v_status public.analysis_status;
+  v_ready boolean;
   v_name text := talent.clean_text(p_full_name);
   v_headline text := talent.clean_text(p_headline);
   v_city text := talent.clean_text(p_city);
@@ -444,7 +445,14 @@ begin
   end if;
 
   -- There is nothing to review until the extraction exists.
-  if v_status <> 'done' then
+  -- Ready once ANY analysis has completed: while a newly uploaded CV is
+  -- being read, the profile still carries the previous extraction, and the
+  -- person must not be locked out of their own facts for those seconds.
+  v_ready := v_status = 'done' or exists (
+    select 1 from talent.cv_versions
+    where profile_id = v_id and analysis_status = 'done'
+  );
+  if not v_ready then
     return jsonb_build_object('ok', false, 'error', 'analysis_not_ready');
   end if;
 
@@ -508,6 +516,7 @@ as $$
 declare
   v_id uuid;
   v_status public.analysis_status;
+  v_ready boolean;
   v_public boolean := coalesce(p_consent_public, false);
   v_offers boolean := coalesce(p_consent_offers, false);
 begin
@@ -518,8 +527,14 @@ begin
   end if;
 
   -- A public page shows the extraction; without one there is nothing that
-  -- may be published.
-  if v_public and v_status <> 'done' then
+  -- may be published. Any completed analysis counts: a re-upload in progress
+  -- must not block someone who is already published from changing the
+  -- offers consent or hiding their page.
+  v_ready := v_status = 'done' or exists (
+    select 1 from talent.cv_versions
+    where profile_id = v_id and analysis_status = 'done'
+  );
+  if v_public and not v_ready then
     return jsonb_build_object('ok', false, 'error', 'analysis_not_ready');
   end if;
 

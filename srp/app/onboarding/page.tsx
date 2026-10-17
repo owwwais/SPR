@@ -45,11 +45,16 @@ export default async function OnboardingPage({
   // membership exists without a profile row, and then /admin would send the
   // user straight back here.
   if (session) redirect("/admin");
-  if (hats.seeker) {
+
+  const { as } = await searchParams;
+  // A seeker who explicitly asks for the organization form gets it: one
+  // account may wear both hats (D26), and without this a seeker could only
+  // ever join a company by invitation. Anything else routes them home.
+  const seekerAddingCompany = hats.seeker && as === "company";
+  if (hats.seeker && !seekerAddingCompany) {
     redirect(hats.seekerStep === "done" ? "/me" : "/onboarding/seeker");
   }
 
-  const { as } = await searchParams;
   const tab = as === "seeker" ? "seeker" : "company";
   const t = ar.seekerOnboarding.chooser;
 
@@ -65,7 +70,7 @@ export default async function OnboardingPage({
           <p className="text-muted-foreground">{t.subtitle}</p>
         </div>
 
-        <AudienceTabs
+        {!seekerAddingCompany && <AudienceTabs
           label={ar.auth.tabs.label}
           tabs={[
             {
@@ -79,7 +84,7 @@ export default async function OnboardingPage({
               active: tab === "company",
             },
           ]}
-        />
+        />}
 
         {tab === "company" ? (
           <Card>

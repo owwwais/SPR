@@ -28,10 +28,10 @@ function entries(values: unknown): Record<string, unknown>[] {
 // content.
 export function ExtractedProfile({ profile }: { profile: SeekerProfile }) {
   const t = ar.seekerPortal.profile;
-  const strengths = strings(strengths);
-  const focusAreas = strings(focusAreas);
-  const languages = strings(languages);
-  const experiences = entries(experiences)
+  const strengths = strings(profile.strengths);
+  const focusAreas = strings(profile.focus_areas);
+  const languages = strings(profile.languages);
+  const experiences = entries(profile.experiences)
     .map((exp) => ({
       title: str(exp.title),
       company: str(exp.company),
@@ -40,7 +40,7 @@ export function ExtractedProfile({ profile }: { profile: SeekerProfile }) {
       summary: str(exp.summary),
     }))
     .filter((exp) => exp.title !== null);
-  const education = entries(education)
+  const education = entries(profile.education)
     .map((edu) => ({
       degree: str(edu.degree),
       field: str(edu.field),

@@ -820,6 +820,29 @@ select pg_temp.chk('auth user deleted: the profile and its versions cascade away
   not exists (select 1 from talent.profiles where id = '5d000000-0000-4000-8000-0000000000c1')
   and not exists (select 1 from talent.cv_versions where id = '5e000000-0000-4000-8000-0000000000c1'));
 
+-- A re-upload in progress does not lock a seeker out: an earlier completed
+-- analysis is enough to edit facts and to keep or change consents.
+reset role;
+insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at, created_at, updated_at) values
+  ('00000000-0000-0000-0000-000000000000','5c000000-0000-4000-8000-0000000000f8','authenticated','authenticated','reupload@s.test', now(), now(), now());
+insert into talent.profiles (id, user_id, public_token, email, email_verified_at, status, onboarding_step,
+                             analysis_status, consent_public_at)
+values ('5d000000-0000-4000-8000-0000000000f8','5c000000-0000-4000-8000-0000000000f8', md5('pr'), 'reupload@s.test',
+        now(), 'published', 'done', 'pending', now());
+insert into talent.cv_versions (id, profile_id, path, sha256, mime, size_bytes, analysis_status, created_at) values
+  ('5e000000-0000-4000-8000-0000000000f8','5d000000-0000-4000-8000-0000000000f8','5d000000-0000-4000-8000-0000000000f8/v1.pdf', encode(sha256('r1'::bytea), 'hex'), 'application/pdf', 1000, 'done',    now() - interval '1 day'),
+  ('5e000000-0000-4000-8000-0000000000f9','5d000000-0000-4000-8000-0000000000f8','5d000000-0000-4000-8000-0000000000f8/v2.pdf', encode(sha256('r2'::bytea), 'hex'), 'application/pdf', 1000, 'pending', now());
+select pg_temp.as_user('5c000000-0000-4000-8000-0000000000f8');
+insert into t_out values ('reupload_consents', public.talent_set_my_consents(true, true, false));
+insert into t_out values ('reupload_review', public.talent_save_my_review('رامي', null, null, 3, null, '{}'));
+select pg_temp.as_owner();
+select pg_temp.chk('re-upload in progress: consents can still be saved while published',
+  pg_temp.out('reupload_consents') = '{"ok":true}'::jsonb
+  and (select status = 'published' and consent_offers_at is not null
+       from talent.profiles where id = '5d000000-0000-4000-8000-0000000000f8'));
+select pg_temp.chk('re-upload in progress: facts can still be edited',
+  pg_temp.out('reupload_review') = '{"ok":true}'::jsonb);
+
 -- A former staff member who once created a job can still delete their
 -- account: authorship is released (on delete set null), the job stays.
 reset role;

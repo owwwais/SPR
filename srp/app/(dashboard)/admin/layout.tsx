@@ -5,8 +5,10 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  UserRound,
 } from "lucide-react";
 import { canAdminister, requireMembership } from "@/lib/auth";
+import { getHats } from "@/lib/seeker";
 import { signOut } from "@/app/login/actions";
 import { NavLink } from "@/components/admin/nav-link";
 import { OrgSwitcher } from "@/components/admin/org-switcher";
@@ -20,6 +22,9 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }>) {
   const session = await requireMembership();
+  // The switcher to the seeker hat (D26): shown when this account also has
+  // a seeker profile. A routing hint only — /me runs its own gate.
+  const hats = await getHats();
 
   return (
     <div className="flex flex-1 flex-col md:flex-row">
@@ -49,6 +54,12 @@ export default async function AdminLayout({
             <NavLink href="/admin/settings">
               <Settings className="size-4" aria-hidden />
               {ar.admin.settings}
+            </NavLink>
+          )}
+          {hats.seeker && (
+            <NavLink href="/me" exact>
+              <UserRound className="size-4" aria-hidden />
+              {ar.seekerPortal.admin.seekerAccountLink}
             </NavLink>
           )}
         </nav>

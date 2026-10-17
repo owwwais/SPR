@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import { getUser } from "@/lib/auth";
+import { homePath } from "@/lib/seeker";
 import { ACTIVE_ORG_COOKIE } from "@/lib/org-cookie";
 import { ar } from "@/lib/i18n/ar";
 
@@ -124,10 +125,13 @@ export async function applyWithProfile(
     return fail(e.generic);
   }
 
+  // Deliberately no revalidatePath here. Revalidating any path makes Next
+  // re-render the page the action came from, and /me/apply would then see
+  // the new application and swap the success screen — the only place the
+  // reference code is shown right after applying — for "already applied".
+  // The /me pages are dynamic (they read the session), so the client router
+  // fetches them fresh on the next navigation anyway (staleTimes.dynamic 0).
   if (response.ok && payload.ok && payload.ref_code) {
-    revalidatePath("/me");
-    revalidatePath("/me/applications");
-    revalidatePath("/me/jobs");
     return { ok: true, refCode: payload.ref_code };
   }
 
@@ -216,8 +220,12 @@ export async function deleteSeekerAccount(): Promise<DeleteSeekerState> {
     redirect("/?account_deleted=1");
   }
 
-  // The account stays for its company hat; the seeker pages no longer have
-  // a profile to show.
+  // The account stays — normally for its company hat, so this lands on
+  // /admin. homePath() rather than a literal: the function also keeps an
+  // account with no live membership (one that decided applications, whose
+  // name the status history must keep), and that one belongs on the
+  // onboarding chooser, not bounced through /admin. The seeker pages no
+  // longer have a profile to show.
   revalidatePath("/me", "layout");
-  redirect("/admin");
+  redirect(await homePath());
 }

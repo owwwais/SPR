@@ -10,15 +10,30 @@ import { ar } from "@/lib/i18n/ar";
 
 const initialState: SeekerFormState = { ok: false, error: null, fieldErrors: {} };
 
-// Step four: two separate, optional consents, both unchecked until the
-// person checks them. Neither implies the other — plenty of people want a
-// page to share and no attention from companies, or the reverse — and
-// leaving both empty is a complete, valid answer. The "hide from search
-// engines" option belongs to the public page, so it appears only with it.
-export function ConsentsStep({ redirectTo }: { redirectTo: string }) {
+export type ConsentDefaults = {
+  consentPublic: boolean;
+  consentOffers: boolean;
+  noindex: boolean;
+};
+
+// Step four: two separate, optional consents. A new profile has given
+// neither, so both start unchecked; a linked legacy profile starts from the
+// choices its owner already made, so finishing onboarding never silently
+// unpublishes a page they had shared. Neither implies the other — plenty of
+// people want a page to share and no attention from companies, or the
+// reverse — and leaving both empty is a complete, valid answer. The "hide
+// from search engines" option belongs to the public page, so it appears only
+// with it.
+export function ConsentsStep({
+  redirectTo,
+  defaults,
+}: {
+  redirectTo: string;
+  defaults: ConsentDefaults;
+}) {
   const t = ar.seekerOnboarding.consents;
   const [state, formAction, pending] = useActionState(saveSeekerConsents, initialState);
-  const [consentPublic, setConsentPublic] = useState(false);
+  const [consentPublic, setConsentPublic] = useState(defaults.consentPublic);
 
   return (
     <form
@@ -56,7 +71,12 @@ export function ConsentsStep({ redirectTo }: { redirectTo: string }) {
 
           {consentPublic && (
             <label className="ms-7 flex cursor-pointer items-center gap-3 border-t pt-3 text-sm">
-              <input type="checkbox" name="noindex" className="size-4 shrink-0 accent-primary" />
+              <input
+                type="checkbox"
+                name="noindex"
+                defaultChecked={defaults.noindex}
+                className="size-4 shrink-0 accent-primary"
+              />
               {t.noindex}
             </label>
           )}
@@ -66,6 +86,7 @@ export function ConsentsStep({ redirectTo }: { redirectTo: string }) {
           <input
             type="checkbox"
             name="consent_offers"
+            defaultChecked={defaults.consentOffers}
             className="mt-1 size-4 shrink-0 accent-primary"
             aria-describedby="consent_offers-hint"
           />
