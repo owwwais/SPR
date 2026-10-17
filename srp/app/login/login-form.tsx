@@ -12,7 +12,13 @@ import { ar } from "@/lib/i18n/ar";
 
 const initialState: LoginState = { error: null };
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({
+  next,
+  signupHref = "/signup",
+}: {
+  next?: string;
+  signupHref?: string;
+}) {
   const [state, formAction, pending] = useActionState(signIn, initialState);
 
   return (
@@ -53,7 +59,7 @@ export function LoginForm({ next }: { next?: string }) {
       </Button>
       <p className="text-center text-sm text-muted-foreground">
         {ar.auth.noAccount}{" "}
-        <Link href="/signup" className="text-primary hover:underline">
+        <Link href={signupHref} className="text-primary hover:underline">
           {ar.auth.signupSubmit}
         </Link>
       </p>
