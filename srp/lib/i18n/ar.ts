@@ -1275,4 +1275,16 @@ export const ar = {
       viewer: "مطّلع",
     },
   },
+
+  // ---- P1: seeker signup and CV-first onboarding (D26) ----
+  seekerOnboarding: {
+  },
+
+  // ---- P1: the seeker portal /me and applying with a stored CV (D27) ----
+  seekerPortal: {
+  },
+
+  // ---- I1: interview question banks and their review (D30) ----
+  interviewBank: {
+  },
 } as const;
