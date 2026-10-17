@@ -820,6 +820,18 @@ select pg_temp.chk('auth user deleted: the profile and its versions cascade away
   not exists (select 1 from talent.profiles where id = '5d000000-0000-4000-8000-0000000000c1')
   and not exists (select 1 from talent.cv_versions where id = '5e000000-0000-4000-8000-0000000000c1'));
 
+-- A former staff member who once created a job can still delete their
+-- account: authorship is released (on delete set null), the job stays.
+reset role;
+insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at, created_at, updated_at) values
+  ('00000000-0000-0000-0000-000000000000','5c000000-0000-4000-8000-0000000000f9','authenticated','authenticated','former-staff@s.test', now(), now(), now());
+insert into profiles (id, full_name) values ('5c000000-0000-4000-8000-0000000000f9','موظف سابق');
+update jobs set created_by = '5c000000-0000-4000-8000-0000000000f9'
+where id = '5a000000-0000-4000-8000-0000000000a2';
+delete from auth.users where id = '5c000000-0000-4000-8000-0000000000f9';
+select pg_temp.chk('former job author deleted: the job stays with created_by null',
+  (select created_by is null from jobs where id = '5a000000-0000-4000-8000-0000000000a2'));
+
 -- ============================================================
 -- Report
 -- ============================================================

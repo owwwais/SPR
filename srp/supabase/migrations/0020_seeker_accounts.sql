@@ -908,3 +908,29 @@ $$;
 
 revoke execute on function public.talent_delete_seeker_data(uuid) from public, anon, authenticated;
 grant execute on function public.talent_delete_seeker_data(uuid) to service_role;
+
+-- ============================================================
+-- Deleting an account must not trip over "who created this"
+--
+-- A member-less seeker can delete their account (seeker-account). If that
+-- same person once created a job, an organization or an interview — staff
+-- who later left the company — the old foreign keys, declared without an
+-- ON DELETE rule, refused the deletion. Authorship is bookkeeping, not
+-- evidence, so it is released.
+--
+-- status_history.changed_by is deliberately NOT changed: it is the record
+-- that a human made each status decision (D24; the transparency report
+-- reads it as decided_by_human). seeker-account keeps the auth account of
+-- anyone who appears there instead of erasing that evidence.
+-- ============================================================
+alter table jobs drop constraint if exists jobs_created_by_fkey;
+alter table jobs add constraint jobs_created_by_fkey
+  foreign key (created_by) references profiles(id) on delete set null;
+
+alter table organizations drop constraint if exists organizations_created_by_fkey;
+alter table organizations add constraint organizations_created_by_fkey
+  foreign key (created_by) references auth.users(id) on delete set null;
+
+alter table interview_assignments drop constraint if exists interview_assignments_created_by_fkey;
+alter table interview_assignments add constraint interview_assignments_created_by_fkey
+  foreign key (created_by) references profiles(id) on delete set null;

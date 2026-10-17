@@ -146,6 +146,23 @@ Deno.serve(async (req) => {
     return json(200, { ok: true, account_deleted: false }, trace);
   }
 
+  // A former staff member who once decided an application's status is named
+  // in status_history — the record that a human made that decision (D24).
+  // Erasing the account would erase that evidence from a company's file, so
+  // the empty account is kept; the seeker data above is already gone.
+  const { count: decisions, error: historyError } = await admin
+    .from("status_history")
+    .select("id", { count: "exact", head: true })
+    .eq("changed_by", user.id);
+  if (historyError) {
+    log.fail("history_lookup", historyError.message, { pg_code: historyError.code });
+    return json(500, { error: "server_error", step: "history_lookup" }, trace);
+  }
+  if ((decisions ?? 0) > 0) {
+    log.step("done", { account_deleted: false, reason: "decision_history" });
+    return json(200, { ok: true, account_deleted: false }, trace);
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
     // The seeker data above is already gone; only the empty account
