@@ -9,6 +9,7 @@ import { hmacSha256Hex, parseKeyring, signRequest } from "./interview-hmac.ts";
 export type AgentClient = {
   call(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<Response>;
   candidateRef(applicationId: string): Promise<string>;
+  tenantRef(orgId: string): Promise<string>;
 };
 
 // null when the agent is not configured for this project — callers decide
@@ -50,6 +51,16 @@ export function agentClient(): AgentClient | null {
     async candidateRef(applicationId) {
       const digest = await hmacSha256Hex(secret, `candidate:${applicationId}`);
       return `c_${digest.slice(0, 32)}`;
+    },
+    // Who pays, without saying who (contract TenantContext): the agent counts
+    // interviews and checks bank ownership per organization but never learns
+    // which one. Its own label and prefix keep it from ever equalling a
+    // candidate reference, even for an id that is both an org and an
+    // application id. Like candidateRef it is keyed by the signing secret,
+    // so rotating that secret changes every reference.
+    async tenantRef(orgId) {
+      const digest = await hmacSha256Hex(secret, `tenant:${orgId}`);
+      return `t_${digest.slice(0, 32)}`;
     },
   };
 }
