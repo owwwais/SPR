@@ -4,6 +4,7 @@
 -- Login credentials (local dev):
 --   admin@example.com / Admin123!
 --   hr@example.com    / Hr123456!
+--   seeker@example.com / Seeker123!   (job seeker, D26 — see the end of file)
 
 -- ============================================================
 -- Auth users + profiles
@@ -152,3 +153,48 @@ values
     null,
     '22222222-2222-2222-2222-222222222222'
   );
+
+-- ============================================================
+-- A job seeker (D26)
+--
+-- A confirmed account with NO talent profile and no membership: signing in
+-- lands on the onboarding chooser, and the seeker path walks the real
+-- CV-first flow (upload → contact → review → consents) with a real file.
+-- No profile or CV version is seeded on purpose — a seeded version would
+-- point at a storage object that does not exist, and applying with it
+-- would fail at the copy step. No public.profiles row either: that table
+-- is identity for company members, and a seeker is not one.
+-- ============================================================
+
+insert into auth.users (
+  instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+  confirmation_token, recovery_token, email_change, email_change_token_new
+)
+values (
+  '00000000-0000-0000-0000-000000000000',
+  '33333333-3333-3333-3333-333333333333',
+  'authenticated', 'authenticated',
+  'seeker@example.com',
+  crypt('Seeker123!', gen_salt('bf')),
+  now(),
+  '{"provider":"email","providers":["email"]}',
+  '{}',
+  now(), now(), '', '', '', ''
+);
+
+insert into auth.identities (
+  id, user_id, provider_id, identity_data, provider,
+  last_sign_in_at, created_at, updated_at
+)
+values (
+  gen_random_uuid(),
+  '33333333-3333-3333-3333-333333333333',
+  '33333333-3333-3333-3333-333333333333',
+  jsonb_build_object(
+    'sub', '33333333-3333-3333-3333-333333333333',
+    'email', 'seeker@example.com',
+    'email_verified', true
+  ),
+  'email', now(), now(), now()
+);

@@ -11,15 +11,30 @@
 // just read, never taken from the request. (A database trigger enforces the
 // same thing independently — see applications_set_org in 0006.)
 //
-// Contract: POST multipart/form-data
+// Two modes share one pipeline (job resolution, screening answers, throttle,
+// duplicate check, insert, analysis + email):
+//
+// Guest (default). Contract: POST multipart/form-data
 //   job_id, full_name, email, phone, cover_note, cv (File), sq_{question_id}…
 //   plus an optional Turnstile token as `cf-turnstile-response`.
+//
+// Profile (D27), when `mode` = "profile": a signed-in seeker applies with a
+// CV they already stored. POST multipart/form-data
+//   job_id, mode, cv_version_id (optional uuid), consent ("on"), cover_note,
+//   sq_{question_id}…
+//   Authorization: Bearer <the user's access token>
+// Name and phone come from the seeker's profile and the email from their
+// verified identity — nothing about who is applying is read off the form.
+// The company receives its OWN copy of the chosen CV version, so a seeker
+// deleting their account never touches a submitted application, and company
+// retention (D8) never touches the seeker's profile.
+//
 // Responses are machine-readable codes; the Arabic wording lives in
 // lib/i18n/ar.ts on the Next.js side.
 //
 // Secrets: platform-injected SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY /
 // SUPABASE_ANON_KEY, plus optional TURNSTILE_SECRET_KEY and THROTTLE_SALT.
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   applicationSchema,
   CV_MAX_BYTES,
@@ -48,6 +63,32 @@ type Fail = {
   error: string;
   field_errors?: Record<string, string>;
 };
+
+type Job = {
+  id: string;
+  org_id: string;
+  screening_questions: unknown;
+};
+
+// Where the company's copy of the CV comes from: the file in this request
+// (guest), or a stored version in the seeker's own bucket (profile).
+type CvSource =
+  | { kind: "upload"; file: File; mime: CvMime }
+  | { kind: "copy"; path: string; mime: CvMime };
+
+type Applicant = {
+  full_name: string;
+  email: string;
+  phone: string;
+  cover_note: string | null;
+  // Set only in profile mode: the account that applied (0020).
+  applicant_user_id: string | null;
+  cv: CvSource;
+};
+
+type SeekerUser = { id: string; email: string };
+
+type CvVersion = { id: string; path: string; mime: string; analysis_status: string };
 
 function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
@@ -101,9 +142,6 @@ function clientIp(req: Request): string {
   return hops.length > 0 ? hops[hops.length - 1]! : "unknown";
 }
 
-// Optional: only enforced once a site key is configured (S9-mini). Absent
-// configuration must not block submissions, or a misconfigured deploy
-// silently rejects every applicant.
 // cv.type is whatever the browser attached to the File — a value the caller
 // controls. Checking it alone lets any 5MB payload through labelled as a PDF,
 // to be stored and then handed to the model. Read the actual leading bytes.
@@ -121,6 +159,9 @@ async function sniffMime(file: File): Promise<CvMime | null> {
   return null;
 }
 
+// Optional: only enforced once a site key is configured (S9-mini). Absent
+// configuration must not block submissions, or a misconfigured deploy
+// silently rejects every applicant.
 async function turnstileOk(token: string | null): Promise<boolean> {
   const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
   if (!secret) {
@@ -155,28 +196,20 @@ async function turnstileOk(token: string | null): Promise<boolean> {
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
-
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return fail(400, { error: "invalid_input" });
+function fieldErrorsFrom(issues: ReadonlyArray<{ path: PropertyKey[] }>): Record<string, string> {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of issues) {
+    const key = String(issue.path[0] ?? "");
+    if (key && !(key in fieldErrors)) fieldErrors[key] = "invalid";
   }
+  return fieldErrors;
+}
 
-  const jobId = String(form.get("job_id") ?? "");
-  if (!UUID_RE.test(jobId)) return fail(400, { error: "invalid_input" });
-
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  // ---- 1. resolve the job, and with it the tenant --------------------
-  // Everything downstream — the storage folder, the row's org_id, the quota
-  // that will be charged — hangs off this read. It is deliberately the first
-  // thing that happens.
+// ---- the job, and with it the tenant ------------------------------------
+// Everything downstream — the storage folder, the row's org_id, the quota
+// that will be charged — hangs off this read. Both modes do it before
+// anything else touches the request's contents.
+async function resolveJob(admin: SupabaseClient, jobId: string): Promise<Job | Response> {
   const { data: job, error: jobError } = await admin
     .from("jobs")
     .select(
@@ -210,7 +243,72 @@ Deno.serve(async (req) => {
 
   if (!jobOpen || !orgLive) return fail(409, { error: "job_closed" });
 
-  // ---- 2. validate the applicant's own fields ------------------------
+  return {
+    id: job.id as string,
+    org_id: job.org_id as string,
+    screening_questions: job.screening_questions,
+  };
+}
+
+// ---- screening answers, checked against the JOB's definition -----------
+// Never against a question list supplied by the client.
+function collectAnswers(
+  job: Job,
+  form: FormData
+): { answers: ScreeningAnswerType[]; errors: Record<string, string> } {
+  const parsedQuestions = ScreeningQuestions.safeParse(job.screening_questions);
+  const questions = parsedQuestions.success ? parsedQuestions.data : [];
+
+  const answers: ScreeningAnswerType[] = [];
+  const errors: Record<string, string> = {};
+
+  for (const question of questions) {
+    const key = `sq_${question.id}`;
+
+    if (question.type === "multiple_choice") {
+      const values = form
+        .getAll(key)
+        .map(String)
+        .filter((v) => question.options.includes(v));
+      if (values.length > 0) {
+        answers.push({
+          question_id: question.id,
+          label: question.label,
+          type: question.type,
+          answer: values,
+        });
+      } else if (question.required) {
+        errors[key] = "required";
+      }
+      continue;
+    }
+
+    let value = String(form.get(key) ?? "").trim();
+    if (question.type === "yes_no" && value !== YES && value !== NO) {
+      value = "";
+    }
+    if (question.type === "single_choice" && !question.options.includes(value)) {
+      value = "";
+    }
+    value = value.slice(0, 2000);
+
+    if (value.length > 0) {
+      answers.push({
+        question_id: question.id,
+        label: question.label,
+        type: question.type,
+        answer: value,
+      });
+    } else if (question.required) {
+      errors[key] = "required";
+    }
+  }
+
+  return { answers, errors };
+}
+
+// ---- guest: everything comes from the form -------------------------------
+async function guestApplicant(form: FormData): Promise<Applicant | Response> {
   const parsed = applicationSchema.safeParse({
     full_name: form.get("full_name"),
     email: form.get("email"),
@@ -218,12 +316,10 @@ Deno.serve(async (req) => {
     cover_note: form.get("cover_note") ?? "",
   });
   if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "");
-      if (key && !(key in fieldErrors)) fieldErrors[key] = "invalid";
-    }
-    return fail(400, { error: "invalid_input", field_errors: fieldErrors });
+    return fail(400, {
+      error: "invalid_input",
+      field_errors: fieldErrorsFrom(parsed.error.issues),
+    });
   }
 
   const cv = form.get("cv");
@@ -256,72 +352,222 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ---- 3. screening answers, checked against the JOB's definition ----
-  // Never against a question list supplied by the client.
-  const parsedQuestions = ScreeningQuestions.safeParse(job.screening_questions);
-  const questions = parsedQuestions.success ? parsedQuestions.data : [];
+  return {
+    full_name: parsed.data.full_name,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    cover_note: parsed.data.cover_note,
+    applicant_user_id: null,
+    cv: { kind: "upload", file: cv, mime: sniffed },
+  };
+}
 
-  const answers: ScreeningAnswerType[] = [];
-  const questionErrors: Record<string, string> = {};
+// ---- profile: who is applying ---------------------------------------------
+async function seekerUser(req: Request, admin: SupabaseClient): Promise<SeekerUser | Response> {
+  const header = req.headers.get("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return fail(401, { error: "auth_required" });
 
-  for (const question of questions) {
-    const key = `sq_${question.id}`;
-
-    if (question.type === "multiple_choice") {
-      const values = form
-        .getAll(key)
-        .map(String)
-        .filter((v) => question.options.includes(v));
-      if (values.length > 0) {
-        answers.push({
-          question_id: question.id,
-          label: question.label,
-          type: question.type,
-          answer: values,
-        });
-      } else if (question.required) {
-        questionErrors[key] = "required";
-      }
-      continue;
+  const { data, error } = await admin.auth.getUser(token);
+  const user = data?.user ?? null;
+  if (!user) {
+    // No status, or a 5xx, is the auth service failing — not the caller's
+    // credentials. Sending them to sign in again would not help.
+    if (error && (!error.status || error.status >= 500)) {
+      console.error("auth lookup failed:", error.status ?? "no status");
+      return fail(500, { error: "server_error" });
     }
+    return fail(401, { error: "auth_required" });
+  }
+  // D26: email verification precedes any paid analysis, and applying
+  // starts one.
+  if (!user.email_confirmed_at || !user.email) {
+    return fail(403, { error: "email_unverified" });
+  }
+  return { id: user.id, email: user.email.toLowerCase() };
+}
 
-    let value = String(form.get(key) ?? "").trim();
-    if (question.type === "yes_no" && value !== YES && value !== NO) {
-      value = "";
-    }
-    if (question.type === "single_choice" && !question.options.includes(value)) {
-      value = "";
-    }
-    value = value.slice(0, 2000);
+// ---- profile: everything comes from the stored profile -------------------
+// Returns the applicant plus any field errors of its own (cv_version_id,
+// consent), so they can be reported together with the screening answers in
+// one response instead of one at a time.
+async function profileApplicant(
+  admin: SupabaseClient,
+  form: FormData,
+  user: SeekerUser
+): Promise<{ applicant: Applicant | null; errors: Record<string, string> } | Response> {
+  const { data: profile, error: profileError } = await admin
+    .schema("talent")
+    .from("profiles")
+    .select("id, full_name, phone")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (profileError) {
+    console.error("profile lookup failed:", profileError.code ?? profileError.message);
+    return fail(500, { error: "server_error" });
+  }
+  if (!profile) return fail(409, { error: "profile_incomplete" });
 
-    if (value.length > 0) {
-      answers.push({
-        question_id: question.id,
-        label: question.label,
-        type: question.type,
-        answer: value,
-      });
-    } else if (question.required) {
-      questionErrors[key] = "required";
+  // The same rules a guest's typed values must meet. A profile that does
+  // not meet them is sent back to be completed, not submitted half-filled.
+  const parsed = applicationSchema.safeParse({
+    full_name: profile.full_name ?? "",
+    email: user.email,
+    phone: profile.phone ?? "",
+    cover_note: form.get("cover_note") ?? "",
+  });
+  if (!parsed.success) {
+    const fieldErrors = fieldErrorsFrom(parsed.error.issues);
+    const fromProfile = ["full_name", "email", "phone"].some((k) => k in fieldErrors);
+    if (fromProfile) return fail(409, { error: "profile_incomplete" });
+    return fail(400, { error: "invalid_input", field_errors: fieldErrors });
+  }
+
+  const errors: Record<string, string> = {};
+
+  // The CV: the version named on the form, else the newest analysed one.
+  // Either way it must be this profile's own and fully analysed — the
+  // profile_id filter is what stops one seeker from applying with another's
+  // file by guessing a version id.
+  const requested = String(form.get("cv_version_id") ?? "").trim();
+  let version: CvVersion | null = null;
+  if (requested.length > 0 && !UUID_RE.test(requested)) {
+    errors.cv_version_id = "invalid";
+  } else {
+    let query = admin
+      .schema("talent")
+      .from("cv_versions")
+      .select("id, path, mime, analysis_status")
+      .eq("profile_id", profile.id);
+    query = requested.length > 0
+      ? query.eq("id", requested)
+      : query.eq("analysis_status", "done").order("created_at", { ascending: false }).limit(1);
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      console.error("cv version lookup failed:", error.code ?? error.message);
+      return fail(500, { error: "server_error" });
+    }
+    version = data as CvVersion | null;
+    if (!version || version.analysis_status !== "done" || !(version.mime in CV_MIME_TYPES)) {
+      errors.cv_version_id = "invalid";
+      version = null;
     }
   }
 
-  if (Object.keys(questionErrors).length > 0) {
-    return fail(400, { error: "invalid_input", field_errors: questionErrors });
+  // Per application, every time. Never stored as a standing permission: the
+  // seeker agrees to share with THIS company for THIS job.
+  if (form.get("consent") !== "on") errors.consent = "required";
+
+  return {
+    applicant: version
+      ? {
+          full_name: parsed.data.full_name,
+          email: parsed.data.email,
+          phone: parsed.data.phone,
+          cover_note: parsed.data.cover_note,
+          applicant_user_id: user.id,
+          cv: { kind: "copy", path: version.path, mime: version.mime as CvMime },
+        }
+      : null,
+    errors,
+  };
+}
+
+// ---- the company's copy of the CV, in the tenant's own folder -----------
+async function storeCv(admin: SupabaseClient, cvPath: string, source: CvSource): Promise<boolean> {
+  let body: Blob;
+  if (source.kind === "upload") {
+    body = source.file;
+  } else {
+    const { data, error } = await admin.storage.from("talent-cvs").download(source.path);
+    if (error || !data) {
+      console.error("CV copy: download failed:", error?.message ?? "no data");
+      return false;
+    }
+    body = data;
+  }
+  const { error: uploadError } = await admin.storage
+    .from("cvs")
+    .upload(cvPath, body, { contentType: source.mime, upsert: false });
+  if (uploadError) {
+    console.error("CV upload failed:", uploadError.message);
+    return false;
+  }
+  return true;
+}
+
+Deno.serve(async (req) => {
+  if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return fail(400, { error: "invalid_input" });
+  }
+
+  const jobId = String(form.get("job_id") ?? "");
+  if (!UUID_RE.test(jobId)) return fail(400, { error: "invalid_input" });
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const profileMode = form.get("mode") === "profile";
+
+  // Profile mode answers "who are you" before anything else.
+  let user: SeekerUser | null = null;
+  if (profileMode) {
+    const resolved = await seekerUser(req, admin);
+    if (resolved instanceof Response) return resolved;
+    user = resolved;
+  }
+
+  // ---- 1. resolve the job, and with it the tenant --------------------
+  const job = await resolveJob(admin, jobId);
+  if (job instanceof Response) return job;
+
+  // ---- 2. the applicant: typed in (guest) or stored (profile) ---------
+  // ---- 3. screening answers -------------------------------------------
+  let applicant: Applicant;
+  let answers: ScreeningAnswerType[];
+  if (user) {
+    const resolved = await profileApplicant(admin, form, user);
+    if (resolved instanceof Response) return resolved;
+    const screening = collectAnswers(job, form);
+    const errors = { ...resolved.errors, ...screening.errors };
+    if (Object.keys(errors).length > 0 || !resolved.applicant) {
+      return fail(400, { error: "invalid_input", field_errors: errors });
+    }
+    applicant = resolved.applicant;
+    answers = screening.answers;
+  } else {
+    const resolved = await guestApplicant(form);
+    if (resolved instanceof Response) return resolved;
+    const screening = collectAnswers(job, form);
+    if (Object.keys(screening.errors).length > 0) {
+      return fail(400, { error: "invalid_input", field_errors: screening.errors });
+    }
+    applicant = resolved;
+    answers = screening.answers;
   }
 
   const validatedAnswers = ScreeningAnswers.safeParse(answers);
   if (!validatedAnswers.success) return fail(400, { error: "invalid_input" });
 
   // ---- 4. abuse controls ---------------------------------------------
-  if (!(await turnstileOk(form.get("cf-turnstile-response") as string | null))) {
+  // The captcha is for anonymous callers. A profile submission carries a
+  // verified account's token, which is a stronger signal than a widget;
+  // the per-IP and per-email limits below still apply to it.
+  if (!user && !(await turnstileOk(form.get("cf-turnstile-response") as string | null))) {
     return fail(403, { error: "captcha_failed" });
   }
 
   const salt = Deno.env.get("THROTTLE_SALT") ?? "srp";
   const [ipHash, emailHash] = await Promise.all([
     sha256Hex(`${salt}:${clientIp(req)}`),
-    sha256Hex(`${salt}:${parsed.data.email}`),
+    sha256Hex(`${salt}:${applicant.email}`),
   ]);
 
   const { data: throttle, error: throttleError } = await admin.rpc(
@@ -338,12 +584,13 @@ Deno.serve(async (req) => {
   // The old flow uploaded first and discovered the duplicate on insert,
   // leaving an orphan file behind for the retention job to sweep. Checking
   // first makes the common rejection free. The unique constraint is still
-  // the authority, for the race.
+  // the authority, for the race. A seeker who once applied to this job as a
+  // guest with the same address is a duplicate too: it is the same person.
   const { data: existing } = await admin
     .from("applications")
     .select("id")
     .eq("job_id", jobId)
-    .eq("email", parsed.data.email)
+    .eq("email", applicant.email)
     .maybeSingle();
   if (existing) {
     return fail(409, {
@@ -352,16 +599,12 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ---- 6. upload into the tenant's own folder -------------------------
+  // ---- 6. the CV, into the tenant's own folder -------------------------
   const applicationId = crypto.randomUUID();
-  const extension = CV_MIME_TYPES[cv.type as CvMime];
+  const extension = CV_MIME_TYPES[applicant.cv.mime];
   const cvPath = `${job.org_id}/${applicationId}.${extension}`;
 
-  const { error: uploadError } = await admin.storage
-    .from("cvs")
-    .upload(cvPath, cv, { contentType: cv.type, upsert: false });
-  if (uploadError) {
-    console.error("CV upload failed:", uploadError.message);
+  if (!(await storeCv(admin, cvPath, applicant.cv))) {
     return fail(500, { error: "server_error" });
   }
 
@@ -380,13 +623,17 @@ Deno.serve(async (req) => {
       // trust or to get wrong.
       job_id: jobId,
       ref_code: refCode,
-      full_name: parsed.data.full_name,
-      email: parsed.data.email,
-      phone: parsed.data.phone,
+      full_name: applicant.full_name,
+      email: applicant.email,
+      phone: applicant.phone,
       cv_path: cvPath,
-      cv_mime: cv.type,
-      cover_note: parsed.data.cover_note,
+      cv_mime: applicant.cv.mime,
+      cover_note: applicant.cover_note,
       screening_answers: validatedAnswers.data,
+      // Guests leave both at their defaults (null, false).
+      ...(applicant.applicant_user_id
+        ? { applicant_user_id: applicant.applicant_user_id, via_account: true }
+        : {}),
     });
 
     if (!error) {
