@@ -66,17 +66,28 @@ const PREFIXES = [
 // Pronoun suffixes (attached object/possessive pronouns).
 const SUFFIXES = ["هما", "كما", "هم", "هن", "كم", "كن", "ها", "نا", "ه", "ك", "ي"];
 
-// Every reading of one token worth matching: as written, without a
-// proclitic, without a pronoun suffix, and with a «ة» restored where a
-// suffix had turned it into «ت» (جنسيتك → جنسية). Suffix stripping never
-// leaves fewer than three letters, so «سنة» (year) and «صحيح» never shrink
-// into «سن» or «صح».
+// Every reading of one token worth matching: as written, without up to two
+// stacked proclitics (ولأطفالك → لأطفالك → أطفالك), without a pronoun
+// suffix, and with a «ة» restored where a suffix had turned it into «ت»
+// (جنسيتك → جنسية). Suffix stripping never leaves fewer than three letters,
+// so «سنة» (year) and «صحيح» never shrink into «سن» or «صح».
 function readings(token: string): Set<string> {
   const bases = new Set<string>([token]);
-  for (const prefix of PREFIXES) {
-    if (token.startsWith(prefix) && token.length - prefix.length >= 2) {
-      bases.add(token.slice(prefix.length));
+  let frontier = [token];
+  for (let depth = 0; depth < 2; depth++) {
+    const next: string[] = [];
+    for (const form of frontier) {
+      for (const prefix of PREFIXES) {
+        if (form.startsWith(prefix) && form.length - prefix.length >= 2) {
+          const stripped = form.slice(prefix.length);
+          if (!bases.has(stripped)) {
+            bases.add(stripped);
+            next.push(stripped);
+          }
+        }
+      }
     }
+    frontier = next;
   }
   const out = new Set<string>(bases);
   for (const base of bases) {
@@ -113,7 +124,7 @@ const CATEGORIES: Readonly<Record<string, CategoryTerms>> = {
     // Graduation year is the classic indirect route to age.
     phrases: [
       "كم عمرك", "تاريخ ميلاد", "سنة ميلاد", "عام ميلاد", "متى ولدت", "اين ولدت",
-      "سنة ولدت", "عام ولدت",
+      "سنة ولدت", "عام ولدت", "سنة تخرجت", "عام تخرجت",
       "سنة تخرج", "عام تخرج", "متى تخرجت", "how old", "born in", "were you born",
       "date of birth", "year of birth", "graduation year", "year did you graduate",
     ],

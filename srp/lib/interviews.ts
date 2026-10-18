@@ -343,7 +343,17 @@ export type AssignmentSummary = {
   bank_hash: string | null;
   bank_locked_at: string | null;
   created_at: string;
+  /**
+   * A draft the agent never acknowledged, old enough that no request can
+   * still be waiting on it. The gateway fails such a row on the next create,
+   * so the panel offers to start again instead of spinning forever.
+   */
+  stale: boolean;
 };
+
+// Matches the gateway's STALE_CREATION_MS: its agent call gives up after
+// 15 s, so a draft this old was left behind by a request that died.
+const STALE_DRAFT_MS = 2 * 60 * 1000;
 
 export type VirtualInterviewData = {
   /** organizations.monthly_interview_quota: null = uncapped, 0 = none (D33). */
@@ -414,6 +424,10 @@ export async function loadVirtualInterview(params: {
           bank_hash: row.bank_hash,
           bank_locked_at: row.bank_locked_at,
           created_at: row.created_at,
+          stale:
+            row.status === "draft" &&
+            row.external_interview_id === null &&
+            Date.parse(row.created_at) < Date.now() - STALE_DRAFT_MS,
         }
       : null,
   };

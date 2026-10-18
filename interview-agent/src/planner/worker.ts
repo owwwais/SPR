@@ -193,7 +193,10 @@ async function failInterview(sql: Sql, id: string, code: FailureCode): Promise<v
 
 async function planInterview(deps: GenerationDeps, interview: PlanningInterviewRow) {
   const wanted = interview.config.mix.gap_probe;
-  const requested = Math.min(wanted + GAP_EXTRA, GAP_MAX);
+  // The spare probes stop at GAP_MAX in total, but the request never falls
+  // below what the mix needs: the contract allows up to 15, and asking for
+  // fewer would fail a valid interview on every attempt.
+  const requested = Math.max(wanted, Math.min(wanted + GAP_EXTRA, GAP_MAX));
   let outcome: Outcome;
   try {
     const { accepted, stats } = await generateGapProbes(deps, interview, requested);
