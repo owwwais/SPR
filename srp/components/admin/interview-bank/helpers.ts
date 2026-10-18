@@ -36,7 +36,13 @@ export function difficultyLabel(level: 1 | 2 | 3) {
 export function formatSeconds(seconds: number | null) {
   const t = ar.interviewBank.question;
   if (seconds === null) return t.noTimeLimit;
-  if (seconds % 60 === 0) return fill(t.minutes, { n: seconds / 60 });
+  if (seconds % 60 === 0) {
+    const n = seconds / 60;
+    // Arabic counted nouns: two takes the dual, three to ten the plural,
+    // everything else the singular («5 دقائق», «15 دقيقة»).
+    if (n === 2) return t.minutesTwo;
+    return fill(n >= 3 && n <= 10 ? t.minutesFew : t.minutes, { n });
+  }
   return fill(t.seconds, { n: seconds });
 }
 

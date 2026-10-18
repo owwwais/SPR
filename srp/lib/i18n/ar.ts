@@ -1890,6 +1890,8 @@ export const ar = {
       noTimeLimit: "بلا حد",
       seconds: "{n} ثانية",
       minutes: "{n} دقيقة",
+      minutesFew: "{n} دقائق",
+      minutesTwo: "دقيقتان",
       followUp: "المتابعة",
       expectedPoints: "ما تتضمنه الإجابة الجيدة",
       rubric: "معايير التقييم",
@@ -1939,9 +1941,9 @@ export const ar = {
       needAnalysis:
         "تحتاج المقابلة إلى اكتمال تحليل السيرة الذاتية أولاً، لأن أسئلة الاستيضاح تُبنى عليه.",
       viewerEmpty: "لا توجد مقابلة افتراضية لهذا المتقدم.",
-      bankInUse: "تُبنى على النسخة {version} من بنك أسئلة الوظيفة ({n} سؤالاً معتمداً).",
+      bankInUse: "تُبنى على النسخة {version} من بنك أسئلة الوظيفة (الأسئلة المعتمدة: {n}).",
       status: "حالة المقابلة: {status}",
-      summary: "{count} أسئلة · {minutes} دقيقة",
+      summary: "عدد الأسئلة: {count} · المدة: {minutes} د",
       form: {
         title: "إعداد المقابلة",
         warmup: "ابدأ بسؤال تمهيدي (لا يُقيَّم)",
@@ -2019,6 +2021,7 @@ export const ar = {
       },
       locked: {
         title: "الأسئلة مقفلة",
+        badge: "الأسئلة جاهزة",
         counts: "الأسئلة حسب النوع",
         hash: "بصمة الأسئلة",
         lockedAt: "تاريخ القفل",

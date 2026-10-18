@@ -76,6 +76,16 @@ export async function VirtualInterviewPanel({
   const live =
     assignment !== null && status !== null && !assignment.stale && !ENDED.includes(status);
   const config = assignment?.config ?? null;
+  // Locked but not yet sent (dispatch arrives with I2): the agent still says
+  // awaiting_review, and showing that beside «الأسئلة مقفلة» would claim a
+  // review that is already done.
+  const questionsLocked = Boolean(view?.locked_at ?? assignment?.bank_locked_at);
+  const statusLabel =
+    status === "awaiting_review" && questionsLocked
+      ? t.locked.badge
+      : status
+        ? ar.interviewBank.interviewStatuses[status]
+        : null;
 
   return (
     <Card className="mb-4">
@@ -92,7 +102,7 @@ export async function VirtualInterviewPanel({
                   })}
                 </span>
               )}
-              <Badge variant="secondary">{ar.interviewBank.interviewStatuses[status]}</Badge>
+              <Badge variant="secondary">{statusLabel}</Badge>
             </div>
           )}
         </div>
