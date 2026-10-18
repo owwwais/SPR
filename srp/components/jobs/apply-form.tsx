@@ -24,7 +24,11 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
-function ScreeningField({
+// The job's screening questions, rendered the same way wherever an
+// application is made: the guest form below and the seeker's profile apply
+// form (/me/apply). Each answer posts as `sq_<question id>`, the contract
+// submit-application reads in both modes.
+export function ScreeningField({
   question,
   error,
 }: {
@@ -81,6 +85,30 @@ function ScreeningField({
       </div>
       <FieldError message={error} />
     </div>
+  );
+}
+
+export function ScreeningQuestionsFieldset({
+  questions,
+  fieldErrors,
+}: {
+  questions: ScreeningQuestionType[];
+  fieldErrors: Record<string, string>;
+}) {
+  if (questions.length === 0) return null;
+  return (
+    <fieldset className="flex flex-col gap-5 rounded-lg border p-4">
+      <legend className="px-2 text-sm font-semibold">
+        {ar.apply.questionsTitle}
+      </legend>
+      {questions.map((question) => (
+        <ScreeningField
+          key={question.id}
+          question={question}
+          error={fieldErrors[`sq_${question.id}`]}
+        />
+      ))}
+    </fieldset>
   );
 }
 
@@ -209,20 +237,10 @@ export function ApplyForm({
         <FieldError message={state.fieldErrors.cover_note} />
       </div>
 
-      {questions.length > 0 && (
-        <fieldset className="flex flex-col gap-5 rounded-lg border p-4">
-          <legend className="px-2 text-sm font-semibold">
-            {t.questionsTitle}
-          </legend>
-          {questions.map((question) => (
-            <ScreeningField
-              key={question.id}
-              question={question}
-              error={state.fieldErrors[`sq_${question.id}`]}
-            />
-          ))}
-        </fieldset>
-      )}
+      <ScreeningQuestionsFieldset
+        questions={questions}
+        fieldErrors={state.fieldErrors}
+      />
 
       <Turnstile siteKey={turnstileSiteKey} />
 

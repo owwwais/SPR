@@ -136,6 +136,26 @@ export async function requireSeeker(
   return { userId: user.id, email: user.email ?? profile.email, profile };
 }
 
+// The searchable part of a stored analysis error. talent-analyze writes
+// "[<trace>/<step>] <message>"; the seeker is shown the bracketed reference
+// only — the message is the model SDK's own English text, meant for the
+// logs, not for an Arabic page (CLAUDE.md §10.7). null when there is none.
+export function analysisReference(error: string | null): string | null {
+  const match = error?.match(/^\[([^\]\s]+)\]/);
+  return match?.[1] ?? null;
+}
+
+// Whether a failed analysis was our failure rather than the file's. The
+// stored reference is "<trace>/<step>" (talent-analyze); only reading the
+// text out of the file and judging what the model made of it say anything
+// about the file. A storage hiccup, a missing key or a model outage must not
+// tell the person their CV is unreadable.
+const FILE_STEPS = new Set(["extract_text", "parse_model_response"]);
+export function analysisFailedOnOurSide(error: string | null): boolean {
+  const step = analysisReference(error)?.split("/")[1];
+  return step !== undefined && !FILE_STEPS.has(step);
+}
+
 // Where a signed-in user belongs when nothing more specific was asked for.
 export async function homePath(): Promise<string> {
   const hats = await getHats();

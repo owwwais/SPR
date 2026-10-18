@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { verifyRequest } from "../src/auth/hmac.ts";
 import { InterviewEvent } from "../src/contract/index.ts";
 import { backoffSeconds, createOutboxWorker, enqueueEvent, MAX_ATTEMPTS } from "../src/webhooks/outbox.ts";
-import { closeDb, createRequest, skipWithoutDb, testDb } from "./helpers.ts";
+import { closeDb, createRequest, jobContext, seedBank, skipWithoutDb, testDb } from "./helpers.ts";
 import { insertInterview } from "../src/db/interviews.ts";
 
 const WEBHOOK_SECRET = "webhook-secret-for-tests-0123456789abcdef";
@@ -47,7 +47,10 @@ describe("webhook outbox", { skip: skipWithoutDb }, () => {
     await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
     const { port } = server.address() as AddressInfo;
 
-    const row = await sql.begin((tx) => insertInterview(tx, createRequest()));
+    const bank = await seedBank(sql);
+    const row = await sql.begin((tx) =>
+      insertInterview(tx, createRequest(bank.id), { id: bank.id, job: jobContext() }, null)
+    );
     await sql.begin((tx) =>
       enqueueEvent(tx, { type: "interview.cancelled", interviewId: row.id, externalRef: row.external_ref, status: "cancelled" })
     );
@@ -79,7 +82,10 @@ describe("webhook outbox", { skip: skipWithoutDb }, () => {
 
   test("an event that keeps failing is eventually declared dead", async () => {
     const sql = await testDb();
-    const row = await sql.begin((tx) => insertInterview(tx, createRequest()));
+    const bank = await seedBank(sql);
+    const row = await sql.begin((tx) =>
+      insertInterview(tx, createRequest(bank.id), { id: bank.id, job: jobContext() }, null)
+    );
     await sql.begin((tx) =>
       enqueueEvent(tx, { type: "interview.cancelled", interviewId: row.id, externalRef: row.external_ref, status: "cancelled" })
     );

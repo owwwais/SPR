@@ -35,7 +35,7 @@ const getJob = cache(async (id: string) => {
     const { data, error } = await supabase
       .from("jobs")
       .select(
-        "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,created_at,org_id,organizations!inner(slug,name,logo_path,status,deleted_at)"
+        "id,title,department,location,type,description,requirements,skills,min_years_experience,closes_at,created_at,org_id,organizations!inner(slug,name,logo_path,status,listed_publicly,deleted_at)"
       )
       .eq("id", id)
       .eq("status", "published")
@@ -68,6 +68,7 @@ type Company = {
   name: string;
   logo_path: string | null;
   status: string;
+  listed_publicly: boolean;
   deleted_at: string | null;
 };
 
@@ -222,7 +223,7 @@ export default async function JobDetailPage({
           {ar.jobs.closedForApplications}
         </div>
       ) : (
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             size="lg"
             nativeButton={false}
@@ -230,6 +231,21 @@ export default async function JobDetailPage({
           >
             {ar.jobs.applyNow}
           </Button>
+          {/* Seeker accounts (D27): the stored CV instead of a new upload. A
+              plain link, so the page stays static (ISR); /me/apply decides
+              who may use it. Offered for marketplace-listed companies only,
+              the jobs the seeker portal itself lists. */}
+          {company.listed_publicly && (
+            <Button
+              size="lg"
+              variant="outline"
+              nativeButton={false}
+              title={ar.seekerPortal.applyWithProfileHint}
+              render={<Link href={`/me/apply/${job.id}`} />}
+            >
+              {ar.seekerPortal.applyWithProfile}
+            </Button>
+          )}
         </div>
       )}
 
@@ -257,7 +273,7 @@ export default async function JobDetailPage({
       </section>
 
       {!applicationsClosed && (
-        <div className="border-t pt-6">
+        <div className="flex flex-wrap items-center gap-3 border-t pt-6">
           <Button
             size="lg"
             nativeButton={false}
@@ -265,6 +281,17 @@ export default async function JobDetailPage({
           >
             {ar.jobs.applyNow}
           </Button>
+          {company.listed_publicly && (
+            <Button
+              size="lg"
+              variant="outline"
+              nativeButton={false}
+              title={ar.seekerPortal.applyWithProfileHint}
+              render={<Link href={`/me/apply/${job.id}`} />}
+            >
+              {ar.seekerPortal.applyWithProfile}
+            </Button>
+          )}
         </div>
       )}
     </article>

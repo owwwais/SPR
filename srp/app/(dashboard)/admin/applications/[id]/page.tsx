@@ -101,7 +101,7 @@ export default async function ApplicationPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, counts_toward_saudization, created_at, jobs(title)"
+      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, counts_toward_saudization, via_account, created_at, jobs(title)"
     )
     .eq("id", id)
     .eq("org_id", session.org.id)
@@ -188,6 +188,18 @@ export default async function ApplicationPage({
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{application.full_name}</h1>
           <Badge variant="secondary">{ar.status[application.status]}</Badge>
+          {/* D27: applied from a seeker account with the stored profile.
+              The badge adds no data — the company sees exactly what the
+              applicant chose to share in this application. */}
+          {application.via_account && (
+            <Badge variant="outline" title={ar.seekerPortal.admin.viaAccountHint}>
+              {ar.seekerPortal.admin.viaAccountBadge}
+              <span className="sr-only">
+                {" — "}
+                {ar.seekerPortal.admin.viaAccountHint}
+              </span>
+            </Badge>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
           <span>

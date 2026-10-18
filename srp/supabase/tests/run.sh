@@ -57,7 +57,7 @@ done
 echo "→ seed"
 run supabase/seed.sql
 
-# Both suites roll back, so order does not matter and neither leaves residue.
+# Every suite rolls back, so order does not matter and none leaves residue.
 echo
 echo "══ tenant isolation ══"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/tenant_isolation.sql
@@ -69,6 +69,10 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/onboarding.sql
 echo
 echo "══ interview isolation ══"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/interview_isolation.sql
+
+echo
+echo "══ seeker isolation ══"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/seeker_isolation.sql
 
 echo
 echo "══ role capabilities ══"

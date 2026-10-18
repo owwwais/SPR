@@ -31,6 +31,11 @@ export default async function TalentVerifyPage({
       headers: {
         "Content-Type": "application/json",
         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        // The functions gateway verifies a JWT on every call by default and
+        // rejects a request carrying only `apikey` with 401, which made every
+        // verification link fail. The anon key is a JWT; the verify token in
+        // the body is what actually authorises this call.
+        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""}`,
       },
       body: JSON.stringify({ verify_token: token }),
       cache: "no-store",

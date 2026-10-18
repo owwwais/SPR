@@ -1,7 +1,9 @@
--- interview_isolation.sql — I0 acceptance for 0019 (D30, the isolation
--- invariant): interview records are readable only inside their own
--- organization, writable by no client role, and filed under the right
--- tenant even when the writer passes the wrong one.
+-- interview_isolation.sql — I0 acceptance for 0019 and I1 acceptance for
+-- 0021 (D30, D33, the isolation invariant): interview records and question
+-- banks are readable only inside their own organization, writable by no
+-- client role, and filed under the right tenant even when the writer passes
+-- the wrong one; only owner/admin/hr of a job's org may manage its bank; and
+-- no tenant can raise its own interview allowance.
 --
 -- Self-contained like tenant_isolation.sql: builds its own two-tenant
 -- fixture, asserts on specific ids, rolls back.
@@ -231,6 +233,48 @@ select pg_temp.chk('event: a matching interview id with the wrong assignment is 
     '2b000000-0000-4000-8000-0000000000aa', '1a000000-0000-4000-8000-00000000e002',
     'failed', '2026-10-16 11:00+00') = 'unknown');
 
+-- The race on create: the agent's first event can arrive before the gateway
+-- has stored the agent's id. A signed event naming an unbound assignment
+-- binds it — unless that interview id is already bound elsewhere (above).
+select pg_temp.chk('event: an event for an unbound assignment binds the agent id and applies',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000004', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000bb', '1a000000-0000-4000-8000-00000000e002',
+    'awaiting_review', now() + interval '1 minute') = 'applied');
+select pg_temp.chk('event: the bound id and the status are stored',
+  (select external_interview_id = '2b000000-0000-4000-8000-0000000000bb' and status = 'awaiting_review'
+   from interview_assignments where id = '1a000000-0000-4000-8000-00000000e002'));
+
+-- ...but a create the gateway already gave up on stays given up: a late
+-- event never revives a failed assignment beside a newer one.
+insert into interview_assignments (id, application_id, status, modes, question_count, duration_minutes, config)
+values ('1b000000-0000-4000-8000-00000000e003','1b000000-0000-4000-8000-0000000000f1', 'failed', array['text'], 8, 20, '{}');
+select pg_temp.chk('event: a late event for a failed, unbound assignment is not applied',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000005', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000cc', '1b000000-0000-4000-8000-00000000e003',
+    'awaiting_review', now() + interval '1 minute') = 'unknown');
+select pg_temp.chk('event: the failed assignment stays failed and unbound',
+  (select status = 'failed' and external_interview_id is null
+   from interview_assignments where id = '1b000000-0000-4000-8000-00000000e003'));
+
+-- A draft's status_at is the platform's clock. With the platform an hour
+-- ahead of the agent, the agent's first event must still win over it; once
+-- the row carries the agent's own time, ordering by time resumes.
+insert into interview_assignments (id, application_id, status, status_at, modes, question_count, duration_minutes, config)
+values ('1b000000-0000-4000-8000-00000000e004','1b000000-0000-4000-8000-0000000000f1', 'draft',
+        now() + interval '1 hour', array['text'], 8, 20, '{}');
+select pg_temp.chk('event: the first event beats a draft whatever the clocks say',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000006', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000dd', '1b000000-0000-4000-8000-00000000e004',
+    'awaiting_review', now()) = 'applied');
+select pg_temp.chk('event: an older event after it is stale again',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000007', 'interview.failed',
+    '2b000000-0000-4000-8000-0000000000dd', '1b000000-0000-4000-8000-00000000e004',
+    'failed', now() - interval '1 minute') = 'stale');
+select pg_temp.chk('event: the draft took the agent''s status, id and clock',
+  (select status = 'awaiting_review' and external_interview_id = '2b000000-0000-4000-8000-0000000000dd'
+          and status_at = now()
+   from interview_assignments where id = '1b000000-0000-4000-8000-00000000e004'));
+
 select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
 select pg_temp.chk_denied('staff cannot call apply_interview_event',
   $q$select public.apply_interview_event(gen_random_uuid(), 'x', gen_random_uuid(),
@@ -239,8 +283,227 @@ reset role;
 
 select pg_temp.chk('rls: every interview table has row level security enabled',
   (select bool_and(relrowsecurity) from pg_class
-    where relname in ('interview_assignments','interview_reports','interview_webhook_events')
+    where relname in ('interview_assignments','interview_reports','interview_webhook_events',
+                      'interview_job_banks')
       and relnamespace = 'public'::regnamespace));
+
+-- ============================================================
+-- I1 (0021): question banks, can_manage_job, the interview allowance
+-- ============================================================
+
+insert into auth.users (instance_id, id, aud, role, email, created_at, updated_at) values
+  ('00000000-0000-0000-0000-000000000000','1a000000-0000-4000-8000-000000000013','authenticated','authenticated','hr2@acme-i.test',   now(), now()),
+  ('00000000-0000-0000-0000-000000000000','1a000000-0000-4000-8000-000000000014','authenticated','authenticated','admin@acme-i.test', now(), now());
+
+insert into profiles (id, full_name) values
+  ('1a000000-0000-4000-8000-000000000013','موظف موارد أكمي'),
+  ('1a000000-0000-4000-8000-000000000014','مدير أكمي');
+
+insert into memberships (org_id, user_id, role) values
+  ('1a000000-0000-4000-8000-000000000001','1a000000-0000-4000-8000-000000000013','hr'),
+  ('1a000000-0000-4000-8000-000000000001','1a000000-0000-4000-8000-000000000014','admin');
+
+-- a2 is soft-deleted; a3 is a second live acme job.
+insert into jobs (id, org_id, title, type, description, requirements, status, deleted_at) values
+  ('1a000000-0000-4000-8000-0000000000a2','1a000000-0000-4000-8000-000000000001','وظيفة محذوفة','full_time','د','م','closed', now()),
+  ('1a000000-0000-4000-8000-0000000000a3','1a000000-0000-4000-8000-000000000001','وظيفة أكمي الثانية','full_time','د','م','published', null);
+
+-- c1 is written the way a buggy writer might: acme's job, globex's org_id.
+insert into interview_job_banks (id, org_id, job_id, status) values
+  ('1a000000-0000-4000-8000-0000000000c1','1b000000-0000-4000-8000-000000000001','1a000000-0000-4000-8000-0000000000a1','awaiting_review');
+insert into interview_job_banks (id, job_id, status, bank_hash, locked_at) values
+  ('1a000000-0000-4000-8000-0000000000c3','1a000000-0000-4000-8000-0000000000a3','locked', repeat('c', 64), now()),
+  ('1b000000-0000-4000-8000-0000000000c1','1b000000-0000-4000-8000-0000000000b1','locked', repeat('b', 64), now());
+
+select pg_temp.chk('bank trigger: org_id comes from the job, not the writer',
+  (select org_id from interview_job_banks where id = '1a000000-0000-4000-8000-0000000000c1')
+    = '1a000000-0000-4000-8000-000000000001');
+
+select pg_temp.chk_denied('one in-progress bank per job',
+  $q$insert into interview_job_banks (job_id, version, status)
+     values ('1a000000-0000-4000-8000-0000000000a1', 2, 'generating')$q$);
+
+select pg_temp.chk_denied('a job cannot have the same bank version twice',
+  $q$insert into interview_job_banks (job_id, version, status)
+     values ('1a000000-0000-4000-8000-0000000000a3', 1, 'failed')$q$);
+
+select pg_temp.chk_denied('a locked bank must carry its hash and lock time',
+  $q$insert into interview_job_banks (job_id, version, status)
+     values ('1a000000-0000-4000-8000-0000000000a3', 2, 'locked')$q$);
+
+select pg_temp.chk_denied('a bank hash must be 64 hex characters',
+  $q$update interview_job_banks set bank_hash = 'not-a-hash'
+     where id = '1a000000-0000-4000-8000-0000000000c3'$q$);
+
+select pg_temp.chk('refused bank writes left no rows', (select count(*) from interview_job_banks) = 3);
+
+update interview_job_banks
+set status = 'locked', bank_hash = repeat('a', 64), locked_at = now()
+where id = '1a000000-0000-4000-8000-0000000000c1';
+insert into interview_job_banks (id, job_id, version, status) values
+  ('1a000000-0000-4000-8000-0000000000c2','1a000000-0000-4000-8000-0000000000a1', 2, 'generating');
+select pg_temp.chk('once a bank is locked, the job may start its next version',
+  exists (select 1 from interview_job_banks where id = '1a000000-0000-4000-8000-0000000000c2'));
+
+-- An interview is built only on a locked bank of its own application's job.
+-- e002 is acme's live assignment for application f1 (job a1).
+select pg_temp.chk_denied('an interview cannot use another job''s bank, even in its own org',
+  $q$update interview_assignments set job_bank_id = '1a000000-0000-4000-8000-0000000000c3'
+     where id = '1a000000-0000-4000-8000-00000000e002'$q$);
+select pg_temp.chk_denied('an interview cannot use another organization''s bank',
+  $q$update interview_assignments set job_bank_id = '1b000000-0000-4000-8000-0000000000c1'
+     where id = '1a000000-0000-4000-8000-00000000e002'$q$);
+select pg_temp.chk_denied('an interview cannot use a bank that is not locked',
+  $q$update interview_assignments set job_bank_id = '1a000000-0000-4000-8000-0000000000c2'
+     where id = '1a000000-0000-4000-8000-00000000e002'$q$);
+update interview_assignments set job_bank_id = '1a000000-0000-4000-8000-0000000000c1'
+where id = '1a000000-0000-4000-8000-00000000e002';
+select pg_temp.chk('an interview can use its job''s locked bank',
+  (select job_bank_id from interview_assignments where id = '1a000000-0000-4000-8000-00000000e002')
+    = '1a000000-0000-4000-8000-0000000000c1');
+
+-- ---------- reads ----------
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000013');
+select pg_temp.chk('acme hr reads acme banks',
+  (select count(*) from interview_job_banks where org_id = '1a000000-0000-4000-8000-000000000001') = 3);
+select pg_temp.chk_blind('acme hr cannot see globex banks',
+  $q$select count(*) from interview_job_banks where id = '1b000000-0000-4000-8000-0000000000c1'$q$);
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000012');
+select pg_temp.chk('acme viewer reads acme banks',
+  (select count(*) from interview_job_banks where org_id = '1a000000-0000-4000-8000-000000000001') = 3);
+select pg_temp.chk_blind('acme viewer cannot see globex banks',
+  $q$select count(*) from interview_job_banks where org_id = '1b000000-0000-4000-8000-000000000001'$q$);
+reset role;
+
+select pg_temp.as_user('1b000000-0000-4000-8000-000000000011');
+select pg_temp.chk_blind('globex staff cannot see acme banks',
+  $q$select count(*) from interview_job_banks where job_id = '1a000000-0000-4000-8000-0000000000a1'$q$);
+reset role;
+
+select pg_temp.as_user('1c000000-0000-4000-8000-000000000010');
+select pg_temp.chk_blind('a user with no membership sees no banks',
+  $q$select count(*) from interview_job_banks$q$);
+reset role;
+
+set local role anon;
+select pg_temp.chk_blind('anon sees no banks', $q$select count(*) from interview_job_banks$q$);
+reset role;
+
+-- ---------- writes: none for any client role ----------
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
+select pg_temp.chk_denied('an owner cannot insert a bank directly',
+  $q$insert into interview_job_banks (job_id, version, status)
+     values ('1a000000-0000-4000-8000-0000000000a3', 2, 'generating')$q$);
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000014');
+select pg_temp.chk_denied('an admin cannot change a bank directly',
+  $q$update interview_job_banks set status = 'failed'
+     where id = '1a000000-0000-4000-8000-0000000000c2'$q$);
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000013');
+select pg_temp.chk_denied('hr cannot delete a bank',
+  $q$delete from interview_job_banks where id = '1a000000-0000-4000-8000-0000000000c2'$q$);
+reset role;
+
+set local role anon;
+select pg_temp.chk_denied('anon cannot insert a bank',
+  $q$insert into interview_job_banks (job_id, version, status)
+     values ('1a000000-0000-4000-8000-0000000000a3', 2, 'generating')$q$);
+reset role;
+
+select pg_temp.chk('refused client writes left the banks as they were',
+  (select count(*) from interview_job_banks) = 4
+  and (select status from interview_job_banks where id = '1a000000-0000-4000-8000-0000000000c2') = 'generating');
+
+-- ---------- can_manage_job ----------
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
+select pg_temp.chk('can_manage_job: owner of the job''s org',
+  public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+select pg_temp.chk('can_manage_job: not for a deleted job',
+  not public.can_manage_job('1a000000-0000-4000-8000-0000000000a2'));
+select pg_temp.chk('can_manage_job: not for a job that does not exist',
+  not public.can_manage_job('1a000000-0000-4000-8000-0000000000a9'));
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000014');
+select pg_temp.chk('can_manage_job: admin of the job''s org',
+  public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000013');
+select pg_temp.chk('can_manage_job: hr of the job''s org',
+  public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000012');
+select pg_temp.chk('can_manage_job: not for a viewer',
+  not public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+reset role;
+
+select pg_temp.as_user('1b000000-0000-4000-8000-000000000011');
+select pg_temp.chk('can_manage_job: not for another org''s owner',
+  not public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+reset role;
+
+select pg_temp.as_user('1c000000-0000-4000-8000-000000000010');
+select pg_temp.chk('can_manage_job: not for a user with no membership',
+  not public.can_manage_job('1a000000-0000-4000-8000-0000000000a1'));
+reset role;
+
+set local role anon;
+select pg_temp.chk_denied('can_manage_job: anon may not call it',
+  $q$select public.can_manage_job('1a000000-0000-4000-8000-0000000000a1')$q$);
+reset role;
+
+-- ---------- the interview allowance (D33) ----------
+
+insert into organizations (id, slug, name) values
+  ('1d000000-0000-4000-8000-000000000001','fresh-i','جديدة');
+select pg_temp.chk('quota: a new organization has no interviews until its plan sets them',
+  (select monthly_interview_quota from organizations where id = '1d000000-0000-4000-8000-000000000001') = 0);
+
+select pg_temp.chk_denied('quota: a negative allowance is refused',
+  $q$update organizations set monthly_interview_quota = -1
+     where id = '1a000000-0000-4000-8000-000000000001'$q$);
+
+update organizations set monthly_interview_quota = 20
+where id = '1a000000-0000-4000-8000-000000000001';
+
+select pg_temp.chk('quota: no client role holds UPDATE on monthly_interview_quota',
+  not has_column_privilege('authenticated', 'public.organizations', 'monthly_interview_quota', 'UPDATE')
+  and not has_column_privilege('anon', 'public.organizations', 'monthly_interview_quota', 'UPDATE'));
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000014');
+select pg_temp.chk_denied('quota: an org admin cannot raise the interview allowance',
+  $q$update organizations set monthly_interview_quota = 100000
+     where id = '1a000000-0000-4000-8000-000000000001'$q$);
+-- Control: the same admin CAN update an ordinary column, so the refusal
+-- above is the column grant, not RLS hiding the row.
+update organizations set about = 'نبذة محدثة' where id = '1a000000-0000-4000-8000-000000000001';
+reset role;
+
+select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
+select pg_temp.chk_denied('quota: an org owner cannot change the interview allowance',
+  $q$update organizations set monthly_interview_quota = null
+     where id = '1a000000-0000-4000-8000-000000000001'$q$);
+reset role;
+
+select pg_temp.chk('quota: the allowance is unchanged and the ordinary update went through',
+  (select monthly_interview_quota = 20 and about = 'نبذة محدثة'
+     from organizations where id = '1a000000-0000-4000-8000-000000000001'));
+
+-- ---------- erasure ----------
+
+delete from interview_job_banks where id = '1a000000-0000-4000-8000-0000000000c1';
+select pg_temp.chk('deleting a bank keeps the interview and clears its bank reference',
+  (select job_bank_id is null from interview_assignments where id = '1a000000-0000-4000-8000-00000000e002'));
 
 -- ============================================================
 -- Report

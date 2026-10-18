@@ -37,8 +37,10 @@ export async function signIn(
     return { error: ar.auth.errors.serverError };
   }
 
-  // Outside try/catch: redirect() works by throwing.
-  redirect(safeNext(formData.get("next"), "/admin"));
+  // Outside try/catch: redirect() works by throwing. /onboarding routes
+  // everyone by the rows they have: a workspace to /admin, a seeker profile
+  // to /me or its next step, neither to the chooser (D26).
+  redirect(safeNext(formData.get("next"), "/onboarding"));
 }
 
 export async function signOut(): Promise<void> {

@@ -52,11 +52,14 @@ export const config = {
   // it there added a Supabase Auth round trip to every public navigation,
   // including ISR-cached hits. The authoritative gate stays server-side in
   // lib/auth.ts (D7); rewriteSubdomain() returns before any of that.
+  // The seeker side (D26) — the CV-first onboarding and the /me portal —
+  // signs in like the workspace does, so its sessions refresh here too.
   matcher: [
     "/admin/:path*",
     "/login",
     "/signup",
-    "/onboarding",
+    "/onboarding/:path*",
+    "/me/:path*",
     "/invite/:path*",
     "/",
     "/jobs/:path*",

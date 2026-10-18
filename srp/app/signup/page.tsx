@@ -2,45 +2,89 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
+import { safeNext } from "@/lib/redirects";
 import { SignupForm } from "./signup-form";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
 import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
+import { AudienceTabs } from "@/components/seeker/onboarding/audience-tabs";
 import { ar } from "@/lib/i18n/ar";
 
 export const metadata: Metadata = {
   title: ar.auth.signupTitle,
 };
 
-export default async function SignupPage() {
-  // Already signed in: the next unfinished step is naming the company, and
-  // requireMembership() forwards on from there if that is done too.
-  if (await getUser()) redirect("/onboarding");
+// One account, two doors (D26): "I'm looking for work" and "I represent a
+// company". The tab only chooses where the confirmed account is sent — the
+// CV-first onboarding or the organization form — and is never stored. What
+// a user may do comes from rows (a membership, a talent profile), which the
+// onboarding creates.
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as?: string; next?: string }>;
+}) {
+  const params = await searchParams;
+  const as = params.as === "seeker" ? "seeker" : "company";
+  // Same-site paths only (lib/redirects.ts). An invitation link passes its
+  // own page here so the new account lands back on it.
+  const next = safeNext(params.next, "") || undefined;
+  const target = next ?? (as === "seeker" ? "/onboarding/seeker" : "/onboarding");
+
+  // Already signed in: the next unfinished step, which forwards on by
+  // itself when there is nothing left to do there.
+  if (await getUser()) redirect(target);
+
+  const withNext = (path: string) =>
+    next ? `${path}${path.includes("?") ? "&" : "?"}next=${encodeURIComponent(next)}` : path;
+  const loginHref =
+    target === "/onboarding" ? "/login" : `/login?next=${encodeURIComponent(target)}`;
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
-      <Link href="/">
+    <main
+      id="main"
+      className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16"
+    >
+      <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/35">
         <BrandMark />
       </Link>
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">{ar.auth.signupTitle}</CardTitle>
-          <CardDescription>{ar.auth.signupSubtitle}</CardDescription>
+        <CardHeader className="gap-4">
+          <AudienceTabs
+            label={ar.auth.tabs.label}
+            tabs={[
+              {
+                href: withNext("/signup?as=seeker"),
+                label: ar.auth.tabs.seeker,
+                active: as === "seeker",
+              },
+              {
+                href: withNext("/signup?as=company"),
+                label: ar.auth.tabs.company,
+                active: as === "company",
+              },
+            ]}
+          />
+          <div className="flex flex-col gap-1.5 text-center">
+            <h1 className="text-xl leading-snug font-semibold">{ar.auth.signupTitle}</h1>
+            <CardDescription>
+              {as === "seeker" ? ar.auth.signupSubtitleSeeker : ar.auth.signupSubtitleCompany}
+            </CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           {/* A Google account arrives with a verified email, so nothing paid
               ever runs for an unproven address (D26). */}
-          <GoogleButton />
+          <GoogleButton next={target} />
           <AuthDivider />
-          <SignupForm />
+          <SignupForm as={as} next={next} loginHref={loginHref} />
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
