@@ -16,6 +16,14 @@ const Env = z.object({
   // Origins allowed to call /v1/session from a browser (the platform's).
   ALLOWED_ORIGINS: z.string().default(""),
   OUTBOX_POLL_MS: z.coerce.number().int().min(200).default(2000),
+  // The model key (D3: this server's environment only). Optional: without
+  // it the agent still serves everything that needs no model, and answers
+  // 503 llm_not_configured to anything that would, before creating anything.
+  GEMINI_API_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().min(1).optional()
+  ),
+  PLANNER_POLL_MS: z.coerce.number().int().min(200).default(2000),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -42,5 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       .map((origin) => origin.trim())
       .filter(Boolean),
     outboxPollMs: value.OUTBOX_POLL_MS,
+    geminiApiKey: value.GEMINI_API_KEY ?? null,
+    plannerPollMs: value.PLANNER_POLL_MS,
   };
 }
