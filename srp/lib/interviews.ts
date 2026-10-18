@@ -241,9 +241,13 @@ export type GatewayResult<T> =
   | { ok: false; status: number; code: string };
 
 // The gateway gives the agent 15 s per call and may make two in one action
-// (a refused retry is followed by a read); this only stops a hung request
-// from holding the page or the action forever.
+// (a refused retry is followed by a read); a review edit may be "generate a
+// replacement", for which it waits up to 55 s on the agent's model call.
+// These only stop a hung request from holding the page or the action
+// forever, and must outlast the gateway's own waits: giving up first would
+// report a failure while the gateway is still storing the result.
 const GATEWAY_TIMEOUT_MS = 40_000;
+const GATEWAY_EDIT_TIMEOUT_MS = 65_000;
 const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 
 export async function callGateway<T>(
@@ -268,7 +272,11 @@ export async function callGateway<T>(
       },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+      signal: AbortSignal.timeout(
+        body.action === "bank_edit" || body.action === "interview_bank_edit"
+          ? GATEWAY_EDIT_TIMEOUT_MS
+          : GATEWAY_TIMEOUT_MS
+      ),
     });
   } catch (err) {
     // The name only (TimeoutError, TypeError …): a message could echo a URL.

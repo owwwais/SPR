@@ -61,7 +61,11 @@ import {
 } from "../_shared/interview-contract.ts";
 import { agentRefsConfigured, agentClient, type AgentClient } from "../_shared/interview-agent-client.ts";
 
-const UUID = z.uuid();
+// Any 8-4-4-4-12 hex id, not only RFC 4122 versions: every row id here comes
+// from our own database, and zod's strict z.uuid() rejected hand-written ids
+// such as the seed's, which made the whole flow untestable on seed data.
+// The agent's own ids stay strict in the contract.
+const UUID = z.guid();
 
 // What staff choose. Language is fixed server-side (Arabic only, D23).
 const ConfigInput = z

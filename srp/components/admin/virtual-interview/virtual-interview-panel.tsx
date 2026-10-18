@@ -239,6 +239,7 @@ function LiveInterview({
             target={{ kind: "interview", assignmentId: assignment.id }}
             canEdit={canEdit}
             regenerationsLeft={view.regenerations_left}
+            headings={false}
           />
         )}
         {canEdit && (
@@ -284,6 +285,10 @@ function StartSection({
 }) {
   const t = ar.interviewBank.panel;
   const previous = data.assignment;
+  // The configuration form below is shown only when all of these hold; the
+  // notices invite starting again only then (never to a viewer).
+  const canStart = canEdit && data.quota !== 0 && data.lockedBank !== null && analysisDone;
+  const startAgain = canStart ? ` ${t.failed.startAgain}` : "";
 
   let notice: React.ReactNode = null;
   if (previous && (previous.stale || previousStatus === "failed")) {
@@ -296,7 +301,7 @@ function StartSection({
         <AlertTitle>{t.failed.title}</AlertTitle>
         <AlertDescription>
           {code ? interviewErrorMessage(code) : t.failed.generic}
-          {canEdit && ` ${t.failed.startAgain}`}
+          {startAgain}
         </AlertDescription>
       </Alert>
     );
@@ -306,6 +311,7 @@ function StartSection({
         <Info aria-hidden />
         <AlertDescription>
           {previousStatus === "cancelled" ? t.cancelled : t.expired}
+          {startAgain}
         </AlertDescription>
       </Alert>
     );
