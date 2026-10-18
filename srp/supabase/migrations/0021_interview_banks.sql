@@ -256,7 +256,12 @@ begin
         )
       )
     )
-    and status_at < p_occurred_at;
+    -- A draft's status_at is the platform's clock at insert, not the
+    -- agent's: compared with the agent's occurred_at, a few milliseconds of
+    -- clock skew would drop the agent's first event as stale and leave the
+    -- row in draft. Draft is the platform's placeholder until the agent
+    -- answers, so any event from the agent is newer than it.
+    and (status = 'draft' or status_at < p_occurred_at);
   if found then
     return 'applied';
   end if;

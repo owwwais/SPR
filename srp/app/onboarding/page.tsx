@@ -65,9 +65,15 @@ export default async function OnboardingPage({
     >
       <BrandMark />
       <div className="flex w-full max-w-md flex-col gap-6">
+        {/* A seeker adding a company has nothing to choose: the page is
+            the organization form, so it is titled as one. */}
         <div className="flex flex-col gap-1 text-center">
-          <h1 className="text-2xl font-bold">{t.title}</h1>
-          <p className="text-muted-foreground">{t.subtitle}</p>
+          <h1 className="text-2xl font-bold">
+            {seekerAddingCompany ? ar.onboarding.title : t.title}
+          </h1>
+          <p className="text-muted-foreground">
+            {seekerAddingCompany ? ar.onboarding.subtitle : t.subtitle}
+          </p>
         </div>
 
         {!seekerAddingCompany && <AudienceTabs
@@ -88,10 +94,12 @@ export default async function OnboardingPage({
 
         {tab === "company" ? (
           <Card>
-            <CardHeader>
-              <CardTitle>{ar.onboarding.title}</CardTitle>
-              <CardDescription>{ar.onboarding.subtitle}</CardDescription>
-            </CardHeader>
+            {!seekerAddingCompany && (
+              <CardHeader>
+                <CardTitle>{ar.onboarding.title}</CardTitle>
+                <CardDescription>{ar.onboarding.subtitle}</CardDescription>
+              </CardHeader>
+            )}
             <CardContent>
               <OnboardingForm
                 rootDomain={process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? null}

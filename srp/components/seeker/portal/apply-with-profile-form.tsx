@@ -58,7 +58,7 @@ export function ApplyWithProfileForm({
     return (
       <div
         role="status"
-        className="flex flex-col items-center gap-4 rounded-xl border bg-card p-8 text-center"
+        className="flex flex-col items-center gap-4 p-3 text-center"
       >
         <CheckCircle2 className="size-10 text-success" strokeWidth={1.75} aria-hidden />
         <h2 className="text-xl font-semibold">{t.successTitle}</h2>
@@ -129,10 +129,14 @@ export function ApplyWithProfileForm({
         )}
       >
         <label className="flex cursor-pointer items-start gap-3">
+          {/* aria-required, not required: the browser's own bubble speaks
+              the browser's language, often English. The refusal comes back
+              from submit-application as the Arabic field error below, and
+              costs nothing — consent is checked before any write. */}
           <input
             type="checkbox"
             name="consent"
-            required
+            aria-required="true"
             className="mt-1 size-4 shrink-0 accent-primary"
             aria-describedby="consent-hint"
             aria-invalid={fieldErrors.consent ? true : undefined}

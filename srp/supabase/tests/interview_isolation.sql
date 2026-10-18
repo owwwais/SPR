@@ -256,6 +256,25 @@ select pg_temp.chk('event: the failed assignment stays failed and unbound',
   (select status = 'failed' and external_interview_id is null
    from interview_assignments where id = '1b000000-0000-4000-8000-00000000e003'));
 
+-- A draft's status_at is the platform's clock. With the platform an hour
+-- ahead of the agent, the agent's first event must still win over it; once
+-- the row carries the agent's own time, ordering by time resumes.
+insert into interview_assignments (id, application_id, status, status_at, modes, question_count, duration_minutes, config)
+values ('1b000000-0000-4000-8000-00000000e004','1b000000-0000-4000-8000-0000000000f1', 'draft',
+        now() + interval '1 hour', array['text'], 8, 20, '{}');
+select pg_temp.chk('event: the first event beats a draft whatever the clocks say',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000006', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000dd', '1b000000-0000-4000-8000-00000000e004',
+    'awaiting_review', now()) = 'applied');
+select pg_temp.chk('event: an older event after it is stale again',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000007', 'interview.failed',
+    '2b000000-0000-4000-8000-0000000000dd', '1b000000-0000-4000-8000-00000000e004',
+    'failed', now() - interval '1 minute') = 'stale');
+select pg_temp.chk('event: the draft took the agent''s status, id and clock',
+  (select status = 'awaiting_review' and external_interview_id = '2b000000-0000-4000-8000-0000000000dd'
+          and status_at = now()
+   from interview_assignments where id = '1b000000-0000-4000-8000-00000000e004'));
+
 select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
 select pg_temp.chk_denied('staff cannot call apply_interview_event',
   $q$select public.apply_interview_event(gen_random_uuid(), 'x', gen_random_uuid(),

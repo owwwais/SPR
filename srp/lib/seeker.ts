@@ -136,6 +136,15 @@ export async function requireSeeker(
   return { userId: user.id, email: user.email ?? profile.email, profile };
 }
 
+// The searchable part of a stored analysis error. talent-analyze writes
+// "[<trace>/<step>] <message>"; the seeker is shown the bracketed reference
+// only — the message is the model SDK's own English text, meant for the
+// logs, not for an Arabic page (CLAUDE.md §10.7). null when there is none.
+export function analysisReference(error: string | null): string | null {
+  const match = error?.match(/^\[([^\]\s]+)\]/);
+  return match?.[1] ?? null;
+}
+
 // Where a signed-in user belongs when nothing more specific was asked for.
 export async function homePath(): Promise<string> {
   const hats = await getHats();

@@ -188,6 +188,7 @@ export function ReviewStep({ profile }: { profile: ReviewProfile }) {
                     <button
                       type="button"
                       onClick={() => toggle(skill.id)}
+                      aria-pressed={!isHidden}
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-sm transition-colors duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/35",
                         isHidden
@@ -199,10 +200,12 @@ export function ReviewStep({ profile }: { profile: ReviewProfile }) {
                       <span className="sr-only">
                         {isHidden ? `(${t.show})` : `(${t.hide})`}
                       </span>
+                      {/* The icon shows the state, as on /me/profile
+                          (facts-form): open eye shown, crossed eye hidden. */}
                       {isHidden ? (
-                        <Eye className="size-3.5 text-muted-foreground" aria-hidden />
-                      ) : (
                         <EyeOff className="size-3.5 text-muted-foreground" aria-hidden />
+                      ) : (
+                        <Eye className="size-3.5 text-muted-foreground" aria-hidden />
                       )}
                     </button>
                   </li>

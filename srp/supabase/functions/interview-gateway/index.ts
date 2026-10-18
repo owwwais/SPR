@@ -885,18 +885,24 @@ async function handleCreate(
     assignmentId
   );
   if (!outcome.ok) {
+    // Only while unbound: if the agent's first event already bound its id,
+    // the interview exists there (a lost answer, not a refusal) and stays as
+    // the event left it.
     await admin
       .from("interview_assignments")
       .update({ status: "failed", last_error: outcome.code })
       .eq("id", assignmentId)
-      .eq("org_id", application.org_id);
+      .eq("org_id", application.org_id)
+      .is("external_interview_id", null);
     return fail(outcome.status, outcome.code);
   }
 
   // The agent's first event may already have landed (apply_interview_event
   // binds the agent's id itself when it wins that race), so this write only
   // moves the status forward: the id is set where still empty, and the status
-  // only where what is stored is older than the agent's own clock.
+  // where the row is still the draft placeholder (whose status_at is the
+  // platform's clock, so never compared with the agent's) or older than the
+  // agent's own clock.
   const view = outcome.data;
   await admin
     .from("interview_assignments")
@@ -904,6 +910,12 @@ async function handleCreate(
     .eq("id", assignmentId)
     .eq("org_id", application.org_id)
     .is("external_interview_id", null);
+  await admin
+    .from("interview_assignments")
+    .update({ status: view.status, status_at: view.updated_at })
+    .eq("id", assignmentId)
+    .eq("org_id", application.org_id)
+    .eq("status", "draft");
   await admin
     .from("interview_assignments")
     .update({ status: view.status, status_at: view.updated_at })

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, MailCheck } from "lucide-react";
+import { AlertCircle, CircleCheck, MailCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { homePath } from "@/lib/seeker";
 import { LoginForm } from "./login-form";
@@ -44,9 +44,9 @@ function signupHrefFor(target: string | null): string {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; notice?: string }>;
 }) {
-  const { next, error } = await searchParams;
+  const { next, error, notice } = await searchParams;
   // Same-site paths only (lib/redirects.ts).
   const target = next ? safeNext(next, "") || null : null;
 
@@ -80,6 +80,14 @@ export default async function LoginPage({
             <Alert variant="info">
               <MailCheck className="size-4" aria-hidden />
               <AlertDescription>{ar.auth.confirmNotice}</AlertDescription>
+            </Alert>
+          )}
+          {/* A seeker who deleted their account lands here signed out
+              (deleteSeekerAccount): the deletion is confirmed, not implied. */}
+          {notice === "account_deleted" && (
+            <Alert variant="success" role="status">
+              <CircleCheck className="size-4" aria-hidden />
+              <AlertDescription>{ar.auth.accountDeletedNotice}</AlertDescription>
             </Alert>
           )}
           <GoogleButton next={target ?? undefined} />

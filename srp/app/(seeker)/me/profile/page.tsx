@@ -9,7 +9,7 @@ import { ContactForm } from "@/components/seeker/portal/contact-form";
 import { CvUploadForm } from "@/components/seeker/portal/cv-upload-form";
 import { ExtractedProfile } from "@/components/seeker/portal/extracted-profile";
 import { FactsForm } from "@/components/seeker/portal/facts-form";
-import { requireSeeker } from "@/lib/seeker";
+import { analysisReference, requireSeeker } from "@/lib/seeker";
 import { formatDate } from "@/lib/format";
 import { ar } from "@/lib/i18n/ar";
 
@@ -39,6 +39,7 @@ export default async function SeekerProfilePage() {
   const analysisReady =
     analysisDone || profile.cv_versions.some((v) => v.analysis_status === "done");
   const published = profile.status === "published";
+  const reference = analysisReference(profile.analysis_error);
 
   return (
     <>
@@ -61,14 +62,15 @@ export default async function SeekerProfilePage() {
           <AlertTitle>{t.analysisFailedTitle}</AlertTitle>
           <AlertDescription className="flex flex-col gap-1.5">
             {t.analysisFailedBody}
-            {/* The stored error carries the analysis trace id and no
-                personal data — it is what support searches the logs for. */}
-            {profile.analysis_error && (
+            {/* The trace reference only: it is what support searches the
+                logs for, and carries no personal data. The message after it
+                is the SDK's English text and stays in the logs. */}
+            {reference && (
               <code
                 dir="ltr"
                 className="block select-all break-all rounded-sm bg-surface px-2 py-1 text-start font-mono text-xs text-foreground"
               >
-                {profile.analysis_error}
+                {reference}
               </code>
             )}
           </AlertDescription>

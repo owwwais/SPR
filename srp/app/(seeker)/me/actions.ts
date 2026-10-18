@@ -217,7 +217,9 @@ export async function deleteSeekerAccount(): Promise<DeleteSeekerState> {
     await supabase.auth.signOut({ scope: "local" });
     const cookieStore = await cookies();
     cookieStore.delete(ACTIVE_ORG_COOKIE);
-    redirect("/?account_deleted=1");
+    // To a page that says so: nothing on the landing page reads a flag,
+    // and a deletion nobody confirms reads as one that did not happen.
+    redirect("/login?notice=account_deleted");
   }
 
   // The account stays — normally for its company hat, so this lands on

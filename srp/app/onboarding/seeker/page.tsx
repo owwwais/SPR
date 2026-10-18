@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, Loader2, MailCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
-import { getSeekerProfile, type SeekerProfile } from "@/lib/seeker";
+import { analysisReference, getSeekerProfile, type SeekerProfile } from "@/lib/seeker";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { googleName } from "../google-name";
@@ -161,6 +161,7 @@ function ReviewContent({ profile }: { profile: SeekerProfile }) {
   }
 
   if (profile.analysis_status === "failed") {
+    const reference = analysisReference(profile.analysis_error);
     return (
       <>
         <div className="flex gap-3 rounded-lg bg-warning-soft p-4 text-warning">
@@ -168,11 +169,11 @@ function ReviewContent({ profile }: { profile: SeekerProfile }) {
           <div className="flex flex-col gap-1">
             <h2 className="font-semibold">{t.failedTitle}</h2>
             <p className="text-sm leading-7">{t.failedBody}</p>
-            {profile.analysis_error && (
+            {reference && (
               <p className="text-xs">
                 {t.referenceLabel}:{" "}
                 <span dir="ltr" className="font-mono break-all">
-                  {profile.analysis_error}
+                  {reference}
                 </span>
               </p>
             )}
