@@ -893,19 +893,23 @@ async function handleCreate(
     return fail(outcome.status, outcome.code);
   }
 
-  // One update: the external id and the status land together, so a webhook
-  // can only match this row once its status_at is the agent's own clock.
+  // The agent's first event may already have landed (apply_interview_event
+  // binds the agent's id itself when it wins that race), so this write only
+  // moves the status forward: the id is set where still empty, and the status
+  // only where what is stored is older than the agent's own clock.
   const view = outcome.data;
   await admin
     .from("interview_assignments")
-    .update({
-      external_interview_id: view.id,
-      status: view.status,
-      status_at: view.updated_at,
-      last_error: null,
-    })
+    .update({ external_interview_id: view.id, last_error: null })
     .eq("id", assignmentId)
-    .eq("org_id", application.org_id);
+    .eq("org_id", application.org_id)
+    .is("external_interview_id", null);
+  await admin
+    .from("interview_assignments")
+    .update({ status: view.status, status_at: view.updated_at })
+    .eq("id", assignmentId)
+    .eq("org_id", application.org_id)
+    .lt("status_at", view.updated_at);
 
   return json(201, { ok: true, assignment_id: assignmentId, status: view.status });
 }

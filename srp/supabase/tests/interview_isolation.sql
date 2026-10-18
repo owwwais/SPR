@@ -233,6 +233,17 @@ select pg_temp.chk('event: a matching interview id with the wrong assignment is 
     '2b000000-0000-4000-8000-0000000000aa', '1a000000-0000-4000-8000-00000000e002',
     'failed', '2026-10-16 11:00+00') = 'unknown');
 
+-- The race on create: the agent's first event can arrive before the gateway
+-- has stored the agent's id. A signed event naming an unbound assignment
+-- binds it — unless that interview id is already bound elsewhere (above).
+select pg_temp.chk('event: an event for an unbound assignment binds the agent id and applies',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000004', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000bb', '1a000000-0000-4000-8000-00000000e002',
+    'awaiting_review', now() + interval '1 minute') = 'applied');
+select pg_temp.chk('event: the bound id and the status are stored',
+  (select external_interview_id = '2b000000-0000-4000-8000-0000000000bb' and status = 'awaiting_review'
+   from interview_assignments where id = '1a000000-0000-4000-8000-00000000e002'));
+
 select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
 select pg_temp.chk_denied('staff cannot call apply_interview_event',
   $q$select public.apply_interview_event(gen_random_uuid(), 'x', gen_random_uuid(),

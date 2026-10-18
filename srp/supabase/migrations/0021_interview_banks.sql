@@ -200,3 +200,85 @@ create policy interview_job_banks_platform_select on interview_job_banks
 revoke all on interview_job_banks from anon, authenticated;
 grant select on interview_job_banks to authenticated;
 grant all on interview_job_banks to service_role;
+
+-- ============================================================
+-- apply_interview_event — bind the agent's id when the event wins the race
+--
+-- The gateway stores external_interview_id only after the agent's create
+-- response returns, but the agent may already have queued an event for the
+-- new interview (with no gap probes it is awaiting_review at once). That
+-- event matched no row, was reported 'unknown', and was dropped. The event
+-- is HMAC-signed by the agent and names our assignment id as its
+-- external_ref, so binding the agent's id to an assignment that has none yet
+-- is safe; an assignment already bound to a different interview still
+-- matches nothing.
+-- ============================================================
+create or replace function public.apply_interview_event(
+  p_event_id uuid,
+  p_type text,
+  p_interview_id uuid,
+  p_assignment_id uuid,
+  p_status interview_status,
+  p_occurred_at timestamptz
+)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into interview_webhook_events (event_id, type, external_interview_id)
+  values (p_event_id, p_type, p_interview_id)
+  on conflict (event_id) do nothing;
+  if not found then
+    return 'duplicate';
+  end if;
+
+  update interview_assignments
+  set status = p_status,
+      status_at = p_occurred_at,
+      external_interview_id = coalesce(external_interview_id, p_interview_id),
+      updated_at = now()
+  where id = p_assignment_id
+    and (
+      external_interview_id = p_interview_id
+      or (
+        external_interview_id is null
+        -- An interview already bound to another assignment never moves.
+        and not exists (
+          select 1 from interview_assignments other
+          where other.external_interview_id = p_interview_id
+        )
+      )
+    )
+    and status_at < p_occurred_at;
+  if found then
+    return 'applied';
+  end if;
+
+  if exists (
+    select 1 from interview_assignments
+    where id = p_assignment_id
+      and (
+        external_interview_id = p_interview_id
+        or (
+          external_interview_id is null
+          and not exists (
+            select 1 from interview_assignments other
+            where other.external_interview_id = p_interview_id
+          )
+        )
+      )
+  ) then
+    return 'stale';
+  end if;
+  return 'unknown';
+end;
+$$;
+
+revoke execute on function public.apply_interview_event(
+  uuid, text, uuid, uuid, interview_status, timestamptz
+) from public, anon, authenticated;
+grant execute on function public.apply_interview_event(
+  uuid, text, uuid, uuid, interview_status, timestamptz
+) to service_role;
