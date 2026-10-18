@@ -16,10 +16,10 @@ import { QuestionContent, type QuestionKind } from "../contract/index.ts";
 
 // Zero-width and bidi controls: removed first so they cannot split a word
 // into harmless-looking pieces.
-const INVISIBLE = /[­؜​-‏‪-‮⁠-⁤⁦-⁩﻿]/g;
+const INVISIBLE = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
 // Harakat, Quranic marks, superscript alef and tatweel.
-const DIACRITICS = /[ؐ-ًؚ-ٰٟۖ-ۭـ]/g;
-const ARABIC_INDIC_DIGITS = /[٠-٩۰-۹]/g;
+const DIACRITICS = /[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/g;
+const ARABIC_INDIC_DIGITS = /[\u0660-\u0669\u06f0-\u06f9]/g;
 
 // Folds letter variants but keeps «ى» and «ة» distinct for now: a final «ى»
 // or «ة» is part of the word, not a pronoun suffix, and that distinction is
