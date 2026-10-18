@@ -273,7 +273,7 @@ export default async function JobDetailPage({
       </section>
 
       {!applicationsClosed && (
-        <div className="border-t pt-6">
+        <div className="flex flex-wrap items-center gap-3 border-t pt-6">
           <Button
             size="lg"
             nativeButton={false}
@@ -281,6 +281,17 @@ export default async function JobDetailPage({
           >
             {ar.jobs.applyNow}
           </Button>
+          {company.listed_publicly && (
+            <Button
+              size="lg"
+              variant="outline"
+              nativeButton={false}
+              title={ar.seekerPortal.applyWithProfileHint}
+              render={<Link href={`/me/apply/${job.id}`} />}
+            >
+              {ar.seekerPortal.applyWithProfile}
+            </Button>
+          )}
         </div>
       )}
     </article>

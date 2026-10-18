@@ -200,8 +200,14 @@ async function analyzeCv(
     parts.push({ text: value.slice(0, MAX_CV_TEXT_CHARS) });
   }
 
+  // Without a key the SDK quietly falls back to Google's default
+  // credentials and fails with a message about those instead; say plainly
+  // what is missing, under its own step.
+  step.current = "configuration";
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
   step.current = "model_call";
-  const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
+  const ai = new GoogleGenAI({ apiKey });
   log.step("model_call_start");
   const response = await ai.models.generateContent({
     model: MODEL,

@@ -145,6 +145,17 @@ export function analysisReference(error: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+// Whether a failed analysis was our failure rather than the file's. The
+// stored reference is "<trace>/<step>" (talent-analyze); only reading the
+// text out of the file and judging what the model made of it say anything
+// about the file. A storage hiccup, a missing key or a model outage must not
+// tell the person their CV is unreadable.
+const FILE_STEPS = new Set(["extract_text", "parse_model_response"]);
+export function analysisFailedOnOurSide(error: string | null): boolean {
+  const step = analysisReference(error)?.split("/")[1];
+  return step !== undefined && !FILE_STEPS.has(step);
+}
+
 // Where a signed-in user belongs when nothing more specific was asked for.
 export async function homePath(): Promise<string> {
   const hats = await getHats();

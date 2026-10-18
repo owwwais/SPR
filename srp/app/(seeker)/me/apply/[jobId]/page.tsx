@@ -187,11 +187,12 @@ export default async function ApplyWithProfilePage({
         </div>
 
         {/* What travels with the application, stated before the consent is
-            given. These are the profile's own values; the function reads
-            them again from the database, not from this page. */}
+            given — so on a phone, where the columns stack, it comes first.
+            These are the profile's own values; the function reads them
+            again from the database, not from this page. */}
         <aside
           aria-labelledby="shared-title"
-          className="flex flex-col gap-3 rounded-xl border bg-surface-soft/60 p-5 text-sm"
+          className="order-first flex flex-col gap-3 rounded-xl border bg-surface-soft/60 p-5 text-sm lg:order-none"
         >
           <h2 id="shared-title" className="font-semibold">
             {t.sharedTitle}

@@ -11,7 +11,7 @@ export default function NotFound() {
       <FileQuestion className="size-12 text-muted-foreground" aria-hidden />
       <h1 className="text-2xl font-bold">{ar.errors.notFoundTitle}</h1>
       <p className="text-sm text-muted-foreground">{ar.errors.notFoundBody}</p>
-      <Button render={<Link href="/" />}>{ar.errors.home}</Button>
+      <Button nativeButton={false} render={<Link href="/" />}>{ar.errors.home}</Button>
     </main>
   );
 }

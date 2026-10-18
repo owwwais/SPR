@@ -9,7 +9,7 @@ import { ContactForm } from "@/components/seeker/portal/contact-form";
 import { CvUploadForm } from "@/components/seeker/portal/cv-upload-form";
 import { ExtractedProfile } from "@/components/seeker/portal/extracted-profile";
 import { FactsForm } from "@/components/seeker/portal/facts-form";
-import { analysisReference, requireSeeker } from "@/lib/seeker";
+import { analysisFailedOnOurSide, analysisReference, requireSeeker } from "@/lib/seeker";
 import { formatDate } from "@/lib/format";
 import { ar } from "@/lib/i18n/ar";
 
@@ -61,7 +61,9 @@ export default async function SeekerProfilePage() {
           <CircleAlert aria-hidden />
           <AlertTitle>{t.analysisFailedTitle}</AlertTitle>
           <AlertDescription className="flex flex-col gap-1.5">
-            {t.analysisFailedBody}
+            {analysisFailedOnOurSide(profile.analysis_error)
+              ? t.analysisFailedBodyOurs
+              : t.analysisFailedBody}
             {/* The trace reference only: it is what support searches the
                 logs for, and carries no personal data. The message after it
                 is the SDK's English text and stays in the logs. */}

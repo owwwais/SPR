@@ -253,7 +253,12 @@ Deno.serve(async (req) => {
     );
     const interviewBlock = formatInterviewQa(application.interview_qa);
 
-    const ai = new GoogleGenAI({ apiKey: Deno.env.get("GEMINI_API_KEY")! });
+    // Without a key the SDK quietly falls back to Google's default
+    // credentials and fails with a message about those instead. Fail plainly
+    // here, before anything reaches the model, so the quota unit is returned.
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+    const ai = new GoogleGenAI({ apiKey });
 
     // Blind screening (0016). When the organisation has it on, the CV is
     // anonymised first and ONLY the redacted text reaches the evaluation —

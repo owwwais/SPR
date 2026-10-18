@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, FileUp } from "lucide-react";
 import Link from "next/link";
 import { getSession, requireUser } from "@/lib/auth";
-import { getHats } from "@/lib/seeker";
+import { getHats, getSeekerProfile } from "@/lib/seeker";
 import { OnboardingForm } from "./onboarding-form";
 import { googleName } from "./google-name";
 import { AudienceTabs } from "@/components/seeker/onboarding/audience-tabs";
@@ -103,7 +103,11 @@ export default async function OnboardingPage({
             <CardContent>
               <OnboardingForm
                 rootDomain={process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? null}
-                defaultFullName={googleName(user.user_metadata)}
+                defaultFullName={
+                  // A seeker adding a company already told us their name.
+                  (seekerAddingCompany ? (await getSeekerProfile())?.full_name : null) ??
+                  googleName(user.user_metadata)
+                }
               />
             </CardContent>
           </Card>
