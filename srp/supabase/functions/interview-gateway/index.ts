@@ -59,7 +59,7 @@ import {
   type CreateInterviewRequest,
   type TenantContext,
 } from "../_shared/interview-contract.ts";
-import { agentClient, type AgentClient } from "../_shared/interview-agent-client.ts";
+import { agentRefsConfigured, agentClient, type AgentClient } from "../_shared/interview-agent-client.ts";
 
 const UUID = z.uuid();
 
@@ -1042,7 +1042,7 @@ Deno.serve(async (req) => {
   }
 
   const agent = agentClient();
-  if (!agent) {
+  if (!agent || !agentRefsConfigured()) {
     console.error(
       "interview-gateway: INTERVIEW_AGENT_URL / INTERVIEW_AGENT_KEYS / INTERVIEW_REF_SECRET not set"
     );

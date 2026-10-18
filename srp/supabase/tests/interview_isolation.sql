@@ -244,6 +244,18 @@ select pg_temp.chk('event: the bound id and the status are stored',
   (select external_interview_id = '2b000000-0000-4000-8000-0000000000bb' and status = 'awaiting_review'
    from interview_assignments where id = '1a000000-0000-4000-8000-00000000e002'));
 
+-- ...but a create the gateway already gave up on stays given up: a late
+-- event never revives a failed assignment beside a newer one.
+insert into interview_assignments (id, application_id, status, modes, question_count, duration_minutes, config)
+values ('1b000000-0000-4000-8000-00000000e003','1b000000-0000-4000-8000-0000000000f1', 'failed', array['text'], 8, 20, '{}');
+select pg_temp.chk('event: a late event for a failed, unbound assignment is not applied',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000005', 'interview.planned',
+    '2b000000-0000-4000-8000-0000000000cc', '1b000000-0000-4000-8000-00000000e003',
+    'awaiting_review', now() + interval '1 minute') = 'unknown');
+select pg_temp.chk('event: the failed assignment stays failed and unbound',
+  (select status = 'failed' and external_interview_id is null
+   from interview_assignments where id = '1b000000-0000-4000-8000-00000000e003'));
+
 select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
 select pg_temp.chk_denied('staff cannot call apply_interview_event',
   $q$select public.apply_interview_event(gen_random_uuid(), 'x', gen_random_uuid(),

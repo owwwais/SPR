@@ -13,17 +13,33 @@ export type AgentClient = {
   tenantRef(orgId: string): Promise<string>;
 };
 
+function configuredRefSecret(): string | null {
+  const value = Deno.env.get("INTERVIEW_REF_SECRET");
+  return value && value.length >= 32 ? value : null;
+}
+
+// Whether candidate and tenant references can be computed. The gateway needs
+// them for everything it sends; retention's erasure does not.
+export function agentRefsConfigured(): boolean {
+  return configuredRefSecret() !== null;
+}
+
 // null when the agent is not configured for this project — callers decide
 // whether that is an error (the gateway) or a reason to wait (retention).
 export function agentClient(): AgentClient | null {
   const base = Deno.env.get("INTERVIEW_AGENT_URL");
   const keys = Deno.env.get("INTERVIEW_AGENT_KEYS");
+  if (!base || !keys) return null;
   // Deliberately NOT a signing key. Signing keys rotate; a reference must
   // not, or every tenant's monthly interview count and bank ownership on the
   // agent would silently reset with the rotation. Set once, never shared with
-  // the agent, never changed.
-  const refSecret = Deno.env.get("INTERVIEW_REF_SECRET");
-  if (!base || !keys || !refSecret || refSecret.length < 32) return null;
+  // the agent, never changed. Only the references need it, so signed calls
+  // such as retention's erasure keep working while it is missing.
+  const refSecret = configuredRefSecret();
+  const requireRefSecret = (): string => {
+    if (!refSecret) throw new Error("INTERVIEW_REF_SECRET is not set (32+ characters)");
+    return refSecret;
+  };
   const keyring = parseKeyring(keys);
   // The first entry signs; the agent accepts any live one, which is what
   // lets a key be rotated without downtime.
@@ -55,7 +71,7 @@ export function agentClient(): AgentClient | null {
     // Stable per application and meaningless without the secret: the agent
     // can tell two sessions are the same candidate, never who they are.
     async candidateRef(applicationId) {
-      const digest = await hmacSha256Hex(refSecret, `candidate:${applicationId}`);
+      const digest = await hmacSha256Hex(requireRefSecret(), `candidate:${applicationId}`);
       return `c_${digest.slice(0, 32)}`;
     },
     // Who pays, without saying who (contract TenantContext): the agent counts
@@ -65,7 +81,7 @@ export function agentClient(): AgentClient | null {
     // application id. Keyed by the reference secret, so rotating the signing
     // keys leaves every reference — and every tenant's usage — intact.
     async tenantRef(orgId) {
-      const digest = await hmacSha256Hex(refSecret, `tenant:${orgId}`);
+      const digest = await hmacSha256Hex(requireRefSecret(), `tenant:${orgId}`);
       return `t_${digest.slice(0, 32)}`;
     },
   };

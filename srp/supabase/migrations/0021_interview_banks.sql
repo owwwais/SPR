@@ -244,6 +244,11 @@ begin
       external_interview_id = p_interview_id
       or (
         external_interview_id is null
+        -- Only an assignment still waiting for the agent's answer: one the
+        -- gateway already marked failed (a create that timed out although
+        -- the agent did create it) stays failed rather than coming back to
+        -- life beside the newer interview staff may have started since.
+        and status = 'draft'
         -- An interview already bound to another assignment never moves.
         and not exists (
           select 1 from interview_assignments other
@@ -263,6 +268,7 @@ begin
         external_interview_id = p_interview_id
         or (
           external_interview_id is null
+          and status = 'draft'
           and not exists (
             select 1 from interview_assignments other
             where other.external_interview_id = p_interview_id
@@ -273,6 +279,12 @@ begin
     return 'stale';
   end if;
   return 'unknown';
+exception
+  -- A status that would make a second live interview for one application
+  -- (interview_assignments_one_live). Acknowledged rather than raised: a 500
+  -- would only make the agent redeliver it for hours to the same outcome.
+  when unique_violation then
+    return 'stale';
 end;
 $$;
 
