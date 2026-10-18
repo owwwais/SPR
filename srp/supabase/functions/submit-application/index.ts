@@ -564,9 +564,13 @@ Deno.serve(async (req) => {
     return fail(403, { error: "captcha_failed" });
   }
 
+  // A profile submission is keyed on its verified account instead of an IP:
+  // it arrives from the Next.js server, whose egress address every seeker
+  // shares, so an IP limit would throttle all of them together. The
+  // per-email limit still applies.
   const salt = Deno.env.get("THROTTLE_SALT") ?? "srp";
   const [ipHash, emailHash] = await Promise.all([
-    sha256Hex(`${salt}:${clientIp(req)}`),
+    sha256Hex(user ? `${salt}:account:${user.id}` : `${salt}:${clientIp(req)}`),
     sha256Hex(`${salt}:${applicant.email}`),
   ]);
 

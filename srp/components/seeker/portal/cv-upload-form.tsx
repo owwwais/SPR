@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { keepValuesSubmit } from "@/components/seeker/portal/keep-values-submit";
 import { uploadSeekerCv, type UploadCvState } from "@/lib/seeker-actions";
-import { CV_MAX_BYTES, CV_MIME_TYPES } from "@/lib/validations/application";
+import { CV_FORM_MAX_BYTES, CV_MIME_TYPES } from "@/lib/validations/application";
 import { cn } from "@/lib/utils";
 import { ar } from "@/lib/i18n/ar";
 
@@ -24,7 +24,7 @@ function fileProblem(file: File): string | null {
   if (!typed && !(unlabelled && (name.endsWith(".pdf") || name.endsWith(".docx")))) {
     return e.cvType;
   }
-  if (file.size > CV_MAX_BYTES) return e.cvSize;
+  if (file.size > CV_FORM_MAX_BYTES) return e.cvSize;
   return null;
 }
 

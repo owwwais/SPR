@@ -63,19 +63,6 @@ async function sha256Hex(data: ArrayBuffer | string): Promise<string> {
     .join("");
 }
 
-// Rightmost hop, never the leftmost: proxies append, so the first entry is
-// whatever the caller wrote. Same reasoning as submit-application.
-function clientIp(req: Request): string {
-  const direct =
-    req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip");
-  if (direct?.trim()) return direct.trim();
-  const hops = (req.headers.get("x-forwarded-for") ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean);
-  return hops.length > 0 ? hops[hops.length - 1]! : "unknown";
-}
-
 // Leading bytes, not the browser's claim about them.
 async function sniffMime(file: File): Promise<CvMime | null> {
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
@@ -208,11 +195,13 @@ Deno.serve(async (req) => {
   // ---- 4. throttle -----------------------------------------------------
   // Keyed on the account id rather than the address: an address can be
   // changed, the id cannot, so this is the key a person cannot rotate to
-  // earn a fresh allowance. Same ledger and limits as before (3 a day per
-  // key, 10 per IP).
+  // earn a fresh allowance (3 a day). The "IP" slot of the ledger is keyed
+  // on the account too: the only caller is a Next.js server action, so the
+  // address this function sees is the web server's egress IP, shared by
+  // every seeker — as an IP limit it would cap uploads for the whole site.
   const salt = Deno.env.get("THROTTLE_SALT") ?? "";
   const [ipHash, accountHash] = await Promise.all([
-    sha256Hex(salt + clientIp(req)),
+    sha256Hex(`${salt}account-ip:${user.id}`),
     sha256Hex(salt + user.id),
   ]);
 
@@ -381,14 +370,25 @@ Deno.serve(async (req) => {
   const { data: versions, error: listError } = await admin
     .schema("talent")
     .from("cv_versions")
-    .select("id, path")
+    .select("id, path, analysis_status")
     .eq("profile_id", currentProfile.id)
     .order("created_at", { ascending: false });
   if (listError) {
     // Not fatal: the upload succeeded and the next one prunes again.
     log.fail("prune_list", listError.message, { pg_code: listError.code });
   } else {
-    const excess = (versions ?? []).slice(KEEP_VERSIONS) as { id: string; path: string }[];
+    // The newest analysed version is never pruned, whatever its age: three
+    // failed uploads in a row must not delete the one CV the seeker can
+    // still apply with.
+    const all = (versions ?? []) as { id: string; path: string; analysis_status: string }[];
+    const keepDone = all.find((v) => v.analysis_status === "done");
+    const kept = new Set(
+      [keepDone, ...all.filter((v) => v !== keepDone)]
+        .filter((v): v is { id: string; path: string; analysis_status: string } => Boolean(v))
+        .slice(0, KEEP_VERSIONS)
+        .map((v) => v.id)
+    );
+    const excess = all.filter((v) => !kept.has(v.id));
     if (excess.length > 0) {
       const { error: removeError } = await admin.storage
         .from("talent-cvs")

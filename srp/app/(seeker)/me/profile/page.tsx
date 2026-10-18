@@ -118,7 +118,12 @@ export default async function SeekerProfilePage() {
                 the form's initial values (headline and years may have just
                 been filled in from the CV) instead of keeping stale ones. */}
             <FactsForm
-              key={`${profile.analysis_status}-${profile.cv_versions[0]?.id ?? "none"}`}
+              // Remounted only when the analysis the form shows is replaced
+              // by a newer finished one — not on every status change, which
+              // would discard what the person is typing while a new CV is read.
+              key={
+                profile.cv_versions.find((v) => v.analysis_status === "done")?.id ?? "none"
+              }
               locked={!analysisReady}
               fullName={profile.full_name}
               city={profile.city}

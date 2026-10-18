@@ -8,7 +8,10 @@ export type EmailKind =
   | "rejected"
   | "invitation"
   // Talent platform: proves the address before any analysis is paid for.
-  | "talent_verify";
+  | "talent_verify"
+  // Seeker accounts: proves the address again before an old profile is
+  // linked to an account (0020, talent_issue_legacy_link).
+  | "talent_link";
 
 type TemplateInput = {
   fullName: string;
@@ -41,8 +44,10 @@ function layout(title: string, body: string, companyName: string): string {
 </html>`;
 }
 
+// The talent kinds carry a link, not an applicant or invitation record, and
+// have their own builders below; this one never receives them.
 export function buildEmail(
-  kind: EmailKind,
+  kind: Exclude<EmailKind, "talent_verify" | "talent_link">,
   input: TemplateInput
 ): Template {
   switch (kind) {
@@ -150,6 +155,31 @@ export function buildTalentVerifyEmail(verifyUrl: string): Template {
        <p style="font-size:13px;color:#6b7280;line-height:1.8">
          الرابط صالح 24 ساعة. إن لم تكن أنت من رفع السيرة، تجاهل هذه الرسالة
          ولن يُنشَر أي شيء.
+       </p>`,
+      ""
+    ),
+  };
+}
+
+export function buildTalentLinkEmail(linkUrl: string): Template {
+  return {
+    subject: "اربط صفحتك المهنية بحسابك",
+    html: layout(
+      "طلب ربط صفحتك بحساب",
+      `<p style="font-size:15px;line-height:1.8;color:#374151">
+         طُلب ربط صفحتك المهنية المرتبطة بهذا البريد بحساب في المنصة. إن كنت
+         أنت من طلب ذلك، افتح الرابط وأنت مسجّل الدخول في الحساب نفسه، ثم أكّد
+         الربط.
+       </p>
+       <p style="margin:24px 0">
+         <a href="${linkUrl}"
+            style="display:inline-block;background:#1c1c1c;color:#fafafa;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:15px;font-weight:600">
+           ربط صفحتي بحسابي
+         </a>
+       </p>
+       <p style="font-size:13px;color:#6b7280;line-height:1.8">
+         الرابط صالح ساعة واحدة. إن لم تطلب الربط فتجاهل هذه الرسالة، وتبقى
+         صفحتك كما هي دون أي تغيير.
        </p>`,
       ""
     ),

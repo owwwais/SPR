@@ -31,6 +31,14 @@ alter table talent.profiles
 alter table talent.profiles
   add column preferences jsonb not null default '{}'::jsonb;
 
+-- A pending request to link this legacy profile to an account, proven by a
+-- one-time link emailed to the profile's own address. Only the token's hash
+-- is stored; the token itself exists only in that email.
+alter table talent.profiles
+  add column link_token_hash text,
+  add column link_requested_by uuid references auth.users(id) on delete set null,
+  add column link_requested_at timestamptz;
+
 -- Where the CV-first onboarding stands (plan §2.3). A routing hint for the
 -- app, never an authorization input.
 alter table talent.profiles
@@ -308,7 +316,21 @@ as $$
     'experiences', talent.json_array(p.extracted -> 'experiences'),
     'education', talent.json_array(p.extracted -> 'education'),
     'languages', talent.json_array(p.extracted -> 'languages'),
-    'consent_public', p.consent_public_at is not null,
+    -- An analysis still unfinished ten minutes after its file arrived was
+    -- lost (a dropped invocation, a worker stopped at its limit) and nothing
+    -- will finish it; talent-upload accepts the same file again after the
+    -- same window, so the UI offers the upload instead of a spinner.
+    'analysis_stale', p.analysis_status in ('pending', 'processing') and coalesce((
+      select v.created_at < now() - interval '10 minutes'
+      from talent.cv_versions v
+      where v.profile_id = p.id
+      order by v.created_at desc, v.id desc
+      limit 1
+    ), false),
+    -- What the person has, not merely what they once gave: a legacy page its
+    -- owner hid (talent_set_visibility) keeps its consent timestamp, and
+    -- reading that as consent would pre-tick the box and republish it.
+    'consent_public', p.consent_public_at is not null and p.status = 'published',
     'consent_offers', p.consent_offers_at is not null,
     'noindex', p.noindex,
     'public_token', p.public_token,
@@ -561,12 +583,13 @@ grant execute on function public.talent_set_my_consents(boolean, boolean, boolea
 -- ============================================================
 -- Legacy profiles (§2.9)
 --
--- A profile created through the accountless flow can be claimed by the
--- account whose CONFIRMED auth email equals the profile's VERIFIED email —
--- both proofs, so neither an unconfirmed signup nor an unverified upload can
--- claim someone else's CV. Linking is the owner's explicit choice: the app
--- calls talent_link_legacy_profile() only from the button that asks, and
--- never on its own.
+-- A profile created through the accountless flow is OFFERED to the account
+-- whose confirmed auth email equals the profile's verified email, and
+-- LINKED only after the person proves the address again with a one-time
+-- link sent to it (below) — a confirmed account alone is not proof, because
+-- an organisation owner can create one for any address. Linking is the
+-- owner's explicit choice twice over: they ask for the email, and they press
+-- the button on the page it opens.
 -- ============================================================
 create or replace function public.talent_legacy_profile_available()
 returns boolean
@@ -592,23 +615,32 @@ $$;
 revoke execute on function public.talent_legacy_profile_available() from public, anon;
 grant execute on function public.talent_legacy_profile_available() to authenticated;
 
-create or replace function public.talent_link_legacy_profile()
+-- Proof of the address, not just a confirmed account. An auth account's
+-- email_confirmed_at is not something its holder necessarily proved: an
+-- organisation owner adding a colleague (manage-users) creates the account
+-- already confirmed, for any address they type. Linking on that flag alone
+-- would let anyone who can create an organisation mint an account for a
+-- stranger's address and take over that stranger's CV. So the link is
+-- completed only with a one-time token emailed to the profile's own address
+-- (talent_issue_legacy_link, called by seeker-account) and redeemed here by
+-- the same account within an hour.
+create or replace function public.talent_issue_legacy_link(p_user uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, talent
 as $$
 declare
-  v_uid uuid := auth.uid();
   v_email text;
   v_confirmed timestamptz;
   v_profile talent.profiles%rowtype;
+  v_token text;
 begin
   select email, email_confirmed_at into v_email, v_confirmed
-  from auth.users where id = v_uid;
+  from auth.users where id = p_user;
 
-  if v_uid is null or v_email is null or v_confirmed is null
-     or exists (select 1 from talent.profiles where user_id = v_uid) then
+  if v_email is null or v_confirmed is null
+     or exists (select 1 from talent.profiles where user_id = p_user) then
     return jsonb_build_object('ok', false, 'error', 'not_available');
   end if;
 
@@ -625,16 +657,86 @@ begin
     return jsonb_build_object('ok', false, 'error', 'not_available');
   end if;
 
-  -- The account owns the profile from here. The old verify link is retired
-  -- so it cannot be replayed against an account-owned profile, and the
-  -- token pages stop reaching it (they serve unlinked profiles only).
-  -- Legacy rows never collected a phone, which applying needs, so they
-  -- resume at the contact step.
+  -- One email at a time: a button pressed twice, or a script, must not turn
+  -- this into a way to flood someone's inbox.
+  if v_profile.link_requested_at > now() - interval '2 minutes' then
+    return jsonb_build_object('ok', false, 'error', 'too_soon');
+  end if;
+
+  -- 122 random bits from the server's strong generator; no extension needed.
+  v_token := replace(gen_random_uuid()::text, '-', '');
+  update talent.profiles
+  set link_token_hash = encode(sha256(convert_to(v_token, 'UTF8')), 'hex'),
+      link_requested_by = p_user,
+      link_requested_at = now()
+  where id = v_profile.id;
+
+  return jsonb_build_object('ok', true, 'token', v_token, 'email', v_profile.email);
+end;
+$$;
+
+revoke execute on function public.talent_issue_legacy_link(uuid) from public, anon, authenticated;
+grant execute on function public.talent_issue_legacy_link(uuid) to service_role;
+
+drop function if exists public.talent_link_legacy_profile();
+
+create or replace function public.talent_link_legacy_profile(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, talent
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email text;
+  v_confirmed timestamptz;
+  v_profile talent.profiles%rowtype;
+begin
+  select email, email_confirmed_at into v_email, v_confirmed
+  from auth.users where id = v_uid;
+
+  if v_uid is null or v_email is null or v_confirmed is null
+     or p_token is null or p_token !~ '^[0-9a-f]{32}$'
+     or exists (select 1 from talent.profiles where user_id = v_uid) then
+    return jsonb_build_object('ok', false, 'error', 'not_available');
+  end if;
+
+  -- The token proves the address; requested_by ties it to the account that
+  -- asked, so a link forwarded to someone else's session does nothing.
+  select * into v_profile
+  from talent.profiles p
+  where p.user_id is null
+    and p.email_verified_at is not null
+    and lower(p.email) = lower(v_email)
+    and p.link_token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex')
+    and p.link_requested_by = v_uid
+    and p.link_requested_at > now() - interval '1 hour'
+  limit 1
+  for update;
+
+  if v_profile.id is null then
+    return jsonb_build_object('ok', false, 'error', 'not_available');
+  end if;
+
+  -- The account owns the profile from here. The old verify link and this
+  -- link token are retired so neither can be replayed, and the token pages
+  -- stop reaching it (they serve unlinked profiles only). Legacy rows never
+  -- collected a phone, which applying needs, so they resume at the contact
+  -- step. An analysis the legacy flow left unfinished will never finish now
+  -- (nothing claims it): it becomes failed, so the person is offered a
+  -- re-upload instead of a spinner that never ends.
   update talent.profiles
   set user_id = v_uid,
       onboarding_step = case when phone is null then 'contact' else 'done' end,
       verify_token = null,
       verify_sent_at = null,
+      link_token_hash = null,
+      link_requested_by = null,
+      link_requested_at = null,
+      analysis_status = case
+        when analysis_status in ('pending', 'processing') then 'failed'::analysis_status
+        else analysis_status
+      end,
       updated_at = now()
   where id = v_profile.id;
 
@@ -653,7 +755,10 @@ begin
         else 'application/pdf'
       end,
       null,
-      v_profile.analysis_status
+      case
+        when v_profile.analysis_status in ('pending', 'processing') then 'failed'::analysis_status
+        else v_profile.analysis_status
+      end
     )
     on conflict (path) do nothing;
   end if;
@@ -662,8 +767,8 @@ begin
 end;
 $$;
 
-revoke execute on function public.talent_link_legacy_profile() from public, anon;
-grant execute on function public.talent_link_legacy_profile() to authenticated;
+revoke execute on function public.talent_link_legacy_profile(text) from public, anon;
+grant execute on function public.talent_link_legacy_profile(text) to authenticated;
 
 -- ============================================================
 -- The legacy token functions serve unlinked profiles only.

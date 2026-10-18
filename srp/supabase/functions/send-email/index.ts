@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import {
   buildEmail,
+  buildTalentLinkEmail,
   buildTalentVerifyEmail,
   type EmailKind,
 } from "./templates.ts";
@@ -71,6 +72,37 @@ Deno.serve(async (req) => {
   const resendKeyEarly = Deno.env.get("RESEND_API_KEY");
   const fromAddress = Deno.env.get("EMAIL_FROM") ?? "onboarding@resend.dev";
   const siteUrlEarly = Deno.env.get("SITE_URL")?.replace(/\/$/, "") ?? null;
+
+  // ---- talent_link: proof of address before linking an old profile ----
+  // Service role only: the caller is seeker-account, and the link inside is
+  // the one-time token itself — it must never be sendable by a browser to an
+  // address of its choosing.
+  if (kind === "talent_link") {
+    if (!isServiceRoleCaller(req)) {
+      return json(403, { error: "service role only" });
+    }
+    const to = payload.email;
+    const linkUrl = payload.url;
+    if (!to || !linkUrl) {
+      return json(400, { error: "email and url required" });
+    }
+    if (!resendKeyEarly) {
+      console.error("RESEND_API_KEY is not configured");
+      return json(500, { error: "email not configured" });
+    }
+    const { subject, html } = buildTalentLinkEmail(linkUrl);
+    const { error: sendError } = await new Resend(resendKeyEarly).emails.send({
+      from: fromAddress,
+      to,
+      subject,
+      html,
+    });
+    if (sendError) {
+      console.error("resend send failed:", sendError.message);
+      return json(502, { error: "send failed" });
+    }
+    return json(200, { ok: true });
+  }
 
   // ---- talent_verify: the companion product's address check ----
   // Service role only, like every other kind here: the caller is
