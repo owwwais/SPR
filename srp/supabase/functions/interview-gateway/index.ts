@@ -41,7 +41,8 @@
 // A network failure is 502 agent_unreachable.
 //
 // Secrets: INTERVIEW_AGENT_URL, INTERVIEW_AGENT_KEYS ("k1:<secret>", shared
-// with the agent's PLATFORM_HMAC_KEYS), plus the platform-injected
+// with the agent's PLATFORM_HMAC_KEYS), INTERVIEW_REF_SECRET (the key for
+// the opaque candidate/tenant references; never rotated), plus the platform-injected
 // SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -1038,7 +1039,9 @@ Deno.serve(async (req) => {
 
   const agent = agentClient();
   if (!agent) {
-    console.error("interview-gateway: INTERVIEW_AGENT_URL / INTERVIEW_AGENT_KEYS not set");
+    console.error(
+      "interview-gateway: INTERVIEW_AGENT_URL / INTERVIEW_AGENT_KEYS / INTERVIEW_REF_SECRET not set"
+    );
     return fail(503, "interviews_not_configured");
   }
 
