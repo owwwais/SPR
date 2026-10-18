@@ -260,7 +260,13 @@ async function callAgent<S extends z.ZodType>(
 ): Promise<AgentOutcome<z.infer<S>>> {
   let response: Response;
   try {
-    response = await agent.call(method, path, body, idempotencyKey);
+    // A review edit may be "generate a replacement", which waits for one
+    // model call on the agent (its own ceiling is 45 s). Giving up sooner
+    // would report agent_unreachable while the agent still stores the
+    // replacement, so edits get room for that call; everything else keeps
+    // the short default.
+    const timeoutMs = method === "PATCH" ? 55_000 : undefined;
+    response = await agent.call(method, path, body, idempotencyKey, timeoutMs);
   } catch (err) {
     console.error(
       `interview-gateway: agent unreachable on ${method} ${route}:`,
