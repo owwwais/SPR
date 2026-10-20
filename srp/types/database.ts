@@ -723,7 +723,7 @@ export type Database = {
         Returns: boolean;
       };
       talent_link_legacy_profile: {
-        Args: Record<PropertyKey, never>;
+        Args: { p_token: string };
         Returns: unknown;
       };
       // The caller's own applications. Never any AI evaluation (FR-08 parity).

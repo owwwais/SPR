@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // An expired or already-used confirmation link comes back with an error
+  // and no code, and the address is NOT confirmed: say so, rather than
+  // telling the person their email is confirmed and then failing their
+  // sign-in as a wrong password.
+  if (viaEmail && searchParams.get("error_code")) {
+    return NextResponse.redirect(new URL("/login?error=link_expired", origin));
+  }
+
   // A confirmation link opened in another browser cannot complete the PKCE
   // exchange (the verifier cookie lives where signup happened), but Supabase
   // confirmed the address before redirecting here. So the login page says

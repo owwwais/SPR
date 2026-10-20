@@ -86,6 +86,12 @@ Deno.serve(async (req) => {
     p_assignment_id: event.external_ref,
     p_status: event.status,
     p_occurred_at: event.occurred_at,
+    // interview.failed carries the planner's failure code; the function
+    // stores it only if it looks like a code.
+    p_reason:
+      event.type === "interview.failed" && typeof event.data.reason === "string"
+        ? event.data.reason
+        : null,
   });
   if (error) {
     // 500 makes the agent retry with backoff; nothing was recorded.

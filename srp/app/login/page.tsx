@@ -82,6 +82,14 @@ export default async function LoginPage({
               <AlertDescription>{ar.auth.confirmNotice}</AlertDescription>
             </Alert>
           )}
+          {/* The confirmation link had expired or was already used, so the
+              address is NOT confirmed yet — signing up again sends a new one. */}
+          {error === "link_expired" && (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" aria-hidden />
+              <AlertDescription>{ar.auth.errors.linkExpired}</AlertDescription>
+            </Alert>
+          )}
           {/* A seeker who deleted their account lands here signed out
               (deleteSeekerAccount): the deletion is confirmed, not implied. */}
           {notice === "account_deleted" && (

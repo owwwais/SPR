@@ -61,7 +61,11 @@ import {
 } from "../_shared/interview-contract.ts";
 import { agentRefsConfigured, agentClient, type AgentClient } from "../_shared/interview-agent-client.ts";
 
-const UUID = z.uuid();
+// Any 8-4-4-4-12 hex id, not only RFC 4122 versions: every row id here comes
+// from our own database, and zod's strict z.uuid() rejected hand-written ids
+// such as the seed's, which made the whole flow untestable on seed data.
+// The agent's own ids stay strict in the contract.
+const UUID = z.guid();
 
 // What staff choose. Language is fixed server-side (Arabic only, D23).
 const ConfigInput = z
@@ -260,7 +264,13 @@ async function callAgent<S extends z.ZodType>(
 ): Promise<AgentOutcome<z.infer<S>>> {
   let response: Response;
   try {
-    response = await agent.call(method, path, body, idempotencyKey);
+    // A review edit may be "generate a replacement", which waits for one
+    // model call on the agent (its own ceiling is 45 s). Giving up sooner
+    // would report agent_unreachable while the agent still stores the
+    // replacement, so edits get room for that call; everything else keeps
+    // the short default.
+    const timeoutMs = method === "PATCH" ? 55_000 : undefined;
+    response = await agent.call(method, path, body, idempotencyKey, timeoutMs);
   } catch (err) {
     console.error(
       `interview-gateway: agent unreachable on ${method} ${route}:`,

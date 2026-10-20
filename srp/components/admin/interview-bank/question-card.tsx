@@ -66,15 +66,19 @@ export function QuestionCard({
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
 
-  const run = (edit: BankEdit, onDone?: () => void) =>
+  // The label is chosen before the transition starts: a state update made
+  // inside an async transition is held until the action ends, so setting it
+  // there showed "saving" for the whole of a regeneration. It is read only
+  // while `pending`, so it needs no reset.
+  const run = (edit: BankEdit, onDone?: () => void) => {
+    setError(null);
+    setRegenerating(edit.op === "regenerate");
     startTransition(async () => {
-      setError(null);
-      setRegenerating(edit.op === "regenerate");
       const result = await send(target, edit);
-      setRegenerating(false);
       if (result.ok) onDone?.();
       else setError(result.error);
     });
+  };
 
   return (
     <li

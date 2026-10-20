@@ -275,6 +275,16 @@ select pg_temp.chk('event: the draft took the agent''s status, id and clock',
           and status_at = now()
    from interview_assignments where id = '1b000000-0000-4000-8000-00000000e004'));
 
+-- A failed planning run tells staff why: the agent's code is stored, and
+-- anything that is not a code is not.
+select pg_temp.chk('event: interview.failed with a reason is applied',
+  public.apply_interview_event('3b000000-0000-4000-8000-000000000008', 'interview.failed',
+    '2b000000-0000-4000-8000-0000000000dd', '1b000000-0000-4000-8000-00000000e004',
+    'failed', now() + interval '1 minute', 'insufficient_questions') = 'applied');
+select pg_temp.chk('event: the agent''s reason code is stored for staff',
+  (select last_error from interview_assignments
+   where id = '1b000000-0000-4000-8000-00000000e004') = 'insufficient_questions');
+
 select pg_temp.as_user('1a000000-0000-4000-8000-000000000011');
 select pg_temp.chk_denied('staff cannot call apply_interview_event',
   $q$select public.apply_interview_event(gen_random_uuid(), 'x', gen_random_uuid(),

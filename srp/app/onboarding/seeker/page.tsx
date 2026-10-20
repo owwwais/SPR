@@ -150,6 +150,23 @@ function ReviewContent({ profile }: { profile: SeekerProfile }) {
   const t = ar.seekerOnboarding.review;
 
   if (profile.analysis_status === "pending" || profile.analysis_status === "processing") {
+    // An analysis lost on the way (talent_my_profile's analysis_stale) will
+    // never finish on its own; talent-upload accepts the same file again
+    // after that window, so the upload is offered instead of a spinner.
+    if (profile.analysis_stale) {
+      return (
+        <>
+          <div className="flex gap-3 rounded-lg bg-warning-soft p-4 text-warning">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden />
+            <div className="flex flex-col gap-1">
+              <h2 className="font-semibold">{t.failedTitle}</h2>
+              <p className="text-sm leading-7">{t.failedBodyOurs}</p>
+            </div>
+          </div>
+          <UploadStep again />
+        </>
+      );
+    }
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center" role="status">
         <span className="flex size-10 items-center justify-center rounded-md bg-surface-soft">

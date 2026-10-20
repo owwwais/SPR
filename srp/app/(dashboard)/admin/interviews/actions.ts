@@ -139,8 +139,9 @@ export async function lockJobBank(bankId: string): Promise<InterviewActionResult
 
   const result = await callGateway({ action: "bank_lock", bank_id: bank.id }, BankReply);
   revalidatePath(bankPagePath(bank.job_id));
-  // Applicant pages read the job's current locked bank for their panel.
-  if (result.ok) revalidatePath("/admin/applications/[id]", "page");
+  // Applicant pages read the job's current locked bank for their panel. A
+  // route pattern names the file structure, route group included.
+  if (result.ok) revalidatePath("/(dashboard)/admin/applications/[id]", "page");
   return outcome(result);
 }
 

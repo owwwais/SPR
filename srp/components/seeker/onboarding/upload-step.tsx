@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { submitKeepingValues } from "@/components/seeker/onboarding/submit-keeping-values";
 import { uploadSeekerCv, type UploadCvState } from "@/lib/seeker-actions";
-import { CV_MAX_BYTES, CV_MIME_TYPES } from "@/lib/validations/application";
+import { CV_FORM_MAX_BYTES, CV_MIME_TYPES } from "@/lib/validations/application";
 import { cn } from "@/lib/utils";
 import { ar } from "@/lib/i18n/ar";
 
@@ -27,7 +27,7 @@ function checkFile(file: File): string | null {
     (file.type === "" || file.type === "application/octet-stream") &&
     (name.endsWith(".pdf") || name.endsWith(".docx"));
   if (!typed && !untypedButNamed) return errors.cvType;
-  if (file.size > CV_MAX_BYTES) return errors.cvSize;
+  if (file.size > CV_FORM_MAX_BYTES) return errors.cvSize;
   if (file.size === 0) return errors.cvRequired;
   return null;
 }

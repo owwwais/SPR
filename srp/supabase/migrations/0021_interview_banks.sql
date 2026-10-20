@@ -213,13 +213,21 @@ grant all on interview_job_banks to service_role;
 -- is safe; an assignment already bound to a different interview still
 -- matches nothing.
 -- ============================================================
-create or replace function public.apply_interview_event(
+-- The signature gains p_reason (the agent's failure code from
+-- interview.failed), so the 0019 function is dropped rather than overloaded:
+-- with a defaulted seventh argument, a six-argument call would match both.
+drop function if exists public.apply_interview_event(
+  uuid, text, uuid, uuid, interview_status, timestamptz
+);
+
+create function public.apply_interview_event(
   p_event_id uuid,
   p_type text,
   p_interview_id uuid,
   p_assignment_id uuid,
   p_status interview_status,
-  p_occurred_at timestamptz
+  p_occurred_at timestamptz,
+  p_reason text default null
 )
 returns text
 language plpgsql
@@ -238,6 +246,13 @@ begin
   set status = p_status,
       status_at = p_occurred_at,
       external_interview_id = coalesce(external_interview_id, p_interview_id),
+      -- Why planning failed, so staff see a reason instead of a bare
+      -- "failed". A code only (the agent never sends content); anything else
+      -- is ignored rather than stored.
+      last_error = case
+        when p_status = 'failed' and p_reason ~ '^[a-z_]{1,60}$' then p_reason
+        else last_error
+      end,
       updated_at = now()
   where id = p_assignment_id
     and (
@@ -294,8 +309,8 @@ end;
 $$;
 
 revoke execute on function public.apply_interview_event(
-  uuid, text, uuid, uuid, interview_status, timestamptz
+  uuid, text, uuid, uuid, interview_status, timestamptz, text
 ) from public, anon, authenticated;
 grant execute on function public.apply_interview_event(
-  uuid, text, uuid, uuid, interview_status, timestamptz
+  uuid, text, uuid, uuid, interview_status, timestamptz, text
 ) to service_role;

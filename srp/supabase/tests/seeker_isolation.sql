@@ -312,7 +312,9 @@ select pg_temp.chk_denied('anon cannot call talent_set_my_consents',
 select pg_temp.chk_denied('anon cannot call talent_legacy_profile_available',
   $q$select public.talent_legacy_profile_available()$q$);
 select pg_temp.chk_denied('anon cannot call talent_link_legacy_profile',
-  $q$select public.talent_link_legacy_profile()$q$);
+  $q$select public.talent_link_legacy_profile(repeat('a', 32))$q$);
+select pg_temp.chk_denied('anon cannot issue a legacy link token',
+  $q$select public.talent_issue_legacy_link('5c000000-0000-4000-8000-0000000000d1')$q$);
 select pg_temp.chk_denied('anon cannot call my_applications', $q$select count(*) from public.my_applications()$q$);
 select pg_temp.chk_denied('anon cannot call talent_delete_seeker_data',
   $q$select public.talent_delete_seeker_data('5c000000-0000-4000-8000-0000000000a1')$q$);
@@ -381,7 +383,7 @@ select pg_temp.chk('talent_my_profile: NULL for a staff member without a profile
   pg_temp.out('profile_staff') = '"<null>"'::jsonb);
 select pg_temp.chk('talent_my_profile: exactly the SeekerProfile keys (lib/seeker.ts)',
   array(select jsonb_object_keys(pg_temp.out('profile_a')) order by 1) = array[
-    'about','analysis_error','analysis_status','city','consent_offers','consent_public',
+    'about','analysis_error','analysis_stale','analysis_status','city','consent_offers','consent_public',
     'cv_versions','education','email','experiences','focus_areas','full_name','headline',
     'hidden_skills','id','languages','noindex','onboarding_step','phone','preferences',
     'public_token','skills','status','strengths','years_experience']);
@@ -666,12 +668,12 @@ select pg_temp.as_user('5c000000-0000-4000-8000-0000000000d1');
 insert into t_out values ('legacy_l_available', to_jsonb(public.talent_legacy_profile_available()));
 select pg_temp.as_user('5c000000-0000-4000-8000-0000000000f1');
 insert into t_out values ('legacy_d_available', to_jsonb(public.talent_legacy_profile_available()));
-insert into t_out values ('legacy_d_link', public.talent_link_legacy_profile());
+insert into t_out values ('legacy_d_link', public.talent_link_legacy_profile(repeat('a', 32)));
 select pg_temp.as_user('5c000000-0000-4000-8000-0000000000f2');
 insert into t_out values ('legacy_v_available', to_jsonb(public.talent_legacy_profile_available()));
 select pg_temp.as_user('5c000000-0000-4000-8000-0000000000e1');
 insert into t_out values ('legacy_u_available', to_jsonb(public.talent_legacy_profile_available()));
-insert into t_out values ('legacy_u_link', public.talent_link_legacy_profile());
+insert into t_out values ('legacy_u_link', public.talent_link_legacy_profile(repeat('a', 32)));
 select pg_temp.as_user('5c000000-0000-4000-8000-0000000000b1');
 insert into t_out values ('legacy_b_available', to_jsonb(public.talent_legacy_profile_available()));
 select pg_temp.as_owner();
@@ -699,9 +701,58 @@ select pg_temp.as_owner();
 select pg_temp.chk('legacy: once the auth email is confirmed it becomes available',
   pg_temp.out('legacy_u_confirmed') = 'true'::jsonb);
 
+-- An emailed link expires after an hour.
+select pg_temp.as_service();
+insert into t_out values ('legacy_u_issue', public.talent_issue_legacy_link('5c000000-0000-4000-8000-0000000000e1'));
+select pg_temp.as_owner();
+update talent.profiles set link_requested_at = now() - interval '2 hours'
+where id = '5d000000-0000-4000-8000-0000000000e1';
+create temp table t_tok_u as select pg_temp.out('legacy_u_issue') ->> 'token' as token;
+grant select on t_tok_u to authenticated;
+select pg_temp.as_user('5c000000-0000-4000-8000-0000000000e1');
+insert into t_out values ('legacy_u_expired', public.talent_link_legacy_profile((select token from t_tok_u)));
+select pg_temp.as_owner();
+select pg_temp.chk('legacy link: an expired link does nothing',
+  pg_temp.out('legacy_u_issue') ->> 'ok' = 'true'
+  and pg_temp.out('legacy_u_expired') = '{"ok":false,"error":"not_available"}'::jsonb
+  and (select user_id is null from talent.profiles where id = '5d000000-0000-4000-8000-0000000000e1'));
+
+-- A confirmed account is not proof of the address (an organisation owner
+-- can create one for any address): linking needs the one-time token that
+-- seeker-account emails to the profile's own address.
 select pg_temp.as_user('5c000000-0000-4000-8000-0000000000d1');
-insert into t_out values ('legacy_l_link', public.talent_link_legacy_profile());
-insert into t_out values ('legacy_l_link_again', public.talent_link_legacy_profile());
+select pg_temp.chk_denied('a seeker cannot issue their own link token',
+  $q$select public.talent_issue_legacy_link('5c000000-0000-4000-8000-0000000000d1')$q$);
+insert into t_out values ('legacy_l_no_token', public.talent_link_legacy_profile(repeat('a', 32)));
+select pg_temp.as_service();
+insert into t_out values ('legacy_l_issue', public.talent_issue_legacy_link('5c000000-0000-4000-8000-0000000000d1'));
+insert into t_out values ('legacy_l_issue_again', public.talent_issue_legacy_link('5c000000-0000-4000-8000-0000000000d1'));
+select pg_temp.as_owner();
+select pg_temp.chk('legacy link: the token goes to the profile''s own address, only its hash is stored',
+  pg_temp.out('legacy_l_issue') ->> 'ok' = 'true'
+  and pg_temp.out('legacy_l_issue') ->> 'email' = 'legacy.owner@s.test'
+  and (select link_token_hash = encode(sha256(convert_to(pg_temp.out('legacy_l_issue') ->> 'token', 'UTF8')), 'hex')
+              and link_requested_by = '5c000000-0000-4000-8000-0000000000d1'
+       from talent.profiles where id = '5d000000-0000-4000-8000-0000000000d1'));
+select pg_temp.chk('legacy link: a second request within two minutes is refused',
+  pg_temp.out('legacy_l_issue_again') = '{"ok":false,"error":"too_soon"}'::jsonb);
+select pg_temp.chk('legacy link: a confirmed account without the emailed token cannot link',
+  pg_temp.out('legacy_l_no_token') = '{"ok":false,"error":"not_available"}'::jsonb
+  and (select user_id is null from talent.profiles where id = '5d000000-0000-4000-8000-0000000000d1'));
+
+-- The token works only for the account that asked for it.
+create temp table t_tok as select pg_temp.out('legacy_l_issue') ->> 'token' as token;
+grant select on t_tok to authenticated;
+select pg_temp.as_user('5c000000-0000-4000-8000-0000000000f1');
+insert into t_out values ('legacy_other_with_token',
+  public.talent_link_legacy_profile((select token from t_tok)));
+select pg_temp.as_owner();
+select pg_temp.chk('legacy link: someone else holding the token cannot use it',
+  pg_temp.out('legacy_other_with_token') = '{"ok":false,"error":"not_available"}'::jsonb);
+
+select pg_temp.as_user('5c000000-0000-4000-8000-0000000000d1');
+insert into t_out values ('legacy_l_link', public.talent_link_legacy_profile((select token from t_tok)));
+insert into t_out values ('legacy_l_link_again', public.talent_link_legacy_profile((select token from t_tok)));
 insert into t_out values ('legacy_l_available_after', to_jsonb(public.talent_legacy_profile_available()));
 insert into t_out values ('legacy_l_profile', public.talent_my_profile());
 select pg_temp.as_anon();
@@ -713,7 +764,7 @@ select pg_temp.chk('legacy: link succeeds',
   pg_temp.out('legacy_l_link') = '{"ok":true}'::jsonb);
 select pg_temp.chk('legacy: the profile now belongs to the account, resumes at contact (no phone)',
   (select user_id = '5c000000-0000-4000-8000-0000000000d1' and onboarding_step = 'contact'
-          and verify_token is null
+          and verify_token is null and link_token_hash is null and link_requested_by is null
    from talent.profiles where id = '5d000000-0000-4000-8000-0000000000d1'));
 select pg_temp.chk('legacy: link creates the cv_versions row for the stored CV',
   (select count(*) = 1
@@ -842,6 +893,19 @@ select pg_temp.chk('re-upload in progress: consents can still be saved while pub
        from talent.profiles where id = '5d000000-0000-4000-8000-0000000000f8'));
 select pg_temp.chk('re-upload in progress: facts can still be edited',
   pg_temp.out('reupload_review') = '{"ok":true}'::jsonb);
+
+-- An analysis unfinished ten minutes after its file arrived is reported as
+-- stale, so the UI can offer a re-upload instead of waiting forever.
+update talent.cv_versions set created_at = now() - interval '11 minutes'
+where id = '5e000000-0000-4000-8000-0000000000f9';
+select pg_temp.as_user('5c000000-0000-4000-8000-0000000000f8');
+insert into t_out values ('stale_profile', public.talent_my_profile());
+select pg_temp.as_owner();
+select pg_temp.chk('talent_my_profile: a lost analysis is flagged stale',
+  (pg_temp.out('stale_profile') ->> 'analysis_stale')::boolean);
+select pg_temp.chk('talent_my_profile: a fresh pending analysis is not stale',
+  not (pg_temp.out('legacy_l_profile') ->> 'analysis_stale')::boolean
+  and (pg_temp.out('legacy_l_profile') ? 'analysis_stale'));
 
 -- A former staff member who once created a job can still delete their
 -- account: authorship is released (on delete set null), the job stays.

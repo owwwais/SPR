@@ -49,6 +49,8 @@ export type SeekerProfile = {
   onboarding_step: OnboardingStep;
   analysis_status: AnalysisStatus;
   analysis_error: string | null;
+  // Pending/processing for over ten minutes: lost, offer a re-upload.
+  analysis_stale: boolean;
   full_name: string | null;
   headline: string | null;
   city: string | null;

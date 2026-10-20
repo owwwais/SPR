@@ -76,6 +76,16 @@ export async function VirtualInterviewPanel({
   const live =
     assignment !== null && status !== null && !assignment.stale && !ENDED.includes(status);
   const config = assignment?.config ?? null;
+  // Locked but not yet sent (dispatch arrives with I2): the agent still says
+  // awaiting_review, and showing that beside «الأسئلة مقفلة» would claim a
+  // review that is already done.
+  const questionsLocked = Boolean(view?.locked_at ?? assignment?.bank_locked_at);
+  const statusLabel =
+    status === "awaiting_review" && questionsLocked
+      ? t.locked.badge
+      : status
+        ? ar.interviewBank.interviewStatuses[status]
+        : null;
 
   return (
     <Card className="mb-4">
@@ -92,7 +102,7 @@ export async function VirtualInterviewPanel({
                   })}
                 </span>
               )}
-              <Badge variant="secondary">{ar.interviewBank.interviewStatuses[status]}</Badge>
+              <Badge variant="secondary">{statusLabel}</Badge>
             </div>
           )}
         </div>
@@ -229,7 +239,9 @@ function LiveInterview({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h3 className="font-semibold">{t.review.title}</h3>
-          <p className="max-w-[68ch] text-sm text-muted-foreground">{t.review.hint}</p>
+          {view.gap_probes.length > 0 && (
+            <p className="max-w-[68ch] text-sm text-muted-foreground">{t.review.hint}</p>
+          )}
         </div>
         {view.gap_probes.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t.review.none}</p>
@@ -239,6 +251,7 @@ function LiveInterview({
             target={{ kind: "interview", assignmentId: assignment.id }}
             canEdit={canEdit}
             regenerationsLeft={view.regenerations_left}
+            headings={false}
           />
         )}
         {canEdit && (
@@ -284,19 +297,29 @@ function StartSection({
 }) {
   const t = ar.interviewBank.panel;
   const previous = data.assignment;
+  // The configuration form below is shown only when all of these hold; the
+  // notices invite starting again only then (never to a viewer).
+  const canStart = canEdit && data.quota !== 0 && data.lockedBank !== null && analysisDone;
+  const startAgain = canStart ? ` ${t.failed.startAgain}` : "";
 
   let notice: React.ReactNode = null;
+  // The refusal this notice reports. The gateway records a refused create on
+  // the assignment before answering, so the form below hides the same text
+  // instead of saying it twice.
+  let reported: string | null = null;
   if (previous && (previous.stale || previousStatus === "failed")) {
     // A stale draft is reported as the gateway will record it on the next
     // create: the agent never answered.
     const code = previous.stale ? "agent_unreachable" : previous.last_error;
+    reported = code ? interviewErrorMessage(code) : null;
     notice = (
       <Alert variant="destructive">
         <AlertCircle aria-hidden />
         <AlertTitle>{t.failed.title}</AlertTitle>
         <AlertDescription>
-          {code ? interviewErrorMessage(code) : t.failed.generic}
-          {canEdit && ` ${t.failed.startAgain}`}
+          {reported ?? t.failed.generic}
+          {/* A spent allowance is not undone by starting again. */}
+          {code === "quota_exceeded" ? "" : startAgain}
         </AlertDescription>
       </Alert>
     );
@@ -306,6 +329,7 @@ function StartSection({
         <Info aria-hidden />
         <AlertDescription>
           {previousStatus === "cancelled" ? t.cancelled : t.expired}
+          {startAgain}
         </AlertDescription>
       </Alert>
     );
@@ -349,7 +373,7 @@ function StartSection({
             n: data.lockedBank.approvedCount,
           })}
         </p>
-        <InterviewConfigForm applicationId={applicationId} />
+        <InterviewConfigForm applicationId={applicationId} reportedError={reported} />
       </div>
     );
   }

@@ -28,7 +28,14 @@ const initialState: CreateInterviewState = { ok: false, error: null, fieldErrors
 // would throw away the choices whenever the server refuses them. The server
 // action re-validates everything and fixes what is not offered yet (text
 // mode only, no coding) regardless of what is posted.
-export function InterviewConfigForm({ applicationId }: { applicationId: string }) {
+export function InterviewConfigForm({
+  applicationId,
+  reportedError = null,
+}: {
+  applicationId: string;
+  /** A refusal the panel's notice already shows; not repeated here. */
+  reportedError?: string | null;
+}) {
   const t = ar.interviewBank.panel.form;
   const [state, formAction, pending] = useActionState(
     createVirtualInterview.bind(null, applicationId),
@@ -237,7 +244,7 @@ export function InterviewConfigForm({ applicationId }: { applicationId: string }
           <Sparkles aria-hidden />
           {pending ? t.submitting : t.submit}
         </Button>
-        {state.error && (
+        {state.error && state.error !== reportedError && (
           <p role="alert" className="text-sm text-destructive">
             {state.error}
           </p>

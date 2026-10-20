@@ -1,8 +1,10 @@
 // seeker-account — a seeker deleting their own data (D26).
 //
-// One action, with the user's own bearer:
+// Two actions, with the user's own bearer:
 //
 //   { action: "delete" }
+//   { action: "request_link" }  — email the one-time link that proves the
+//     address of an old accountless profile before it is linked (0020)
 //
 // "Delete" means immediately and completely, for everything that belongs to
 // the seeker hat: the talent profile, its CV versions and skills (one
@@ -23,11 +25,11 @@
 // from their verified token, never from the body.
 //
 // Secrets: platform-injected SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { newTraceId, makeLogger } from "../_shared/trace.ts";
 
-const Body = z.object({ action: z.literal("delete") });
+const Body = z.object({ action: z.enum(["delete", "request_link"]) });
 
 function json(status: number, body: Record<string, unknown>, trace?: string): Response {
   return new Response(JSON.stringify(trace ? { ...body, request_id: trace } : body), {
@@ -82,6 +84,10 @@ Deno.serve(async (req) => {
   if (!parsed.success) {
     log.fail("parse_body", "unknown action");
     return json(400, { error: "invalid_input" }, trace);
+  }
+
+  if (parsed.data.action === "request_link") {
+    return requestLink(admin, user.id, log, trace);
   }
 
   // ---- 2. the seeker's data ---------------------------------------------
@@ -175,3 +181,45 @@ Deno.serve(async (req) => {
   log.step("done", { account_deleted: true });
   return json(200, { ok: true, account_deleted: true }, trace);
 });
+
+// The token goes only into an email to the old profile's own address, never
+// into this response: an account whose confirmed address was set by someone
+// else (an organisation owner creating a colleague) can ask for the email
+// but can never read it, and so can never complete the link.
+async function requestLink(
+  admin: SupabaseClient,
+  userId: string,
+  log: ReturnType<typeof makeLogger>,
+  trace: string
+): Promise<Response> {
+  const { data, error } = await admin.rpc("talent_issue_legacy_link", { p_user: userId });
+  if (error) {
+    log.fail("issue_link", error.message, { pg_code: error.code });
+    return json(500, { error: "server_error", step: "issue_link" }, trace);
+  }
+  const issued = (data ?? {}) as { ok?: boolean; error?: string; token?: string; email?: string };
+  if (!issued.ok || !issued.token || !issued.email) {
+    log.step("link_refused", { reason: issued.error ?? "unknown" });
+    if (issued.error === "too_soon") return json(429, { error: "too_soon" }, trace);
+    return json(409, { error: "not_available" }, trace);
+  }
+
+  const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+  if (!siteUrl) {
+    log.fail("site_url", "SITE_URL is not set — the link in the email would be malformed");
+    return json(500, { error: "not_configured", step: "site_url" }, trace);
+  }
+  const { error: mailError } = await admin.functions.invoke("send-email", {
+    body: {
+      kind: "talent_link",
+      email: issued.email,
+      url: `${siteUrl}/onboarding/seeker/link/${issued.token}`,
+    },
+  });
+  if (mailError) {
+    log.fail("send_email", mailError.message);
+    return json(502, { error: "email_failed" }, trace);
+  }
+  log.step("link_sent");
+  return json(200, { ok: true }, trace);
+}

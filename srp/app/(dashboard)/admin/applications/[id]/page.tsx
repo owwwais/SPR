@@ -29,6 +29,8 @@ import {
   type InterviewQuestion,
 } from "@/components/admin/interview-questions";
 import { InterviewManager } from "@/components/admin/interview-manager";
+import { VirtualInterviewPanel } from "@/components/admin/virtual-interview/virtual-interview-panel";
+import { loadVirtualInterview } from "@/lib/interviews";
 import { StatusChanger } from "@/components/admin/status-changer";
 import { SaudizationControl } from "@/components/admin/saudization-control";
 import {
@@ -36,7 +38,7 @@ import {
   ScreeningAnswers,
 } from "@/lib/validations/screening";
 import { scoreBandClass } from "@/components/admin/score-badge";
-import { requireMembership } from "@/lib/auth";
+import { canWrite, requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ExtractedCV, ScoreBreakdown } from "@/lib/validations/evaluation";
 import { ar } from "@/lib/i18n/ar";
@@ -123,7 +125,7 @@ export default async function ApplicationPage({
   // on nothing from each other. Awaiting them in sequence put two round trips
   // on the critical path — a Storage API call and a database query — where
   // one suffices.
-  const [signedRes, evaluationRes] = await Promise.all([
+  const [signedRes, evaluationRes, virtualInterview] = await Promise.all([
     // CV via short-lived signed URL only (D8): 10 minutes (§8).
     supabase.storage.from("cvs").createSignedUrl(application.cv_path, 600),
     // Fetched only when analysis completed; skipped without a round trip
@@ -138,6 +140,13 @@ export default async function ApplicationPage({
           .eq("org_id", session.org.id)
           .maybeSingle()
       : null,
+    // I1 virtual interview: latest assignment, the job's current locked
+    // bank and the org's quota — each filtered by this org in code.
+    loadVirtualInterview({
+      orgId: session.org.id,
+      applicationId: application.id,
+      jobId: application.job_id,
+    }),
   ]);
 
   const cvUrl = signedRes.data?.signedUrl ?? null;
@@ -534,6 +543,13 @@ export default async function ApplicationPage({
 
         {/* ------------------------------ المقابلة ----------------------------- */}
         <TabsContent value="interview">
+          <VirtualInterviewPanel
+            applicationId={application.id}
+            jobId={application.job_id}
+            analysisDone={application.analysis_status === "done"}
+            canEdit={canWrite(session.role)}
+            data={virtualInterview}
+          />
           <Card>
             <CardContent className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">

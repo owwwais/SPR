@@ -10,6 +10,13 @@
 #   Migrations            -> manual button only (Actions -> Run workflow).
 #                            They alter data and several are not reversible,
 #                            so a merge should never run one on its own.
+#                            The live project's migrations were applied by
+#                            hand in the SQL Editor, so the CLI's history
+#                            table does not know them and `db push` would
+#                            start again at 0001 and stop on its first
+#                            statement. Until that history is repaired, check
+#                            with supabase/scripts/deploy_check.sql and apply
+#                            the missing files in the SQL Editor instead.
 #
 #   Expose talent schema  -> manual button only. This edits a PROJECT-LEVEL
 #                            API gateway setting (which Postgres schemas
@@ -59,6 +66,21 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+
+      # An expired or revoked token otherwise fails inside the CLI with a bare
+      # "401 Invalid access token", which is how two merges in October
+      # deployed nothing without anyone noticing. Say what to do instead.
+      - name: Check the access token
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects")
+          if [ "$status" != "200" ]; then
+            echo "::error title=SUPABASE_ACCESS_TOKEN rejected (HTTP $status)::Nothing was deployed. Generate a new token at https://supabase.com/dashboard/account/tokens and replace the SUPABASE_ACCESS_TOKEN secret under Settings -> Secrets and variables -> Actions, then re-run this workflow."
+            exit 1
+          fi
 
       # No function name deploys every function under supabase/functions.
       # Directories starting with _ are skipped by the CLI, so _shared travels

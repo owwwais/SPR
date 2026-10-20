@@ -109,7 +109,7 @@ srp/
 │   │   ├── c/[slug]/                # per-tenant careers page (S3)
 │   │   ├── companies/               # company directory (S6)
 │   │   └── track/[ref]/             # applicant status tracking by reference code
-│   ├── (seeker)/me/                 # ☐ P1: seeker portal (D26)
+│   ├── (seeker)/me/                 # P1: seeker portal (D26)
 │   ├── (dashboard)/admin/           # TENANT workspace, scoped to one org
 │   │   ├── jobs/                    # FR-01 manage jobs
 │   │   ├── jobs/[id]/applicants/    # FR-06 ranked applicants
@@ -601,10 +601,11 @@ with I0 and I1 running alongside P1.
 - **I0 – Contract & skeleton · I1 – Question bank · I2 – Text interview ·
   I3 – Evaluation & report · I4 – Code sandbox · I5 – Voice · I6 – Hardening.**
 
-**Status (2026-10-16): P0, I0 and P3 complete** (P3 pulled forward at the owner's request, with a larger root type size site-wide and Google sign-in) — see `docs/V3-PROGRESS.md`.
-Test suites: `tenant_isolation.sql` (53), `onboarding.sql` (23),
-`interview_isolation.sql` (31), `rls_check.sql`, and the agent's own
-`npm test` (34, including a byte-parity check of the shared contract).
+**Status (2026-10-18): P0, I0, P3, P1 and I1 complete** (P3 pulled forward at the owner's request, with a larger root type size site-wide and Google sign-in) — see `docs/V3-PROGRESS.md`. Migrations run to `0022`. Interviews stay switched off until the owner sets `organizations.monthly_interview_quota` per plan (D33; default 0).
+Test suites: `tenant_isolation.sql` (55), `onboarding.sql` (23),
+`interview_isolation.sql` (79), `seeker_isolation.sql` (132), `rls_check.sql`,
+and the agent's own `npm test` (210, including a byte-parity check of the
+shared contract).
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),

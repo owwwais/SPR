@@ -8,7 +8,13 @@
 import { hmacSha256Hex, parseKeyring, signRequest } from "./interview-hmac.ts";
 
 export type AgentClient = {
-  call(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<Response>;
+  call(
+    method: string,
+    path: string,
+    body?: unknown,
+    idempotencyKey?: string,
+    timeoutMs?: number
+  ): Promise<Response>;
   candidateRef(applicationId: string): Promise<string>;
   tenantRef(orgId: string): Promise<string>;
 };
@@ -47,7 +53,7 @@ export function agentClient(): AgentClient | null {
   const root = new URL(base);
 
   return {
-    async call(method, path, body, idempotencyKey) {
+    async call(method, path, body, idempotencyKey, timeoutMs = 15_000) {
       const url = new URL(path, root);
       const raw = body === undefined ? "" : JSON.stringify(body);
       const headers = await signRequest({
@@ -65,7 +71,7 @@ export function agentClient(): AgentClient | null {
           ...headers,
         },
         body: body === undefined ? undefined : raw,
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     },
     // Stable per application and meaningless without the secret: the agent

@@ -7,7 +7,7 @@ import { getSupabaseEnv } from "@/lib/supabase/env";
 import { getUser } from "@/lib/auth";
 import { safeNext } from "@/lib/redirects";
 import {
-  CV_MAX_BYTES,
+  CV_FORM_MAX_BYTES,
   CV_MIME_TYPES,
   type CvMime,
 } from "@/lib/validations/application";
@@ -160,7 +160,7 @@ export async function uploadSeekerCv(
   // the network to be refused there.
   const raw = formData.get("cv");
   if (!(raw instanceof File) || raw.size === 0) return fail(e.cvRequired);
-  if (raw.size > CV_MAX_BYTES) return fail(e.cvSize);
+  if (raw.size > CV_FORM_MAX_BYTES) return fail(e.cvSize);
   const mime = declaredMime(raw);
   if (!mime) return fail(e.cvType);
   const cv = raw.type === mime ? raw : new File([raw], raw.name, { type: mime });
@@ -308,10 +308,76 @@ export async function saveSeekerConsents(
 // nothing calls it on their behalf. The database repeats every condition —
 // no profile yet, a confirmed auth address, a verified legacy profile with
 // the same address — so the page offering the button is not what allows it.
-export async function linkLegacyProfile(): Promise<SeekerFormState> {
+// Linking an old accountless profile takes a second proof of the address
+// (0020): a confirmed account is not enough, because an organisation owner
+// can create one for any address. This asks seeker-account to email a
+// one-time link to the profile's own address; the link opens
+// /onboarding/seeker/link/[token], where confirmLegacyLink completes it.
+export async function requestLegacyLink(): Promise<SeekerFormState> {
   if (!(await getUser())) return formFail(e.authRequired);
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("talent_link_legacy_profile");
-  return settle(data, error, "talent_link_legacy_profile");
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) return formFail(e.authRequired);
+
+  let response: Response;
+  try {
+    const { url } = getSupabaseEnv();
+    response = await fetch(`${url}/functions/v1/seeker-account`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "request_link" }),
+    });
+  } catch (err) {
+    console.error("seeker-account unreachable:", err instanceof Error ? err.message : err);
+    return formFail(e.generic);
+  }
+
+  let body: { ok?: boolean; error?: string; request_id?: string } = {};
+  try {
+    body = await response.json();
+  } catch {
+    // Falls through to the generic message.
+  }
+  if (response.ok && body.ok) return { ok: true, error: null, fieldErrors: {} };
+  switch (body.error) {
+    case "too_soon":
+      return formFail(e.linkTooSoon);
+    case "not_available":
+      return formFail(e.notAvailable);
+    case "auth_required":
+      return formFail(e.authRequired);
+    default:
+      return formFail(withReference(e.linkEmailFailed, body.request_id));
+  }
+}
+
+// The press on the emailed link's page. The database checks the token, that
+// it was issued to this very account, and that it is under an hour old.
+export async function confirmLegacyLink(
+  _prev: SeekerFormState,
+  formData: FormData
+): Promise<SeekerFormState> {
+  if (!(await getUser())) return formFail(e.authRequired);
+  const token = String(formData.get("token") ?? "");
+  if (!/^[0-9a-f]{32}$/.test(token)) return formFail(e.linkInvalid);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("talent_link_legacy_profile", {
+    p_token: token,
+  });
+  if (error) {
+    console.error("talent_link_legacy_profile failed:", error.message);
+    return formFail(e.generic);
+  }
+  const result = data as RpcResult;
+  if (!result?.ok) return formFail(e.linkInvalid);
+  revalidateSeekerPaths();
+  redirect("/onboarding/seeker");
 }

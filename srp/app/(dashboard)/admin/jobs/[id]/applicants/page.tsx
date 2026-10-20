@@ -5,6 +5,7 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  ListChecks,
   Loader2,
   RefreshCw,
   Users,
@@ -119,9 +120,21 @@ export default async function ApplicantsPage({
           <ArrowRight className="size-4" aria-hidden />
           {ar.adminJobs.title}
         </Link>
-        <h1 className="text-2xl font-bold">
-          {ar.applicants.title}: {job.title}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">
+            {ar.applicants.title}: {job.title}
+          </h1>
+          {/* I1: the job's core question bank for virtual interviews. */}
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/admin/jobs/${id}/interview-bank`} />}
+          >
+            <ListChecks className="size-4" aria-hidden />
+            {ar.interviewBank.applicantsLink}
+          </Button>
+        </div>
       </div>
 
       {showRetryError && (

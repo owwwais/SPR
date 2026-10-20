@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Turnstile } from "@/components/jobs/turnstile";
 import type { ApplyState } from "@/app/(public)/jobs/[id]/apply/actions";
 import {
-  CV_MAX_BYTES,
+  CV_FORM_MAX_BYTES,
   CV_MIME_TYPES,
 } from "@/lib/validations/application";
 import type { ScreeningQuestionType } from "@/lib/validations/screening";
@@ -169,7 +169,7 @@ export function ApplyForm({
   const checkFile = (file: File | undefined) => {
     if (!file) return setCvError(null);
     if (!(file.type in CV_MIME_TYPES)) return setCvError(t.errors.cvType);
-    if (file.size > CV_MAX_BYTES) return setCvError(t.errors.cvSize);
+    if (file.size > CV_FORM_MAX_BYTES) return setCvError(t.errors.cvSize);
     setCvError(null);
   };
 
