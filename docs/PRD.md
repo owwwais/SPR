@@ -11,10 +11,11 @@
 | Field | Value |
 |---|---|
 | Document | `docs/PRD.md` |
-| Version | 1.0 |
-| Date | 2026-10-20 |
+| Version | 1.1 (verification pass: claims re-checked against the code, corrections applied, gaps filled) |
+| Date | 2026-10-21 |
 | Product | حكيم (`hakeem`), the Smart Recruitment Portal (SRP). The name lives only in `srp/lib/i18n/ar.ts` as `PRODUCT_NAME` / `PRODUCT_SLUG` (D25) |
-| Scope | Branch `claude/quirky-mccarthy-w902qy`, HEAD `5f24d6c`. The application code is identical to commit `c31763e`; the commits after it change only `docs/` |
+| Scope | Branch `claude/quirky-mccarthy-w902qy`, HEAD `aee56dc` (the commit that added this document). The application code is identical to commit `c31763e`; the commits after it change only `docs/` |
+| Verification | Version 1.1 was checked against the code and, for database claims, against a scratch Postgres 16 built from `srp/supabase/tests/harness.sql`, migrations `0001`–`0022` and the seed (`npm run test:db` suites: all checks passed). Database-verified statements say so |
 | Code covered | `srp/` (Next.js 16 app, Supabase migrations `0001`–`0022`, Edge Functions, DB tests, seed) and `interview-agent/` (the separate interview service, D30), seen from the outside only |
 | Specification | `CLAUDE.md` v3.0 (decisions D1–D33). Where code and specification differ, this PRD describes the **code** and flags the difference in §13 |
 
@@ -101,6 +102,7 @@
 - Dates in the UI use Arabic month names, format "d MMMM yyyy", and "d MMMM yyyy، h:mm a" with time.
 - Some strings are **composed at render time** from dictionary parts, and this PRD quotes the rendered result: the product name «حكيم» comes from `PRODUCT_NAME` (e.g. «كيف ستستخدم حكيم؟»); counters and labels such as «(استشاري)», «(الأحدث)», «(مكتملة)» or a count in parentheses may sit in a separate element; references render as `{message} رمز المرجع: {reference}`. Assertions should match on normalised text content (collapse whitespace) rather than on a single text node.
 - "Write roles" means owner, admin and hr. "Admin roles" means owner and admin (`srp/lib/auth.ts:31-33`).
+- Redirect URLs carrying `next` are written **decoded** in this document. In the code, `requireSeeker()` (every `/me/*` page), the legacy-link page and the apply-with-profile action build them with `encodeURIComponent` (e.g. `/login?next=%2Fme%2Fjobs`, `/login?next=%2Fme%2Fapply%2F{id}`), while `/onboarding/seeker` redirects to the literal `/login?next=/onboarding/seeker` (`srp/lib/seeker.ts:129-132`; `srp/app/onboarding/seeker/page.tsx:46`). Tests should compare the decoded `next` query value, not the raw string.
 
 ---
 
@@ -166,7 +168,7 @@ The AI score is advice. A human makes every decision. Every score comes with its
   - The only history row written without a human is the initial `new` row at insert (`changed_by` null, shown as «النظام» in the transparency report).
 - **Acceptance criteria:**
   - **AC-ETH-02.1** — *Given* a new application whose analysis finishes with a score below 50, *when* HR opens it, *then* its status is still «تم استلام الطلب», and `/track/{ref}` shows exactly one history row «تم استلام الطلب».
-  - **AC-ETH-02.2** — *Given* an application whose analysis fails because the quota is exhausted, *when* housekeeping retries it three times, *then* its status is unchanged.
+  - **AC-ETH-02.2** — *Given* an application whose analysis fails because the quota is exhausted, *when* housekeeping runs on three consecutive days (it retries only while `analysis_attempts < 3`), *then* its status is unchanged.
   - **AC-ETH-02.3** — [API] *Given* an interview assignment for an application, *when* a valid signed `interview.failed` or `interview.cancelled` event reaches `interview-webhook`, *then* `applications.status` is unchanged.
   - **AC-ETH-02.4** — [DB][NEG] *Given* an hr user's session, *when* it runs `update applications set status = 'accepted'` directly, *then* the statement is refused (permission denied) and the status is unchanged.
   - **AC-ETH-02.5** — *Given* an application moved by HR from `new` to `interview`, *when* its transparency report is exported, *then* the trail shows the insert row with «النظام» and the HR change marked «قرار بشري».
@@ -337,7 +339,7 @@ Files to create:
 | Dependency | How to switch it off for a test | What the UI shows then |
 |---|---|---|
 | Gemini (CV analysis) | Unset `GEMINI_API_KEY` on the Edge Functions | Applying still succeeds and shows the reference code. The analysis ends `failed` (quota unit refunded); HR sees «فشل التحليل — يمكن قراءة السيرة يدوياً وإعادة المحاولة (المحاولات: {n})» |
-| Gemini (CV analysis), quota path | Set `monthly_analysis_quota = 0` | Same failure display; `/admin/stats` shows the exhausted banner |
+| Gemini (CV analysis), quota path | Set `monthly_analysis_quota = 0`, **and** make sure the org already has an `analysis_usage` row for the current month (for example, run one analysis first) | Same failure display; `/admin/stats` shows the exhausted banner. Without a usage row for the month, the first analysis still runs (KD-16) |
 | Gemini (seeker CV) | Unset `GEMINI_API_KEY` | Version `failed` at step `configuration`; onboarding shows «تعثّرت القراءة لسبب من جهتنا لا من ملفك. ارفع الملف نفسه مرة أخرى بعد قليل.» with a reference |
 | Resend | Unset `RESEND_API_KEY` | No email; submissions and status changes still succeed; an invitation shows «أُنشئت الدعوة لكن تعذّر إرسال البريد — راجع إعدادات البريد ثم أعد الإرسال» |
 | `SITE_URL` | Unset | Applicant emails have no tracking link; the invitation email has **no accept button or link**; the legacy link request returns `not_configured` |
@@ -423,9 +425,9 @@ Global rules:
 | `interview-gateway` | Interview server actions (user token) | Per action: `can_manage_job` / `can_manage_application` / RLS visibility | The platform's only door to the interview agent |
 | `interview-webhook` | The interview agent | HMAC signature | Agent → platform status events |
 
-**RPCs executable by `anon`** (all others need `authenticated` or the service role): `track_application`, `is_platform_admin`, `current_org_ids`, `is_org_member`, `org_role`, `org_is_public`, `can_manage_application`, `storage_org_id`, `current_membership_org_ids`, `invitation_preview`, `slug_available`, `talent_public_profile`, and the legacy token functions `talent_publish_profile`, `talent_set_visibility`, `talent_delete_profile`, `talent_review_profile`.
+**RPCs executable by `anon`** (all others need `authenticated` or the service role; verified with `has_function_privilege` on the scratch database): `track_application`, `is_platform_admin`, `current_org_ids`, `is_org_member`, `org_role`, `org_is_public`, `can_manage_application`, `storage_org_id`, `current_membership_org_ids`, `invitation_preview`, `slug_available`, `talent_public_profile`, the legacy token functions `talent_publish_profile`, `talent_set_visibility`, `talent_delete_profile`, `talent_review_profile`, and `change_application_status`. The last one is executable by `anon` only because `0003_status_rpc.sql:41` revokes EXECUTE from `public` while Supabase's default privileges grant it to `anon` by name (`srp/supabase/tests/harness.sql:201-207` reproduces them); for `anon` it always raises `forbidden` (42501) and changes nothing.
 
-**RPCs for signed-in users only:** `change_application_status`, `create_organization`, `accept_invitation`, `org_stats`, `org_quota`, `application_transparency_report`, `org_saudization`, `can_manage_job`, `my_hats`, `talent_my_profile`, `talent_save_my_contact`, `talent_save_my_review`, `talent_set_my_consents`, `talent_legacy_profile_available`, `talent_link_legacy_profile`, `my_applications`.
+**RPCs for signed-in users only:** `create_organization`, `accept_invitation`, `org_stats`, `org_quota`, `application_transparency_report`, `org_saudization`, `can_manage_job`, `my_hats`, `talent_my_profile`, `talent_save_my_contact`, `talent_save_my_review`, `talent_set_my_consents`, `talent_legacy_profile_available`, `talent_link_legacy_profile`, `my_applications`.
 
 **Service role only:** `record_submission_attempt`, `claim_application_for_analysis`, `consume_analysis_quota`, `release_analysis_quota`, `talent_record_upload_attempt`, `talent_record_unmapped_skill`, `talent_issue_legacy_link`, `talent_delete_seeker_data`, `apply_interview_event`.
 
@@ -496,7 +498,7 @@ The shared shell of every public page, plus the 404 page, the error page and the
 - **Rules:**
   - Metadata title «حكيم يرشّح، وأنت تقرّر». The page reads no data.
   - Hero: eyebrow «توظيف بالذكاء الاصطناعي — استشاري دائماً»; headline in two lines «حكيم يرشّح،» / «وأنت تقرّر.»; subtitle «يقرأ حكيم كل سيرة ذاتية بالعربية والإنجليزية، ويعطي كل متقدم درجة ملاءمة مكتوبٌ سببها، ويقترح أسئلة المقابلة. الترتيب آلي، والقرار بشري دائماً.»; CTA «ابدأ كشركة — مجاناً» → `/signup`; CTA «أبحث عن عمل» → `/talent`; proof list «سير عربية وإنجليزية» · «كل درجة بتبريرها» · «لا رفض آلي»; product cards labelled «مثال توضيحي».
-  - Sections: «لماذا يتعثّر التوظيف اليوم» (3 problems); «المنتج» / «كل ما يحتاجه فريق التوظيف»; the interview showcase titled «مقابلة أولية يجريها حكيم، ويقرّر نتيجتها إنسان» with the badge «قريباً»; «الإنصاف» / «لا درجة بلا دليل» with the struck-through list «الاسم، الجنس، العمر، الجنسية، الصورة الشخصية، الحالة الاجتماعية، الحي أو العنوان، سمعة الجامعة باسمها», the note «الفجوة الوظيفية تُعرض كسؤال محايد للمقابلة، لا كسبب استبعاد.» and the link «اقرأ كيف نُنصف» → `/fairness`; seekers section «للباحثين عن عمل» / «سيرتك مرة واحدة، وفرصك في مكان واحد» with «أنشئ صفحتك المهنية» → `/talent`, where steps «وظائف مناسبة لك، وسببها» and «قدّم بضغطة» carry «قريباً»; marketplace section «وظائفك تصل إلى الباحثين» with «شاهد الدليل» → `/companies`; FAQ «أسئلة شائعة» with 5 entries; final CTA «جرّب حكيم على وظيفة واحدة» / «أنشئ حسابك وانشر أول وظيفة خلال دقائق.» / «ابدأ مجاناً» → `/signup`.
+  - Sections: «لماذا يتعثّر التوظيف اليوم» (3 problems); «المنتج» / «كل ما يحتاجه فريق التوظيف»; the interview showcase titled «مقابلة أولية يجريها حكيم، ويقرّر نتيجتها إنسان» with the badge «قريباً»; «الإنصاف» / «لا درجة بلا دليل» with a struck-through list of eight separate items «الاسم», «الجنس», «العمر», «الجنسية», «الصورة الشخصية», «الحالة الاجتماعية», «الحي أو العنوان», «سمعة الجامعة باسمها» (`ar.landing.fairnessIgnored`, one element per item), the note «الفجوة الوظيفية تُعرض كسؤال محايد للمقابلة، لا كسبب استبعاد.» and the link «اقرأ كيف نُنصف» → `/fairness`; seekers section «للباحثين عن عمل» / «سيرتك مرة واحدة، وفرصك في مكان واحد» with «أنشئ صفحتك المهنية» → `/talent`, where steps «وظائف مناسبة لك، وسببها» and «قدّم بضغطة» carry «قريباً»; marketplace section «وظائفك تصل إلى الباحثين» with «شاهد الدليل» → `/companies`; FAQ «أسئلة شائعة» with 5 entries; final CTA «جرّب حكيم على وظيفة واحدة» / «أنشئ حسابك وانشر أول وظيفة خلال دقائق.» / «ابدأ مجاناً» → `/signup`.
   - Signed-in users are not redirected away from `/`.
 - **Acceptance criteria:**
   - **AC-MKT-04.1** — *Given* `/`, *when* it loads, *then* the hero shows the eyebrow, both headline lines, the subtitle, and the two CTAs pointing to `/signup` and `/talent`.
@@ -624,7 +626,7 @@ The shared shell of every public page, plus the 404 page, the error page and the
 - **Routes:** `/jobs`
 - **Priority:** P0
 - **Test type:** UI e2e; DB-RLS
-- **Source:** `srp/lib/marketplace.ts:137-189`; `srp/app/(public)/jobs/page.tsx`
+- **Source:** `srp/lib/marketplace.ts:47-101`; `srp/app/(public)/jobs/page.tsx`
 - **Rules:**
   - Listed: jobs with `status = published` and `deleted_at is null`, whose org has `listed_publicly = true`, is not deleted, and is `trial` or `active`.
   - Newest first, at most 500 rows, grouped by company; companies ordered by their most recent posting.
@@ -792,7 +794,7 @@ The shared shell of every public page, plus the 404 page, the error page and the
 - **Routes:** `/companies`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/lib/marketplace.ts:197-248`
+- **Source:** `srp/lib/marketplace.ts:109-159`
 - **Rules:**
   - Companies: listed, not deleted, `trial`/`active`; ordered by name; at most 500.
   - Open-role counts come from a second query (published, not deleted; at most 2000 job rows) and include past-deadline jobs.
@@ -831,7 +833,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/jobs/[id]/apply`; Edge `submit-application`
 - **Priority:** P0
 - **Test type:** UI e2e; API
-- **Source:** `srp/components/jobs/apply-form.tsx`; `srp/supabase/functions/_shared/application.ts:32-44`; `srp/app/(public)/jobs/[id]/apply/actions.ts:132-243`
+- **Source:** `srp/components/jobs/apply-form.tsx`; `srp/supabase/functions/_shared/application.ts:32-44`; `srp/app/(public)/jobs/[id]/apply/actions.ts:31-144`
 - **Rules:**
 
   | Field | Client | Server (zod) | Message under the field |
@@ -895,7 +897,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Test type:** UI e2e; API
 - **Source:** `srp/supabase/functions/submit-application/index.ts:588-598`; `srp/supabase/migrations/0001_init.sql` (`unique (job_id, email)`)
 - **Rules:**
-  - Checked on `(job_id, lower(email))` **before** the CV upload → 409 `duplicate` with `field_errors.email = "duplicate"`.
+  - Checked on `(job_id, email)` with the email already lower-cased by the shared zod schema (profile mode: the lower-cased auth email), **before** the CV upload → 409 `duplicate` with `field_errors.email = "duplicate"`.
   - The database unique constraint is the backstop: losing a race deletes the uploaded file and returns `duplicate`.
   - Guest and account applications share the rule: a guest application blocks a later account application with the same email to the same job, and the reverse.
   - The same email may apply to different jobs.
@@ -1097,7 +1099,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/signup`; Supabase Auth email; `/auth/callback`
 - **Priority:** P0
 - **Test type:** UI e2e
-- **Source:** `srp/app/signup/actions.ts:118-122,156-162`; `srp/supabase/templates/confirm-signup.html`
+- **Source:** `srp/app/signup/actions.ts:28-32,60-96`; `srp/supabase/templates/confirm-signup.html`
 - **Rules:**
   - Target: a safe `next` wins; otherwise seeker tab → `/onboarding/seeker`, company tab → `/onboarding`.
   - If Supabase returns a session (confirmations off) → redirect to the target. Otherwise the screen «تحقّق من بريدك» / «أرسلنا رابط تأكيد إلى بريدك. افتحه لإكمال إنشاء الحساب.»
@@ -1112,7 +1114,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/signup`, `/login`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/lib/supabase/proxy.ts:149-157`; `srp/app/signup/page.tsx:41`; `srp/app/login/page.tsx:54`
+- **Source:** `srp/lib/supabase/proxy.ts:81-90`; `srp/app/signup/page.tsx:41`; `srp/app/login/page.tsx:54`
 - **Rules:** without `next`, the proxy redirects a signed-in user to `/onboarding` and **drops the query string**. With a safe `next`, the page redirects to it (login falls back to `homePath()` when `next` is unsafe).
 - **Acceptance criteria:**
   - **AC-AUTH-04.1** — *Given* the signed-in hr user, *when* `/login` opens, *then* the browser ends on `/admin` (via `/onboarding`).
@@ -1197,7 +1199,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/login`, `/signup`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/app/auth/actions.ts:32-55`
+- **Source:** `srp/app/auth/actions.ts:24-47`
 - **Rules:** `next = safeNext(form.next, "/onboarding")`; `redirectTo` = `{site}/auth/callback?next=…`; `prompt=select_account`. No provider URL → `/login?error=oauth`. The sign-up page passes the target (seeker tab → `/onboarding/seeker`); the login page passes the safe `next` or nothing. Google is disabled in the local config.
 - **Acceptance criteria:**
   - **AC-AUTH-10.1** — *Given* a project with Google enabled, *when* «المتابعة باستخدام Google» is pressed on the seeker tab, *then* the browser goes to Google with a return URL ending in `/auth/callback?next=%2Fonboarding%2Fseeker`.
@@ -1207,7 +1209,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/auth/callback`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/app/auth/callback/route.ts:65-104`
+- **Source:** `srp/app/auth/callback/route.ts:10-49`
 - **Rules:**
   1. `code` present and exchanged → redirect to `next` (default `/onboarding`).
   2. Else `via=email` with an `error_code` parameter → `/login?error=link_expired`.
@@ -1224,7 +1226,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/login`, `/signup`, `/auth/callback`, Google start
 - **Priority:** P0
 - **Test type:** UI e2e
-- **Source:** `srp/lib/redirects.ts:181-193`
+- **Source:** `srp/lib/redirects.ts:14-26`
 - **Rules:** a `next` value is accepted only if it is a string starting with `/`, contains no control characters (U+0000–U+001F, U+007F) and no backslash, and resolves on the same origin. The normalised path + query + hash is used; otherwise the fallback.
 - **Acceptance criteria:**
   - **AC-AUTH-12.1** — [NEG] *Given* `next` values `https://evil.com`, `//evil.com`, `/\tevil.com` (with a tab) and `/\evil`, *when* the user signs in, *then* they land on the fallback, never on another origin.
@@ -1280,7 +1282,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/onboarding`; RPC `create_organization`
 - **Priority:** P0
 - **Test type:** UI e2e; DB-RLS
-- **Source:** `srp/app/onboarding/actions.ts:158-164`; `srp/supabase/migrations/0009_onboarding.sql:75-135`; `srp/supabase/migrations/0006_multitenancy.sql:37-40`
+- **Source:** `srp/app/onboarding/actions.ts:19-25,60-79`; `srp/supabase/migrations/0009_onboarding.sql:75-135`; `srp/supabase/migrations/0006_multitenancy.sql:37-40`
 - **Rules:**
   - Server: company name trimmed 2–200; slug lower-case matching `^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$` (3–40); full name 2–120. Failure → top «يرجى التحقق من الحقول المدخلة» with field messages: slug «الرابط بحروف إنجليزية صغيرة وأرقام وشرطات فقط، ولا يقل عن ثلاثة أحرف», name «اسم الشركة حرفان على الأقل», full name «الاسم الكامل حرفان على الأقل».
   - Slug taken → «هذا الرابط محجوز، اختر غيره» (top and field).
@@ -1376,11 +1378,12 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/invite/[token]`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/app/invite/[token]/actions.ts`
-- **Rules:** expired → «انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة» (and the row becomes `expired` at that moment); wrong email, revoked or bad token → «الدعوة غير صالحة لهذا الحساب — تأكد أنك دخلت بالبريد المدعوّ»; other → «تعذّر قبول الدعوة، حاول مرة أخرى». The page has no sign-out link.
+- **Source:** `srp/app/invite/[token]/actions.ts`; `srp/supabase/migrations/0009_onboarding.sql:175-178`
+- **Rules:** expired → «انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة». `accept_invitation` runs `update invitations set status = 'expired'` and then raises `invitation expired`; the exception rolls the update back, so the row **stays `pending`** (verified on the scratch database; see ST-INVITE and OQ-34). Wrong email, revoked or bad token → «الدعوة غير صالحة لهذا الحساب — تأكد أنك دخلت بالبريد المدعوّ»; other → «تعذّر قبول الدعوة، حاول مرة أخرى». The page has no sign-out link.
 - **Acceptance criteria:**
   - **AC-INV-05.1** — [NEG] *Given* an invitation to `a@x.com`, *when* `b@x.com` is signed in and presses «قبول الدعوة», *then* «الدعوة غير صالحة لهذا الحساب — تأكد أنك دخلت بالبريد المدعوّ» is shown and no membership is created.
   - **AC-INV-05.2** — [NEG] *Given* an invitation that expires between page load and submit, *when* «قبول الدعوة» is pressed, *then* «انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة» is shown.
+  - **AC-INV-05.3** — [DB] *Given* the refused expired acceptance of AC-INV-05.2, *when* the `invitations` row is read, *then* its status is still `pending` and no membership exists. This records current behaviour (OQ-34).
 
 ### F-ROLE-01 — Roles, workspace gate and organization switcher (P0)
 
@@ -1641,7 +1644,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Rules:**
   - «الموافقات» / «كلتاهما اختيارية ومنفصلة عن الأخرى، ويمكنك تغييرهما في أي وقت من الإعدادات.»
   - Checkbox «صفحة مهنية عامة برابط فريد» (hint «تعرض خبراتك ومهاراتك ونقاط قوتك فقط. بريدك وجوالك لا يظهران عليها أبداً.»); the nested «إخفاء صفحتي عن محركات البحث» appears only while the public box is ticked.
-  - Checkbox «أن تراني الشركات في «مرشحون مقترحون» وتدعوني للتقديم» (hint «تظهر للشركات بطاقة بلا اسم ولا وسيلة تواصل، ولا تُكشف بياناتك إلا حين تتقدّم بنفسك.»). Nothing reads this consent yet (P2).
+  - Checkbox `أن تراني الشركات في «مرشحون مقترحون» وتدعوني للتقديم` (hint «تظهر للشركات بطاقة بلا اسم ولا وسيلة تواصل، ولا تُكشف بياناتك إلا حين تتقدّم بنفسك.»). Nothing reads this consent yet (P2).
   - Button «إنهاء والانتقال إلى لوحتي».
   - New profiles start with both unticked; a linked legacy profile keeps its choices. Both unticked is valid; unticked always means "no". `noindex` is saved as false when the public box is unticked. Public consent without a done analysis → «لم تكتمل قراءة سيرتك بعد. انتظر قليلاً ثم أعد المحاولة.»
   - Effects: a consent keeps its first timestamp while it stands and is cleared on withdrawal; public consent sets status `published`; the step moves `consents` → `done`; redirect to `/me`.
@@ -1689,7 +1692,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Rules:**
   - Opening the page changes nothing. Card «اربط صفحتك المهنية بحسابك» / «سيُنقل إلى حسابك ملفك القديم وسيرتك وما استخرجناه منها، ويبقى رابط صفحتك العامة كما هو. بعد الربط تديرها من حسابك.»; button «أكّد الربط» (pending «جارٍ الربط…»); link «العودة إلى ملفي» → `/onboarding/seeker`.
   - A token that is not 32 hex characters shows the invalid text and no button.
-  - The link works only if the token hash matches, the requester is the caller, the request is under 1 hour old, the caller's email is confirmed and matches, the caller has no profile, and the legacy profile is verified and unlinked. Any refusal → «هذا الرابط غير صالح أو انتهت صلاحيته، أو أنه أُرسل لحساب آخر. ارجع إلى ملفك واطلب رابطاً جديداً.»; an RPC error → «تعذّر إتمام العملية، حاول مرة أخرى.». Success → `/onboarding/seeker`.
+  - The link works only if the token hash matches, the requester is the caller, the request is under 1 hour old, the caller's email is confirmed and matches, the caller has no profile, and the legacy profile is verified and unlinked. Any refusal → «هذا الرابط غير صالح أو انتهت صلاحيته، أو أنه أُرسل لحساب آخر. ارجع إلى ملفك واطلب رابطاً جديداً.»; an RPC error → «تعذّر الحفظ. حاول مرة أخرى.» (`ar.seekerOnboarding.errors.generic`, `srp/lib/seeker-actions.ts:375-377`). Success → `/onboarding/seeker`.
 - **Acceptance criteria:**
   - **AC-LINK-03.1** — *Given* a fresh link opened by the requesting account, *when* «أكّد الربط» is pressed, *then* the seeker lands on the contact step (legacy profiles have no phone).
   - **AC-LINK-03.2** — [NEG][PERM] *Given* the link opened in another account's session, *when* «أكّد الربط» is pressed, *then* the invalid-link text is shown.
@@ -1749,7 +1752,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/me/jobs`
 - **Priority:** P1
 - **Test type:** UI e2e
-- **Source:** `srp/app/(seeker)/me/data.ts:146-169`; `srp/components/seeker/portal/seeker-jobs-explorer.tsx`; `srp/components/seeker/portal/seeker-job-card.tsx`
+- **Source:** `srp/app/(seeker)/me/data.ts:83-106`; `srp/components/seeker/portal/seeker-jobs-explorer.tsx`; `srp/components/seeker/portal/seeker-job-card.tsx`
 - **Rules:**
   - Same source as the marketplace (published, not deleted, listed live orgs; newest 500), flattened and sorted by job date.
   - Header «الوظائف» / «كل الوظائف المنشورة في السوق. افتح التفاصيل، أو تقدّم مباشرة بملفك المحفوظ.»
@@ -1831,6 +1834,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
   - **AC-SAPPLY-04.5** — [API][NEG] *Given* no bearer token, *when* posted with `mode=profile`, *then* the reply is 401 `auth_required`.
   - **AC-SAPPLY-04.6** — [API] *Given* an unlisted company's published job, *when* posted directly in profile mode, *then* it is accepted (the function does not check `listed_publicly`; see OQ-13).
   - **AC-SAPPLY-04.7** — [API][NEG] *Given* 10 submissions with one email in a day across guest and profile modes, *when* an 11th profile submission is sent, *then* the reply is 429 and the UI shows «وصلنا عدد كبير من الطلبات خلال وقت قصير. حاول بعد قليل.»
+  - **AC-SAPPLY-04.8** — [API][NEG] *Given* a crafted profile-mode submission with a 2,001-character `cover_note`, *when* posted, *then* the reply is 400 `invalid_input` with `field_errors.cover_note` and the UI shows «الرسالة طويلة — 2000 حرف كحد أقصى.» (`submit-application/index.ts` `profileApplicant`; `srp/app/(seeker)/me/actions.ts:42-53`).
 
 #### REQ-SAPPLY-05 — Success and the company's own CV copy
 - **Routes:** `/me/apply/[jobId]`; bucket `cvs`; `/admin/applications/[id]`
@@ -1846,7 +1850,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
   - **AC-SAPPLY-05.1** — *Given* a valid profile application, *when* submitted, *then* «أُرسل طلبك» and a reference code are shown, and the application appears in `/me/applications`.
   - **AC-SAPPLY-05.2** — [DB] *Given* the stored application, *when* storage is inspected, *then* `cvs/{org_id}/{application_id}.{ext}` exists and is byte-identical to the chosen version.
   - **AC-SAPPLY-05.3** — *Given* HR opens that application, *when* the header renders, *then* the badge «قدّم عبر حسابه» is shown.
-  - **AC-SAPPLY-05.4** — [DB][NEG] *Given* an hr session, *when* it updates `applicant_user_id` or `via_account`, *then* the trigger refuses with `applicant_user_id and via_account are set by the platform only`.
+  - **AC-SAPPLY-05.4** — [DB][NEG] *Given* an hr session, *when* it updates `applicant_user_id` or `via_account`, *then* the statement is refused with 42501 "permission denied for table applications" (staff hold column UPDATE grants on `interview_at` and `interview_qa` only, `0005_screening_and_interviews.sql:33`); *given* a role that does hold an UPDATE grant on those columns and is neither `service_role` nor `postgres`, the guard trigger refuses with `applicant_user_id and via_account are set by the platform only` (`0020_seeker_accounts.sql:146-169`, defence in depth).
   - **AC-SAPPLY-05.5** — *Given* the seeker deletes their seeker data afterwards, *when* HR opens the application, *then* it and its CV remain.
 
 ### F-SAPPS-01 — My applications `/me/applications` (P1)
@@ -1855,7 +1859,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Routes:** `/me/applications?page=N`; RPC `my_applications`
 - **Priority:** P1
 - **Test type:** UI e2e; DB-RLS
-- **Source:** `srp/app/(seeker)/me/applications/page.tsx`; `srp/app/(seeker)/me/data.ts:106-124`; `srp/supabase/migrations/0020_seeker_accounts.sql:935-982`
+- **Source:** `srp/app/(seeker)/me/applications/page.tsx`; `srp/app/(seeker)/me/data.ts:43-61`; `srp/supabase/migrations/0020_seeker_accounts.sql:935-982`
 - **Rules:**
   - Only rows with `applicant_user_id = auth.uid()`, newest first: job title, org name and slug, status, `created_at`, `ref_code`, history. Nothing from `ai_evaluations`. Guest applications with the same email are not shown. Applications to later soft-deleted jobs or orgs still appear.
   - Header «طلباتي» / «الطلبات التي قدّمتها بحسابك، بحالاتها وتواريخها.»
@@ -2209,7 +2213,7 @@ Anyone can apply to an open job with a form and a CV file, without an account (D
 - **Acceptance criteria:**
   - **AC-RANK-03.1** — [STATE] *Given* a failed analysis with 2 attempts, *when* the list renders, *then* the button reads `إعادة التحليل (2)`.
   - **AC-RANK-03.2** — [STATE] *Given* a pending analysis, *when* the list renders, *then* «التحليل قيد الانتظار…» is shown with a spinner.
-  - **AC-RANK-03.3** — [NEG] *Given* a double-click on «إعادة التحليل» (the second call gets 409), *when* the page reloads, *then* «تعذّرت إعادة التحليل، حاول لاحقاً» is shown.
+  - **AC-RANK-03.3** — [NEG] *Given* a failed application whose org's analysis quota is exhausted (the function answers 429 `quota exceeded` within the 3-second window), *when* «إعادة التحليل» is pressed on the applicants page, *then* the page reloads with «تعذّرت إعادة التحليل، حاول لاحقاً». (A double-click is **not** a reliable trigger: a forced call is accepted even while the row is `processing`; see AC-ANL-02.3 and KD-17.)
 
 #### REQ-RANK-04 — Status filter and empty states
 - **Routes:** `/admin/jobs/[id]/applicants?status=`
@@ -2245,10 +2249,11 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
 - **Priority:** P0
 - **Test type:** API; DB-RLS
 - **Source:** `srp/supabase/migrations/0012_security_hardening.sql`
-- **Rules:** the claim atomically sets `processing`, increments `analysis_attempts` and clears `analysis_error`. Without force it succeeds only from `pending`; with force from `failed`, `done` or `processing`. A lost race → 409 `analysis already in progress`. Every claim increments attempts, including claims that end in a quota refusal.
+- **Rules:** the claim atomically sets `processing`, increments `analysis_attempts` and clears `analysis_error`. Without force it succeeds only from `pending`; with force from `failed`, `done` or `processing` (`0012_security_hardening.sql:87-95`). A lost race → 409 `analysis already in progress`, which therefore only happens between **non-forced** calls racing on a `pending` row. A forced call is accepted even while another run holds the row in `processing` (deliberate, so housekeeping can recover a crashed run; `analyze-application/index.ts:146-157`), so two forced calls both run (KD-17). Every claim increments attempts, including claims that end in a quota refusal.
 - **Acceptance criteria:**
-  - **AC-ANL-02.1** — [API] *Given* two concurrent forced calls on one application, *when* both run, *then* one proceeds and the other returns 409 `analysis already in progress`.
+  - **AC-ANL-02.1** — [API] *Given* a `pending` application and two concurrent calls **without** `force` (e.g. the anon key or the service role), *when* both run, *then* one proceeds and the other returns 409 `analysis already in progress`.
   - **AC-ANL-02.2** — [DB] *Given* an application analysed once successfully, *when* inspected, *then* `analysis_attempts = 1` and `analysis_error` is null.
+  - **AC-ANL-02.3** — [API][KD-17] *Given* a `failed` application and two concurrent calls with `force:true` by an hr JWT, *when* both run, *then* only one model call and one quota unit should be spent. (Observed in code: the second forced claim succeeds from `processing`, so both calls run, attempts rise by 2 and two quota units are consumed.)
 
 #### REQ-ANL-03 — CV handling before the model call
 - **Routes:** Edge `analyze-application`
@@ -2300,7 +2305,7 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
 - **Priority:** P0
 - **Test type:** API; UI e2e
 - **Source:** `srp/supabase/functions/analyze-application/index.ts:450-467`
-- **Rules:** any thrown error → `failed`, `analysis_error = message[:500]`, HTTP 500 `analysis failed`. The quota unit is refunded only when the model was never reached (CV download failure, unsupported MIME, missing `GEMINI_API_KEY`, DOCX parse failure). Model errors and invalid output keep it consumed. `analysis_error` is never shown in the HR UI. The application stays fully usable: HR can open the CV.
+- **Rules:** any thrown error → `failed`, `analysis_error = message[:500]`, HTTP 500 `analysis failed`. The quota unit is refunded only when the model was never reached (CV download failure, unsupported MIME, missing `GEMINI_API_KEY`, DOCX parse failure). Exception: with blind screening on, `reachedModel` is set before the redaction stage reads the file (`analyze-application/index.ts:276-296`), so a DOCX parse failure or unsupported MIME in blind mode keeps the unit consumed. Model errors and invalid output keep it consumed. `analysis_error` is never shown in the HR UI. The application stays fully usable: HR can open the CV.
 - **Acceptance criteria:**
   - **AC-ANL-07.1** — [STATE] *Given* `GEMINI_API_KEY` unset, *when* an application is analysed, *then* the evaluation tab shows «فشل التحليل — يمكن قراءة السيرة يدوياً وإعادة المحاولة (المحاولات: 1)» and «عرض السيرة الذاتية» still opens the CV.
   - **AC-ANL-07.2** — [DB] *Given* the same failure, *when* `analysis_usage` is read, *then* `used` did not increase.
@@ -2357,7 +2362,7 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
 - **Routes:** `/admin/applications/[id]?tab=evaluation`
 - **Priority:** P0
 - **Test type:** UI e2e
-- **Source:** application page lines 396-431
+- **Source:** application page lines 346-411
 - **Rules:** always: the disclaimer, the button «تصدير تقرير الشفافية», and «قُيّم مُعمّى» when blind. pending → «التحليل قيد الانتظار…»; processing → «جارٍ التحليل…»; failed → alert «فشل التحليل — يمكن قراءة السيرة يدوياً وإعادة المحاولة (المحاولات: {n})» + «إعادة التحليل»; done but missing or invalid → «التقييم غير متاح». The evaluation is fetched only when the status is `done`.
 - **Acceptance criteria:**
   - **AC-EVAL-03.1** — [STATE] *Given* a processing analysis, *when* the tab opens, *then* «جارٍ التحليل…» is shown with the disclaimer and «تصدير تقرير الشفافية».
@@ -2442,7 +2447,8 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
 - **Acceptance criteria:**
   - **AC-STATUS-01.1** — *Given* a new application, *when* the select still shows «تم استلام الطلب», *then* «تحديث الحالة» is disabled.
   - **AC-STATUS-01.2** — *Given* hr selects «قيد المراجعة» with a note, *when* «تحديث الحالة» is pressed, *then* «تم تحديث الحالة» is shown and the badge reads «قيد المراجعة».
-  - **AC-STATUS-01.3** — *Given* a 1,200-character note, *when* saved, *then* the stored note is 1,000 characters.
+  - **AC-STATUS-01.3** — *Given* a 1,200-character note (crafted; the textarea has `maxLength` 1000), *when* saved, *then* the stored note is 1,000 characters.
+  - **AC-STATUS-01.4** — [NEG] *Given* a crafted status value outside the five statuses (e.g. `hired`), *when* «تحديث الحالة» is submitted, *then* «تعذّر تحديث الحالة، حاول مرة أخرى» is shown and nothing changes (`srp/app/(dashboard)/admin/applications/actions.ts:92-96`).
 
 #### REQ-STATUS-02 — Status RPC rules and history
 - **Routes:** RPC `change_application_status`; table `status_history`; trigger `applications_status_history`
@@ -2456,6 +2462,7 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
   - **AC-STATUS-02.3** — [DB][PERM][NEG] *Given* Org B's hr, *when* they call the RPC on a seed-org application, *then* it raises `forbidden`.
   - **AC-STATUS-02.4** — [DB] *Given* the current status `interview`, *when* the RPC is called with `interview`, *then* no history row is added.
   - **AC-STATUS-02.5** — [DB] *Given* any change by hr, *when* history is read, *then* `changed_by` is that hr user's id.
+  - **AC-STATUS-02.6** — [DB][NEG] *Given* an `anon` session (which holds EXECUTE on the RPC, §4.2), *when* it calls `change_application_status` on any application, *then* it raises `forbidden` (42501) and neither the status nor `status_history` changes (verified on the scratch database).
 
 #### REQ-STATUS-03 — Status emails
 - **Routes:** Edge `send-email` kinds `interview_invited`, `accepted`, `rejected`
@@ -2515,16 +2522,17 @@ The analysis runs only inside the Edge Function `analyze-application` (D3). One 
 - **Test type:** API; DB-RLS
 - **Source:** `srp/supabase/migrations/0014_analysis_quota.sql`
 - **Rules:**
-  - `organizations.monthly_analysis_quota`: default 25; null = uncapped (usage still counted); 0 = no analyses. `plan_code` is free text (default `trial`) and maps to nothing; only the 25 default exists in code.
-  - Usage per org per calendar month (`date_trunc('month', now())`, server time). `used` increments atomically while `used < quota`.
+  - `organizations.monthly_analysis_quota`: default 25; null = uncapped (usage still counted); 0 is meant to allow no analyses, but see KD-16. `plan_code` is free text (default `trial`) and maps to nothing; only the 25 default exists in code.
+  - Usage per org per calendar month (`date_trunc('month', now())`, server time). `used` increments atomically while `used < quota`; the **first** claim of a month inserts the usage row with `used = 1` without comparing it with the quota (`0014_analysis_quota.sql`, `consume_analysis_quota`), so with quota 0 the first analysis of each month is allowed (KD-16; verified on the scratch database: quota 0 → first call `allowed:true, used:1`, second call refused; quota 2 → allowed, allowed, refused).
   - Checked inside the function **before** the model call. Refusal → row `failed`, `analysis_error = 'monthly analysis quota exhausted'`, HTTP 429 `{"error":"quota exceeded"}`. RPC error → `failed`, 500.
   - Release (refund) decrements but never below 0.
   - Tenants cannot update `monthly_analysis_quota` or `plan_code`.
 - **Acceptance criteria:**
   - **AC-QUOTA-01.1** — [API] *Given* quota 2 and 3 new applications, *when* they are analysed in turn, *then* the first two end `done` and the third ends `failed` with HTTP 429.
-  - **AC-QUOTA-01.2** — [API] *Given* quota 0, *when* any application is analysed, *then* it ends `failed` with 429 and no model call is made.
+  - **AC-QUOTA-01.2** — [API] *Given* quota 0 and an `analysis_usage` row for the current month already present, *when* any application is analysed, *then* it ends `failed` with 429 and no model call is made.
   - **AC-QUOTA-01.3** — [DB] *Given* quota null, *when* analyses run, *then* they all succeed and `analysis_usage.used` still increases.
   - **AC-QUOTA-01.4** — [DB][PERM][NEG] *Given* the owner, *when* they update `monthly_analysis_quota`, *then* it is refused.
+  - **AC-QUOTA-01.5** — [API][KD-16] *Given* quota 0 and **no** `analysis_usage` row for the current month, *when* the first application of the month is analysed, *then* it should end `failed` with 429. (Observed in code and on the scratch database: `consume_analysis_quota` returns `allowed:true, used:1`, so the analysis runs and the model is called; only the second analysis of the month is refused.)
 
 #### REQ-QUOTA-02 — Quota display on the stats page
 - **Routes:** `/admin/stats`
@@ -3068,7 +3076,7 @@ Everything in this area runs through the Edge Function `interview-gateway`, the 
 - **Priority:** P1
 - **Test type:** API
 - **Source:** `srp/supabase/functions/interview-webhook/index.ts:17-106`; `srp/supabase/functions/_shared/interview-hmac.ts`
-- **Rules:** in order: non-POST 405; `INTERVIEW_WEBHOOK_SECRETS` unset → 503 `not_configured`; body > 256 KB → 413 `too_large`; HMAC → 401 `unauthorized` on missing headers, unknown key id, timestamp more than ±300 s off, or bad signature. Headers `x-hakeem-key-id`, `x-hakeem-timestamp`, `x-hakeem-nonce`, `x-hakeem-signature: v1=<hex>`; signed string `v1\n{ts}\n{nonce}\n{METHOD}\n{path}\n{sha256(body)}`; the path is accepted with or without `/functions/v1`. HMAC-SHA256, constant-time compare. The two directions use different secrets.
+- **Rules:** in order: non-POST 405; `INTERVIEW_WEBHOOK_SECRETS` unset → 503 `not_configured`; body > 256 KB → 413 `too_large`; HMAC → 401 `unauthorized` on missing headers, unknown key id, timestamp more than ±300 s off, or bad signature. Headers `x-hakeem-key-id`, `x-hakeem-timestamp`, `x-hakeem-nonce`, `x-hakeem-signature: v1=<hex>`; signed string `v1\n{ts}\n{nonce}\n{METHOD}\n{path and query}\n{sha256(body)}` (`interview-hmac.ts:12-13`); the timestamp must be 1–12 digits; the path is accepted with or without `/functions/v1`. HMAC-SHA256, constant-time compare. The two directions use different secrets.
 - **Acceptance criteria:**
   - **AC-IGW-04.1** — [API][NEG] *Given* a correctly signed event whose timestamp is 301 s old, *when* posted, *then* the reply is 401.
   - **AC-IGW-04.2** — [API][NEG] *Given* an unknown key id, or one changed body byte after signing, *when* posted, *then* the reply is 401.
@@ -3228,10 +3236,10 @@ A published job past `closes_at` stays `published` and listed, but its detail an
 
 | State | Allowed next states | Trigger | Observable effect |
 |---|---|---|---|
-| `pending` | `accepted`, `revoked`, `expired` | Created by `manage-users` invite (7-day expiry) | Listed under «دعوات معلّقة»; preview works |
+| `pending` | `accepted`, `revoked` (`expired` exists in the enum but is never persisted, see below) | Created by `manage-users` invite (7-day expiry) | Listed under «دعوات معلّقة» (also after `expires_at`); preview works only before `expires_at` |
 | `accepted` | — | `accept_invitation` by the invited email | Membership created; link shows «الدعوة غير صالحة» |
 | `revoked` | — | «إلغاء», or a re-invite of the same email | Link shows «الدعوة غير صالحة» |
-| `expired` | — | Written only when acceptance is attempted after `expires_at` | «انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة» |
+| `expired` | — | **No code path persists it.** `accept_invitation` sets it and then raises `invitation expired`, which rolls the update back (`0009_onboarding.sql:175-178`; verified on the scratch database) | Acceptance after `expires_at` shows «انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة» while the row stays `pending` |
 
 ### ST-SEEKER-STEP — Seeker onboarding step (`talent.profiles.onboarding_step`)
 
@@ -3537,7 +3545,7 @@ All applicant and invitation emails are sent through the Edge Function `send-ema
 | **P2 «مرشحون مقترحون»** (suggested candidates) and company invitations to seekers with limits | Not built | `consent_offers` is stored and editable but nothing reads it |
 | **P2 skill taxonomy expansion**, `jobs.skill_ids` | Not built | 36 seeded skills only |
 | **P4 internal redesign** | Not built | — |
-| **I2 candidate interview room** — «مهامي», consent screen, timer, dispatch, session tokens from the platform | Not built | «إرسال للمتقدم» permanently disabled; no gateway session-token/dispatch/extend action; `opens_at`/`closes_at` unused |
+| **I2 candidate interview room** — a candidate-facing task list (planned in `docs/INTERVIEW-AGENT-DESIGN.md`; no such page or string exists in the code), consent screen, timer, dispatch, session tokens from the platform | Not built | «إرسال للمتقدم» permanently disabled; no gateway session-token/dispatch/extend action; `opens_at`/`closes_at` unused |
 | **Interview statuses after `awaiting_review`** (`scheduled` … `evaluated`, `expired`) | No code path | — |
 | **I3 interview evaluation, report, authenticity signals** | Not built | `interview_reports` never written; no score or report in the UI |
 | **I4 code sandbox (Judge0)** | Not built | «أسئلة برمجة» disabled «قريباً»; agent `coding_unavailable` |
@@ -3570,7 +3578,7 @@ All applicant and invitation emails are sent through the Edge Function `send-ema
 
 One row per requirement, generated from the requirement blocks of §1 and §5–§8 (heading, **Routes**, **Priority**, **Test type**, and the number of acceptance criteria). "Feature" is the parent `F-` ID.
 
-Totals at version 1.0: **51 features** (26 P0, 19 P1, 6 P2), **206 requirements** (93 P0, 88 P1, 25 P2), **667 acceptance criteria**.
+Totals at version 1.1: **51 features** (26 P0, 19 P1, 6 P2), **206 requirements** (93 P0, 88 P1, 25 P2), **673 acceptance criteria** (version 1.0 had 667; 1.1 added AC-INV-05.3, AC-SAPPLY-04.8, AC-ANL-02.3, AC-STATUS-01.4, AC-STATUS-02.6 and AC-QUOTA-01.5).
 
 Suggested test type, as used in the table:
 - **UI e2e** — browser test of the Arabic RTL UI (Playwright is the approved devDependency, D10).
@@ -3647,7 +3655,7 @@ Suggested test type, as used in the table:
 | REQ-INV-02 | F-INV-01 | Pending invitations list and revoke | `/admin/settings` | P2 | UI e2e | 2 |
 | REQ-INV-03 | F-INV-01 | Invitation page, signed out | `/invite/[token]`; RPC `invitation_preview` (anon) | P1 | UI e2e | 2 |
 | REQ-INV-04 | F-INV-01 | Accepting an invitation | `/invite/[token]`; RPC `accept_invitation` | P1 | UI e2e; DB-RLS | 3 |
-| REQ-INV-05 | F-INV-01 | Invitation acceptance errors | `/invite/[token]` | P1 | UI e2e | 2 |
+| REQ-INV-05 | F-INV-01 | Invitation acceptance errors | `/invite/[token]` | P1 | UI e2e | 3 |
 | REQ-ROLE-01 | F-ROLE-01 | Workspace gate | `/admin/*` | P0 | UI e2e | 3 |
 | REQ-ROLE-02 | F-ROLE-01 | Role labels | `/admin` sidebar; settings team table; invitation page | P1 | UI e2e | 2 |
 | REQ-ROLE-03 | F-ROLE-01 | Organization switcher and active org | `/admin` sidebar | P1 | UI e2e | 4 |
@@ -3675,7 +3683,7 @@ Suggested test type, as used in the table:
 | REQ-SAPPLY-01 | F-SAPPLY-01 | Access to the apply-with-profile page | `/me/apply/[jobId]` | P0 | UI e2e | 3 |
 | REQ-SAPPLY-02 | F-SAPPLY-01 | Page states (first matching wins) | `/me/apply/[jobId]` | P0 | UI e2e | 4 |
 | REQ-SAPPLY-03 | F-SAPPLY-01 | Apply form, per-application consent and shared-data panel | `/me/apply/[jobId]` | P0 | UI e2e | 4 |
-| REQ-SAPPLY-04 | F-SAPPLY-01 | Profile-mode submission rules and messages | Edge `submit-application` (`mode=profile`) | P0 | API; UI e2e | 7 |
+| REQ-SAPPLY-04 | F-SAPPLY-01 | Profile-mode submission rules and messages | Edge `submit-application` (`mode=profile`) | P0 | API; UI e2e | 8 |
 | REQ-SAPPLY-05 | F-SAPPLY-01 | Success and the company's own CV copy | `/me/apply/[jobId]`; bucket `cvs`; `/admin/applications/[id]` | P0 | UI e2e; DB-RLS | 5 |
 | REQ-SAPPS-01 | F-SAPPS-01 | Source, content and privacy | `/me/applications?page=N`; RPC `my_applications` | P1 | UI e2e; DB-RLS | 3 |
 | REQ-SAPPS-02 | F-SAPPS-01 | Paging, empty and error states | `/me/applications?page=N` | P1 | UI e2e | 3 |
@@ -3706,7 +3714,7 @@ Suggested test type, as used in the table:
 | REQ-RANK-03 | F-RANK-01 | Analysis column and retry | `/admin/jobs/[id]/applicants` | P0 | UI e2e | 3 |
 | REQ-RANK-04 | F-RANK-01 | Status filter and empty states | `/admin/jobs/[id]/applicants?status=` | P1 | UI e2e | 2 |
 | REQ-ANL-01 | F-ANL-01 | Who may trigger an analysis | Edge `analyze-application` | P0 | API | 4 |
-| REQ-ANL-02 | F-ANL-01 | Atomic claim and attempt counting | Edge `analyze-application`; RPC `claim_application_for_analysis` (service role) | P0 | API; DB-RLS | 2 |
+| REQ-ANL-02 | F-ANL-01 | Atomic claim and attempt counting | Edge `analyze-application`; RPC `claim_application_for_analysis` (service role) | P0 | API; DB-RLS | 3 |
 | REQ-ANL-03 | F-ANL-01 | CV handling before the model call | Edge `analyze-application` | P0 | API | 3 |
 | REQ-ANL-04 | F-ANL-01 | Model call parameters and structured-output validation (D2, D5, D6) | Edge `analyze-application` | P0 | API | 3 |
 | REQ-ANL-05 | F-ANL-01 | The stored score is the sum of the breakdown | Edge `analyze-application`; trigger `ai_evaluations_sync_fit_score` | P0 | API; DB-RLS | 2 |
@@ -3722,12 +3730,12 @@ Suggested test type, as used in the table:
 | REQ-NOTES-01 | F-NOTES-01 | Suggested interview questions | `/admin/applications/[id]?tab=questions` | P1 | UI e2e | 2 |
 | REQ-NOTES-02 | F-NOTES-01 | HR interview notes (separate from the AI original, FR-07) | `/admin/applications/[id]?tab=questions`; column `ai_evaluations.interview_notes` | P1 | UI e2e; DB-RLS | 3 |
 | REQ-NOTES-03 | F-NOTES-01 | Manual interview record (schedule and answers) | `/admin/applications/[id]?tab=interview` | P1 | UI e2e | 4 |
-| REQ-STATUS-01 | F-STATUS-01 | Status changer UI | `/admin/applications/[id]?tab=profile` | P0 | UI e2e | 3 |
-| REQ-STATUS-02 | F-STATUS-01 | Status RPC rules and history | RPC `change_application_status`; table `status_history`; trigger `applications_status_history` | P0 | DB-RLS; API | 5 |
+| REQ-STATUS-01 | F-STATUS-01 | Status changer UI | `/admin/applications/[id]?tab=profile` | P0 | UI e2e | 4 |
+| REQ-STATUS-02 | F-STATUS-01 | Status RPC rules and history | RPC `change_application_status`; table `status_history`; trigger `applications_status_history` | P0 | DB-RLS; API | 6 |
 | REQ-STATUS-03 | F-STATUS-01 | Status emails | Edge `send-email` kinds `interview_invited`, `accepted`, `rejected` | P0 | UI e2e (mail capture); API | 5 |
 | REQ-CAL-01 | F-CAL-01 | Month grid and lists | `/admin/calendar?m=YYYY-MM` | P2 | UI e2e | 5 |
 | REQ-STATS-01 | F-STATS-01 | KPIs, charts and empty state | `/admin/stats`; RPCs `org_stats`, `org_quota` | P1 | UI e2e; DB-RLS | 3 |
-| REQ-QUOTA-01 | F-QUOTA-01 | Quota enforcement inside the analysis | Edge `analyze-application`; RPCs `consume_analysis_quota`, `release_analysis_quota` (service role) | P0 | API; DB-RLS | 4 |
+| REQ-QUOTA-01 | F-QUOTA-01 | Quota enforcement inside the analysis | Edge `analyze-application`; RPCs `consume_analysis_quota`, `release_analysis_quota` (service role) | P0 | API; DB-RLS | 5 |
 | REQ-QUOTA-02 | F-QUOTA-01 | Quota display on the stats page | `/admin/stats` | P0 | UI e2e | 4 |
 | REQ-QUOTA-03 | F-QUOTA-01 | Behaviour when the quota is exhausted | `/jobs/[id]/apply`; `/admin/applications/[id]`; Edge `housekeeping` | P0 | UI e2e; API | 2 |
 | REQ-SET-01 | F-SET-01 | Branding and careers page settings | `/admin/settings`; bucket `org-assets` | P1 | UI e2e; DB-RLS | 9 |
@@ -3830,12 +3838,12 @@ No test should assert either answer to an open question until the supervising en
 | OQ-31 | Deleting seeker data does not delete an unlinked legacy profile with the same email ("documented, not fixed"). Accepted? | REQ-SSET-03 |
 | OQ-32 | The expired legacy verify link says «انتهت صلاحية الرابط. ارفع سيرتك من جديد.», but accountless upload no longer exists. Update the copy? | REQ-TALENT-02 |
 | OQ-33 | A signed-in user following the `/talent` CTA to `/signup?as=seeker` is sent to `/onboarding` with the query dropped and sees the company tab of the chooser. Intended? | AC-AUTH-04.2 |
-| OQ-34 | Invitations past `expires_at` but never opened stay listed under «دعوات معلّقة» (status still `pending`). Should the list hide them? | AC-INV-02.2 |
+| OQ-34 | Invitations past `expires_at` stay listed under «دعوات معلّقة» with status `pending`, whether or not anyone tried to accept them: the `expired` update inside `accept_invitation` is rolled back by the exception raised after it. Should the list hide them, and should the status be persisted (e.g. by raising after a committed update, or by housekeeping)? | AC-INV-02.2, AC-INV-05.3, ST-INVITE |
 | OQ-35 | Browser-native validation bubbles (minLength, min/max) are not Arabic dictionary strings. This PRD says do not assert their text. Confirm. | REQ-BANK-08, REQ-VINT-03 |
 
 ### 13.2 Suspected defects (KD)
 
-Each was found by reading the code (KD-01 and KD-02 were also confirmed on a scratch Postgres built from the harness, all migrations and the seed). The linked AC states the behaviour the UI or specification promises; expect it to fail until fixed.
+Each was found by reading the code (KD-01, KD-02, KD-09 and KD-16 were also confirmed on a scratch Postgres built from the harness, all migrations and the seed). The linked AC states the behaviour the UI or specification promises; expect it to fail until fixed.
 
 | ID | Defect | Expected | Observed in code | Linked |
 |---|---|---|---|---|
@@ -3854,13 +3862,15 @@ Each was found by reading the code (KD-01 and KD-02 were also confirmed on a scr
 | KD-13 | Revoking an invitation can fail silently | «تعذّر إلغاء الدعوة» on failure | «إلغاء» has no confirmation and ignores errors | REQ-INV-02 |
 | KD-14 | Legacy page deletion leaves the CV file | The CV file is removed with the profile | `deleteProfile` (`srp/app/(talent)/talent/actions.ts`) ignores the returned `cv_path`; the file stays in `talent-cvs` | REQ-TALENT-02 |
 | KD-15 | Stale tab re-sends a status email | No email when the status does not change | The RPC no-ops, but the action still sends the interview/accepted/rejected email | AC-STATUS-03.5 |
+| KD-16 | A monthly analysis quota of 0 still allows one analysis a month | `monthly_analysis_quota = 0` refuses every analysis | `consume_analysis_quota` (`0014_analysis_quota.sql`) inserts the month's `analysis_usage` row with `used = 1` without comparing with the quota; the `used < quota` test applies only on conflict. Verified on the scratch database: quota 0 → first call `allowed:true`, second refused | AC-QUOTA-01.5 |
+| KD-17 | Two forced re-runs of the same application both run | One model call and one quota unit per re-run request burst (§8 cost guard) | `claim_application_for_analysis` with `p_force` succeeds from `processing` (`0012_security_hardening.sql:92-95`), deliberately so housekeeping can recover a crashed run; a second forced call (double submit of «إعادة التحليل», or a dashboard re-run overlapping a housekeeping retry) therefore also runs, adds an attempt and consumes another unit | AC-ANL-02.3 |
 
 ### 13.3 Security observations (SEC) — each needs a test
 
 | ID | Observation | Suggested test |
 |---|---|---|
-| SEC-01 | An admin can UPDATE an invitation's `role`, `email` and `token_hash`: the update policy has no owner ceiling and the table-level UPDATE grant is intact. An admin could set role `owner` with a token they know and accept it with a second account. | [DB] As admin, update a pending invitation to role `owner` and a known token hash, then accept with another account; the escalation must be refused |
-| SEC-02 | hr can INSERT arbitrary `status_history` rows for its own org, with a client-chosen `changed_by` and `note`, without changing the status. The transparency report would list them as human decisions. | [DB] As hr, insert a history row naming the owner as `changed_by`; check whether it is refused and whether it appears in the report |
+| SEC-01 | An admin can UPDATE an invitation's `role`, `email` and `token_hash`: the update policy has no owner ceiling and the table-level UPDATE grant is intact. An admin could set role `owner` with a token they know and accept it with a second account. (Confirmed on the scratch database: an admin's `update invitations set role = 'owner'` succeeds.) | [DB] As admin, update a pending invitation to role `owner` and a known token hash, then accept with another account; the escalation must be refused |
+| SEC-02 | hr can INSERT arbitrary `status_history` rows for its own org, with a client-chosen `changed_by` and `note`, without changing the status. The transparency report would list them as human decisions. (Confirmed on the scratch database: hr inserted a row naming the owner as `changed_by`.) | [DB] As hr, insert a history row naming the owner as `changed_by`; check whether it is refused and whether it appears in the report |
 | SEC-03 | `send-email` applicant kinds accept any JWT (the public anon key) plus an application UUID, with no dedupe and no rate limit. | [API] Call `send-email {kind:"rejected", application_id}` with the anon key; it should be refused |
 | SEC-04 | `housekeeping` performs no authorization inside the function; any caller passing the gateway (anon key) can trigger retries and retention. | [API] POST `housekeeping` with the anon key; it should be refused |
 | SEC-05 | `analyze-application` analyses any `pending` row for any caller (anon key), consuming the org's quota. | [API] POST a pending id with the anon key; decide whether this must be refused |
