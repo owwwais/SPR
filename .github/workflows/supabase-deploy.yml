@@ -227,11 +227,13 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
+          # NEVER print these responses: the PostgREST config carries the
+          # project's jwt_secret, and this repository's Action logs are
+          # public. Only db_schema is ever echoed.
           current=$(curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest")
-          echo "current postgrest config: $current"
-
           db_schema=$(echo "$current" | jq -er '.db_schema')
+          echo "exposed schemas: $db_schema"
 
           if echo ",$db_schema," | grep -q ",talent,"; then
             echo "talent is already exposed — nothing to do."
@@ -241,10 +243,13 @@ jobs:
           new_schema="$db_schema,talent"
           echo "adding talent -> $new_schema"
 
-          curl -sS -X PATCH \
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"db_schema\": \"$new_schema\"}" \
-            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest"
-          echo
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest")
+          if [ "$code" -ge 300 ]; then
+            echo "::error::Updating the exposed schemas failed (HTTP $code)."
+            exit 1
+          fi
           echo "done — PostgREST reloads its schema cache within a few seconds."
