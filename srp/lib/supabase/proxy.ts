@@ -70,6 +70,15 @@ export async function updateSession(request: NextRequest) {
     return response;
   };
 
+  // The redirects below are for page navigations only. A redirect answering
+  // a Server Action's POST reaches the client as an HTML page instead of an
+  // action result, so the user saw the error boundary instead of the sign-in
+  // page (a session revoked elsewhere, then "save"). Each action's own gate
+  // (requireMembership and friends) redirects through the action protocol.
+  if (request.headers.has("next-action")) {
+    return supabaseResponse;
+  }
+
   if (!user && pathname.startsWith("/admin")) {
     return redirectTo("/login");
   }

@@ -39,15 +39,18 @@ export default async function AdminSettingsPage() {
   const session = await requireOrgAdmin();
 
   const supabase = await createClient();
-  // The team roster is memberships joined to identity — profiles no longer
-  // carries a role (D14).
+  // The team roster is memberships plus identity — profiles no longer
+  // carries a role (D14). The names are a second read: memberships.user_id
+  // and profiles.id both reference auth.users, with no foreign key between
+  // them, so PostgREST cannot embed one in the other. The embed this used to
+  // be failed on every request and left the team list empty.
   // All three need nothing but session.org.id, so they go out together. The
   // branding read used to await after the other two and added a round trip
   // to the page for no reason.
   const [membersRes, invitesRes, orgRes] = await Promise.all([
     supabase
       .from("memberships")
-      .select("user_id, role, created_at, profiles(id, full_name)")
+      .select("user_id, role, created_at")
       .eq("org_id", session.org.id)
       .order("created_at", { ascending: true }),
     supabase
@@ -73,21 +76,37 @@ export default async function AdminSettingsPage() {
       ? supabase.storage.from("org-assets").getPublicUrl(path).data.publicUrl
       : null;
 
-  const memberRows = membersRes.data;
+  const memberRows = membersRes.data ?? [];
   if (membersRes.error)
     console.error("members query failed:", membersRes.error.message);
   if (invitesRes.error)
     console.error("invitations query failed:", invitesRes.error.message);
   const invitations = invitesRes.data ?? [];
 
+  // Ids come from this org's own memberships, which the query above already
+  // scoped by org_id and RLS; profiles RLS adds its co-member check on top.
+  const memberIds = memberRows.map((row) => row.user_id);
+  const profilesRes =
+    memberIds.length > 0
+      ? await supabase.from("profiles").select("id, full_name").in("id", memberIds)
+      : { data: [], error: null };
+  if (profilesRes.error)
+    console.error("member profiles query failed:", profilesRes.error.message);
+  const names = new Map(
+    (profilesRes.data ?? []).map((profile) => [profile.id, profile.full_name])
+  );
+
   type MemberRow = {
     user_id: string;
     role: MemberRole;
     profiles: { id: string; full_name: string } | null;
   };
-  const members = ((memberRows ?? []) as unknown as MemberRow[]).filter(
-    (row) => row.profiles !== null
-  );
+  const members: MemberRow[] = memberRows.flatMap((row) => {
+    const fullName = names.get(row.user_id);
+    return fullName === undefined
+      ? []
+      : [{ user_id: row.user_id, role: row.role, profiles: { id: row.user_id, full_name: fullName } }];
+  });
   const t = ar.settingsPage;
 
   return (

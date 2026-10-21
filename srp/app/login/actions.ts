@@ -45,7 +45,10 @@ export async function signIn(
 
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // This browser only. The default ("global") revokes every session the
+  // account has, so signing out on a phone ended the session on a laptop
+  // mid-task, and its next save failed.
+  await supabase.auth.signOut({ scope: "local" });
   // The active-org choice belongs to the session that just ended; leaving it
   // behind would preselect one account's workspace for whoever signs in next
   // on this device.
