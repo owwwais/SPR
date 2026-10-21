@@ -50,6 +50,11 @@ on:
         description: "One-time: add 'talent' to the project's exposed API schemas"
         type: boolean
         default: false
+      database:
+        description: "Database: 'check' reports which migrations exist (read-only); 'apply' also applies the missing ones"
+        type: choice
+        options: [none, check, apply]
+        default: none
 
 concurrency:
   # Never let two deploys race against the same project.
@@ -57,9 +62,85 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The live project's migrations were applied by hand in the SQL Editor, so
+  # `supabase db push` (the `migrations` box) cannot tell what is there. This
+  # asks the database itself: supabase/scripts/deploy_check.sql reports, per
+  # migration, whether its objects exist. 'apply' then sends each missing
+  # file, oldest first, through the Management API's query endpoint. A file
+  # is one query string, which Postgres runs as one implicit transaction, so
+  # a failing file leaves nothing half-applied, and the job stops there.
+  database:
+    name: Database (check / apply missing migrations)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.database != 'none'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check, apply what is missing, check again
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          MODE: ${{ inputs.database }}
+        run: |
+          set -euo pipefail
+          api="https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+
+          # Sends one SQL file; prints the JSON answer, fails on an HTTP error.
+          run_sql() {
+            jq -Rs '{query: .}' < "$1" > "$RUNNER_TEMP/body.json"
+            code=$(curl -sS -o "$RUNNER_TEMP/resp.json" -w '%{http_code}' -X POST "$api" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data @"$RUNNER_TEMP/body.json")
+            if [ "$code" -ge 300 ]; then
+              echo "HTTP $code: $(cat "$RUNNER_TEMP/resp.json")" >&2
+              return 1
+            fi
+            cat "$RUNNER_TEMP/resp.json"
+          }
+
+          check() {
+            run_sql srp/supabase/scripts/deploy_check.sql > "$RUNNER_TEMP/check.json"
+            jq -r '.[] | "\(.migration)  \(.status)"' "$RUNNER_TEMP/check.json"
+          }
+
+          echo "== migrations in the database"
+          check
+          missing=$(jq -r '.[] | select(.status != "applied") | .migration' "$RUNNER_TEMP/check.json")
+          if [ -z "$missing" ]; then
+            echo "Every migration is applied."
+            exit 0
+          fi
+          echo "== missing:" $missing
+          if [ "$MODE" != "apply" ]; then
+            echo "Check only; nothing was changed."
+            exit 0
+          fi
+
+          for m in $missing; do
+            echo "== applying $m"
+            if ! run_sql "srp/supabase/migrations/$m.sql" > /dev/null; then
+              echo "::error title=$m failed::Rolled back; nothing after it was applied. See the HTTP error above."
+              exit 1
+            fi
+          done
+
+          echo "== migrations in the database, after"
+          check
+          if jq -e '[.[] | select(.status != "applied")] | length > 0' "$RUNNER_TEMP/check.json" > /dev/null; then
+            echo "::error::Some migrations still report MISSING."
+            exit 1
+          fi
+
   functions:
     name: Edge Functions
     runs-on: ubuntu-latest
+    # After the database when both run (functions read its new objects); on a
+    # plain push the database job is skipped and this runs straight away. A
+    # read-only 'check' deploys nothing: new functions must not go live ahead
+    # of the migrations they need.
+    needs: database
+    if: ${{ !cancelled() && inputs.database != 'check' && (needs.database.result == 'success' || needs.database.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -115,7 +196,9 @@ jobs:
   expose-talent-schema:
     name: Expose talent schema to the Data API
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.expose_talent_schema
+    # The schema has to exist first (0017), so after the database job.
+    needs: database
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.expose_talent_schema && (needs.database.result == 'success' || needs.database.result == 'skipped') }}
     steps:
       # migration 0017 created the talent schema deliberately UNEXPOSED —
       # public.talent_* wrapper functions were meant to be its only reachable
@@ -144,11 +227,13 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
+          # NEVER print these responses: the PostgREST config carries the
+          # project's jwt_secret, and this repository's Action logs are
+          # public. Only db_schema is ever echoed.
           current=$(curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest")
-          echo "current postgrest config: $current"
-
           db_schema=$(echo "$current" | jq -er '.db_schema')
+          echo "exposed schemas: $db_schema"
 
           if echo ",$db_schema," | grep -q ",talent,"; then
             echo "talent is already exposed — nothing to do."
@@ -158,10 +243,13 @@ jobs:
           new_schema="$db_schema,talent"
           echo "adding talent -> $new_schema"
 
-          curl -sS -X PATCH \
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"db_schema\": \"$new_schema\"}" \
-            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest"
-          echo
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/postgrest")
+          if [ "$code" -ge 300 ]; then
+            echo "::error::Updating the exposed schemas failed (HTTP $code)."
+            exit 1
+          fi
           echo "done — PostgREST reloads its schema cache within a few seconds."
