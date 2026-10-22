@@ -26,7 +26,7 @@ type TemplateInput = {
 };
 
 // Fixed, neutral vocabulary — matches the status_history.public_reason
-// check constraint (0019). Never free text, never AI-generated: the one
+// check constraint (0023). Never free text, never AI-generated: the one
 // thing D24 and §10.4 both forbid is the applicant reading any evaluation
 // reasoning, and a human picking from this list is the guardrail.
 const REJECTION_REASON_LABELS: Record<string, string> = {

@@ -1,4 +1,4 @@
--- 0020_candidate_search.sql
+-- 0024_candidate_search.sql
 --
 -- Advanced feature #6: a candidate bank searchable by skill, across every
 -- job in the organization. "The organization already paid to have these CVs
@@ -11,7 +11,7 @@
 -- current_org_ids() membership check every other aggregate here uses.
 --
 -- Scale note, deliberately not solved here: this is a sequential scan per
--- organization (ai_evaluations_org_idx from 0019 narrows it to the caller's
+-- organization (ai_evaluations_org_idx from 0023 narrows it to the caller's
 -- own rows first, nothing more). Fine at pre-launch volumes; a trigram index
 -- (pg_trgm) is the next step if an organization's applicant count makes it
 -- not fine, not a reason to add one before anyone has that problem.

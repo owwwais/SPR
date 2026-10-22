@@ -44,10 +44,10 @@ type OrgStats = {
   per_job: { name: string; count: number; avg: number | null }[];
   funnel: { status: AppStatus; count: number }[];
   over_time: { date: string; count: number }[];
-  // 0019 #4: does the score track who actually gets hired? Only decided
+  // 0023 #4: does the score track who actually gets hired? Only decided
   // applications (accepted/rejected) with a score.
   calibration: { status: "accepted" | "rejected"; count: number; avg_fit_score: number }[];
-  // 0019 #12: top ten applicant sources by volume.
+  // 0023 #12: top ten applicant sources by volume.
   source_quality: {
     source: string;
     count: number;

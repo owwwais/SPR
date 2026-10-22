@@ -318,7 +318,7 @@ exception when sqlstate '42501' then
   raise notice 'PASS: hr cannot update AI originals (fit_score)';
 end $$;
 
--- 0019 #7: the interview_notes update two blocks up changed a real column
+-- 0023 #7: the interview_notes update two blocks up changed a real column
 -- but not fit_score, and must NOT have archived anything — the WHEN clause
 -- on the trigger exists specifically to keep a routine HR edit from being
 -- read back later as "an evaluation this application once had".
@@ -327,7 +327,7 @@ select 'ai_evaluation_history: untouched by an interview_notes-only update' as t
         where application_id = (select id from applications where ref_code = 'TRK-TEST-001')) = 0
        as pass;
 
--- 0019 #7: simulate analyze-application's real re-run (service role,
+-- 0023 #7: simulate analyze-application's real re-run (service role,
 -- upsert semantics — ON CONFLICT DO UPDATE fires the same BEFORE UPDATE
 -- trigger as this plain UPDATE). fit_score changes, so this one DOES archive.
 reset role;
@@ -352,7 +352,7 @@ select 'hr: can read its own org''s evaluation history' as test,
         where application_id = (select id from applications where ref_code = 'TRK-TEST-001')) = 1
        as pass;
 
--- 0019 #8: a neutral, human-picked rejection reason travels with the status
+-- 0023 #8: a neutral, human-picked rejection reason travels with the status
 -- change, separate from the free-text note.
 select public.change_application_status(
   (select id from applications where ref_code = 'TRK-TEST-001'),
@@ -384,7 +384,7 @@ exception when sqlstate '22023' then
   raise notice 'PASS: change_application_status rejects an arbitrary public_reason';
 end $$;
 
--- 0019 #4/#12: org_stats carries the two new aggregates and they are shaped
+-- 0023 #4/#12: org_stats carries the two new aggregates and they are shaped
 -- as expected for this fixture (one rejected application with a score).
 select 'org_stats: calibration reflects the rejected fixture' as test,
        (select (public.org_stats(
@@ -402,7 +402,7 @@ select 'org_stats: source_quality includes the fixture as "direct"' as test,
          where s ->> 'source' = 'direct' and (s ->> 'count')::int >= 1
        ) as pass;
 
--- 0019 #7/#8: both land in the D24 transparency export too.
+-- 0023 #7/#8: both land in the D24 transparency export too.
 select 'transparency report: carries public_reason and the superseded evaluation' as test,
        (
          select
@@ -416,7 +416,7 @@ select 'transparency report: carries public_reason and the superseded evaluation
          ) t
        ) as pass;
 
--- 0020 #6: candidate search by skill, across jobs.
+-- 0024 #6: candidate search by skill, across jobs.
 reset role;
 update ai_evaluations set extracted = '{"skills": ["React", "PostgreSQL"]}'
 where application_id = (select id from applications where ref_code = 'TRK-TEST-001');

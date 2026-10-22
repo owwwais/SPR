@@ -1,4 +1,4 @@
--- 0019_rejection_reason_and_sourcing.sql
+-- 0023_rejection_reason_and_sourcing.sql
 --
 -- Four of the nine advanced features COMPETITIVE-2026-08.md recommended
 -- beyond the top three (already shipped: transparency export, blind

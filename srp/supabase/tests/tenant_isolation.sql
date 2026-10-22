@@ -139,7 +139,7 @@ insert into ai_evaluations (application_id, model, prompt_version, extracted, fi
   ('0a000000-0000-4000-8000-0000000000f1','gemini-3.5-flash','1.1','{}',80,'{}','{}','[]'),
   ('0b000000-0000-4000-8000-0000000000f1','gemini-3.5-flash','1.1','{}',75,'{}','{}','[]');
 
--- Re-run globex's evaluation so ai_evaluation_history (0019 #7) has a row
+-- Re-run globex's evaluation so ai_evaluation_history (0023 #7) has a row
 -- that belongs to globex alone, for the isolation checks below.
 update ai_evaluations set fit_score = 60
 where application_id = '0b000000-0000-4000-8000-0000000000f1';

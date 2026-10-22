@@ -313,7 +313,7 @@ export type Database = {
           screening_answers: Json;
           interview_at: string | null;
           interview_qa: Json;
-          // 0019: optional hiring-source attribution (#12), e.g. "linkedin".
+          // 0023: optional hiring-source attribution (#12), e.g. "linkedin".
           // Sanitized by submit-application; never used in scoring.
           source: string | null;
           created_at: string;
@@ -413,7 +413,7 @@ export type Database = {
           },
         ];
       };
-      // 0019: every evaluation a re-run replaced. Written only by the
+      // 0023: every evaluation a re-run replaced. Written only by the
       // ai_evaluations_archive_before_update trigger — never by application
       // code, so there is no Insert/Update type.
       ai_evaluation_history: {
@@ -455,7 +455,7 @@ export type Database = {
           to_status: AppStatus;
           changed_by: string | null;
           note: string | null;
-          // 0019: optional, human-picked, neutral reason category (#8).
+          // 0023: optional, human-picked, neutral reason category (#8).
           public_reason: string | null;
           created_at: string;
         };
@@ -496,7 +496,7 @@ export type Database = {
           p_application_id: string;
           p_new_status: AppStatus;
           p_note?: string | null;
-          // 0019: optional, human-picked, neutral reason category (#8).
+          // 0023: optional, human-picked, neutral reason category (#8).
           p_public_reason?: string | null;
         };
         Returns: undefined;
@@ -566,7 +566,7 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
-      // 0020: org-wide candidate search by extracted skill (#6).
+      // 0024: org-wide candidate search by extracted skill (#6).
       search_candidates: {
         Args: {
           p_org: string;

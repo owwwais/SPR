@@ -70,7 +70,7 @@ const APP_STATUSES: AppStatus[] = [
 ];
 
 // #8: the only values status_history.public_reason's check constraint
-// (0019) accepts. Validated here too so a bad value fails before the RPC
+// (0023) accepts. Validated here too so a bad value fails before the RPC
 // round trip, with the same message as any other invalid submission.
 const PUBLIC_REASONS = [
   "more_suitable_candidate",

@@ -21,7 +21,7 @@ const APP_STATUSES: AppStatus[] = [
 ];
 
 // #8: fixed, neutral options only — matches status_history.public_reason's
-// check constraint (0019). Never free text: this is the one sentence class
+// check constraint (0023). Never free text: this is the one sentence class
 // that reaches the applicant, so it stays out of anyone's hands but a
 // short, pre-approved list.
 const REJECTION_REASONS = [
