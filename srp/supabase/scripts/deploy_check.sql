@@ -73,7 +73,12 @@ checks (migration, applied) as (values
         and (has_table_privilege('anon', c.oid, 'INSERT')
           or has_table_privilege('anon', c.oid, 'UPDATE')
           or has_table_privilege('anon', c.oid, 'DELETE'))
-    ))
+    )),
+  ('0023_rejection_reason_and_sourcing',
+    exists (select 1 from col where table_name = 'status_history' and column_name = 'public_reason')
+    and to_regclass('public.ai_evaluation_history') is not null),
+  ('0024_candidate_search',
+    exists (select 1 from fn where name = 'search_candidates'))
 )
 select
   migration,

@@ -37,7 +37,7 @@ type Report = {
   } | null;
   // #7: evaluations a re-run replaced — so the report stays honest about
   // what was live when an earlier decision in decision_trail was made.
-  superseded_evaluations: {
+  superseded_evaluations?: {
     fit_score: number;
     model: string;
     prompt_version: string;
@@ -138,6 +138,10 @@ export async function GET(
       </tr>`
     )
     .join("");
+
+  // Absent on a database still on 0015's version of the RPC (the route
+  // deploys on merge, 0023 does not) — default it instead of crashing.
+  report.superseded_evaluations ??= [];
 
   const supersededRows = report.superseded_evaluations
     .map(

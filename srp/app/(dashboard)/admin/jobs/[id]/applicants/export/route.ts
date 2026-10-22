@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
+import type { AnalysisStatus, AppStatus } from "@/types/database";
 
 // Advanced feature #9: a CSV of every applicant for one job. The one
 // feature COMPETITIVE-2026-08.md flagged as "every customer's first ask,
@@ -53,15 +54,35 @@ export async function GET(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const { data: applicants, error } = await supabase
-    .from("applications")
-    .select(
-      "ref_code, full_name, email, phone, status, fit_score, analysis_status, source, created_at"
-    )
-    .eq("org_id", session.org.id)
-    .eq("job_id", id)
-    .order("fit_score", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: true });
+  type Row = {
+    ref_code: string;
+    full_name: string;
+    email: string;
+    phone: string;
+    status: AppStatus;
+    fit_score: number | null;
+    analysis_status: AnalysisStatus;
+    source?: string | null;
+    created_at: string;
+  };
+  const query = (columns: string) =>
+    supabase
+      .from("applications")
+      .select(columns)
+      .eq("org_id", session.org.id)
+      .eq("job_id", id)
+      .order("fit_score", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: true })
+      .returns<Row[]>();
+
+  const base =
+    "ref_code, full_name, email, phone, status, fit_score, analysis_status, created_at";
+  let { data: applicants, error } = await query(`${base}, source`);
+  // applications.source arrives with 0023, which is applied by hand after
+  // this route has already deployed. Postgres 42703 = undefined column.
+  if (error?.code === "42703") {
+    ({ data: applicants, error } = await query(base));
+  }
   if (error) {
     console.error("applicants CSV export query failed:", error.message);
     return NextResponse.json({ error: "export_failed" }, { status: 500 });

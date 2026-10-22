@@ -644,7 +644,11 @@ Deno.serve(async (req) => {
       cv_mime: applicant.cv.mime,
       cover_note: applicant.cover_note,
       screening_answers: validatedAnswers.data,
-      source,
+      // Only sent when there is one: this function deploys on merge, its
+      // migration (0023) does not, and PostgREST rejects an insert naming a
+      // column it has never seen — so an unconditional `source: null` took
+      // every application down until the migration ran.
+      ...(source ? { source } : {}),
       // Guests leave both at their defaults (null, false).
       ...(applicant.applicant_user_id
         ? { applicant_user_id: applicant.applicant_user_id, via_account: true }
