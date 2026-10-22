@@ -66,6 +66,17 @@ export const Evaluation = z.object({
   confidence: z.enum(["high", "medium", "low"]), // low => UI shows a caution badge
 });
 
+// §6's per-criterion caps — the same numbers as ScoreBreakdown's own
+// .max(N) above, lifted out so a progress bar or a diff can show "how much
+// of this criterion was available" without hard-coding the rubric twice.
+export const BREAKDOWN_MAX = {
+  required_skills: 40,
+  experience_relevance: 30,
+  experience_years: 15,
+  education_fit: 10,
+  bonus_signals: 5,
+} as const;
+
 export type ExtractedCVType = z.infer<typeof ExtractedCV>;
 export type ScoreBreakdownType = z.infer<typeof ScoreBreakdown>;
 export type EvaluationType = z.infer<typeof Evaluation>;

@@ -23,6 +23,10 @@ type DraftQuestion = {
   type: QuestionType;
   required: boolean;
   optionsText: string;
+  // #11: a yes_no question whose "no" flags the application for HR —
+  // never an auto-reject. Meaningless outside yes_no, so it is cleared on
+  // serialize whenever the type is anything else.
+  disqualifying: boolean;
 };
 
 const selectClass =
@@ -35,6 +39,7 @@ function toDraft(questions: ScreeningQuestionType[]): DraftQuestion[] {
     type: q.type,
     required: q.required,
     optionsText: q.options.join("\n"),
+    disqualifying: q.disqualifying,
   }));
 }
 
@@ -52,6 +57,7 @@ function serialize(drafts: DraftQuestion[]): string {
               .map((o) => o.trim())
               .filter(Boolean)
           : [],
+      disqualifying: d.type === "yes_no" ? d.disqualifying : false,
     }))
   );
 }
@@ -147,6 +153,26 @@ export function QuestionsBuilder({
                 {t.required}
               </label>
             </div>
+            {draft.type === "yes_no" && (
+              <div className="flex items-end pb-2 sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={draft.disqualifying}
+                    onChange={(e) =>
+                      update(draft.id, { disqualifying: e.target.checked })
+                    }
+                  />
+                  {t.disqualifying}
+                </label>
+                {draft.disqualifying && (
+                  <p className="ms-2 text-xs text-muted-foreground">
+                    {t.disqualifyingHint}
+                  </p>
+                )}
+              </div>
+            )}
             {(draft.type === "single_choice" ||
               draft.type === "multiple_choice") && (
               <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -183,6 +209,7 @@ export function QuestionsBuilder({
                 type: "text",
                 required: false,
                 optionsText: "",
+                disqualifying: false,
               },
             ])
           }

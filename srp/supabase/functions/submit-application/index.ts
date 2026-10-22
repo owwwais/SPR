@@ -286,6 +286,7 @@ Deno.serve(async (req) => {
           label: question.label,
           type: question.type,
           answer: values,
+          disqualifying: question.disqualifying,
         });
       } else if (question.required) {
         questionErrors[key] = "required";
@@ -308,6 +309,7 @@ Deno.serve(async (req) => {
         label: question.label,
         type: question.type,
         answer: value,
+        disqualifying: question.disqualifying,
       });
     } else if (question.required) {
       questionErrors[key] = "required";

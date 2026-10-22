@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  Users,
 } from "lucide-react";
 import { canAdminister, requireMembership } from "@/lib/auth";
 import { signOut } from "@/app/login/actions";
@@ -40,6 +41,10 @@ export default async function AdminLayout({
           <NavLink href="/admin/calendar">
             <CalendarDays className="size-4" aria-hidden />
             {ar.calendar.title}
+          </NavLink>
+          <NavLink href="/admin/candidates">
+            <Users className="size-4" aria-hidden />
+            {ar.candidates.title}
           </NavLink>
           <NavLink href="/admin/stats">
             <ChartColumn className="size-4" aria-hidden />

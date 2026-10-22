@@ -566,6 +566,16 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
+      // 0020: org-wide candidate search by extracted skill (#6).
+      search_candidates: {
+        Args: {
+          p_org: string;
+          p_skill?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: unknown;
+      };
       // 0017: the talent schema is not exposed through the API; these
       // wrappers in public are its entire surface.
       talent_publish_profile: {

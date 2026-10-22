@@ -183,6 +183,8 @@ select pg_temp.chk_blind('acme hr: CANNOT see globex evaluations',
 select pg_temp.chk_blind('acme hr: CANNOT see globex evaluation history',
   $$select count(*) from ai_evaluation_history
     where application_id = '0b000000-0000-4000-8000-0000000000f1'$$);
+select pg_temp.chk_denied('acme hr: CANNOT search_candidates in globex',
+  $$select public.search_candidates('0b000000-0000-4000-8000-000000000001', 'engineer')$$);
 select pg_temp.chk_blind('acme hr: CANNOT see globex status history',
   $$select count(*) from status_history
     where org_id = '0b000000-0000-4000-8000-000000000001'$$);

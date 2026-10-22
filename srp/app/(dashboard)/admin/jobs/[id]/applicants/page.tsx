@@ -5,10 +5,13 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  Download,
   Loader2,
   RefreshCw,
+  TriangleAlert,
   Users,
 } from "lucide-react";
+import { ScreeningAnswers } from "@/lib/validations/screening";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,7 +87,7 @@ export default async function ApplicantsPage({
   let query = supabase
     .from("applications")
     .select(
-      "id, full_name, email, status, analysis_status, analysis_attempts, created_at, fit_score",
+      "id, full_name, email, status, analysis_status, analysis_attempts, created_at, fit_score, screening_answers",
       { count: "exact" }
     )
     .eq("org_id", session.org.id)
@@ -119,9 +122,20 @@ export default async function ApplicantsPage({
           <ArrowRight className="size-4" aria-hidden />
           {ar.adminJobs.title}
         </Link>
-        <h1 className="text-2xl font-bold">
-          {ar.applicants.title}: {job.title}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">
+            {ar.applicants.title}: {job.title}
+          </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<a href={`${currentPath}/export`} />}
+          >
+            <Download className="size-4" aria-hidden />
+            {ar.applicants.export.button}
+          </Button>
+        </div>
       </div>
 
       {showRetryError && (
@@ -166,10 +180,20 @@ export default async function ApplicantsPage({
           </p>
         </div>
       ) : (
+        // #5: a plain GET form — no client JS needed. Submitting with
+        // exactly two checkboxes ticked lands on the compare page with
+        // ?id=a&id=b; any other count and that page explains what to do
+        // instead of guessing.
+        <form
+          method="get"
+          action={`${currentPath}/compare`}
+          className="flex flex-col gap-3"
+        >
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead>{ar.applicants.table.rank}</TableHead>
                 <TableHead>{ar.applicants.table.name}</TableHead>
                 <TableHead title={ar.evaluation.advisoryTooltip}>
@@ -184,15 +208,43 @@ export default async function ApplicantsPage({
             <TableBody>
               {applicants.map((applicant, index) => {
                 const fitScore = applicant.fit_score ?? null;
+                // #11: flag for HR's attention only — never affects ranking
+                // or an auto-reject (D4). "لا" is the literal stored value.
+                const parsedAnswers = ScreeningAnswers.safeParse(
+                  applicant.screening_answers
+                );
+                const flagged =
+                  parsedAnswers.success &&
+                  parsedAnswers.data.some(
+                    (a) => a.disqualifying && a.answer === "لا"
+                  );
                 return (
                   <TableRow key={applicant.id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        name="id"
+                        value={applicant.id}
+                        className="size-4 accent-primary"
+                        aria-label={ar.applicants.compare.selectOne}
+                      />
+                    </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
                       {(page - 1) * PAGE_SIZE + index + 1}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-medium">
+                        <span className="flex items-center gap-1.5 font-medium">
                           {applicant.full_name}
+                          {flagged && (
+                            <TriangleAlert
+                              className="size-3.5 text-amber-600 dark:text-amber-400"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="sr-only">
+                            {flagged ? ar.application.screeningFlag : ""}
+                          </span>
                         </span>
                         <span dir="ltr" className="text-xs text-muted-foreground">
                           {applicant.email}
@@ -240,6 +292,10 @@ export default async function ApplicantsPage({
             </TableBody>
           </Table>
         </div>
+          <Button type="submit" variant="outline" size="sm" className="self-start">
+            {ar.applicants.compare.button}
+          </Button>
+        </form>
       )}
 
       {totalPages > 1 && (

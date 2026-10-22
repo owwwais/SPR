@@ -478,6 +478,9 @@ export const ar = {
       questionLabel: "نص السؤال",
       questionType: "نوع السؤال",
       required: "إلزامي",
+      disqualifying: "سؤال موقِف — نبّهني إن كانت الإجابة «لا»",
+      disqualifyingHint:
+        "يظهر تنبيه في قائمة المتقدمين وملف المتقدم فقط — لا يُرفض أي طلب تلقائياً أبداً.",
       optionsLabel: "الخيارات (سطر لكل خيار)",
       optionsPlaceholder: "الخيار الأول\nالخيار الثاني",
       remove: "حذف السؤال",
@@ -821,6 +824,26 @@ export const ar = {
     },
   },
 
+  candidates: {
+    title: "بنك المرشحين",
+    hint: "بحث بالمهارة عبر كل من تقدّم لأي وظيفة في مؤسستك — لا يُعاد تحليل أحد، ولا يدخل هذا البحث في أي درجة.",
+    searchPlaceholder: "مهارة، مثل React أو SQL",
+    search: "بحث",
+    emptyTitle: "لا يوجد متقدمون محلَّلون بعد",
+    emptyBody: "سيظهر المتقدمون هنا فور اكتمال أول تحليل ذكاء اصطناعي.",
+    noResultsTitle: "لا توجد نتائج لهذه المهارة",
+    noResultsBody: "جرّب كلمة أخرى أو جزءاً من اسم المهارة.",
+    table: {
+      name: "الاسم",
+      job: "الوظيفة المتقدَّم لها",
+      score: "درجة الملاءمة",
+      status: "حالة الطلب",
+      skills: "المهارات",
+      appliedAt: "تاريخ التقديم",
+      actions: "إجراءات",
+    },
+  },
+
   applicants: {
     title: "المتقدمون",
     emptyTitle: "لا توجد طلبات تقديم",
@@ -840,6 +863,36 @@ export const ar = {
     filterAll: "الكل",
     errors: {
       retryFailed: "تعذّرت إعادة التحليل، حاول لاحقاً",
+    },
+    export: {
+      button: "تصدير CSV",
+      columns: {
+        refCode: "رمز المتابعة",
+        name: "الاسم",
+        email: "البريد الإلكتروني",
+        phone: "رقم الجوال",
+        status: "حالة الطلب",
+        score: "درجة الملاءمة",
+        analysis: "حالة التحليل",
+        source: "المصدر",
+        appliedAt: "تاريخ التقديم",
+      },
+      analysisStatus: {
+        pending: "قيد الانتظار",
+        processing: "جارٍ التحليل",
+        done: "تم",
+        failed: "فشل",
+      },
+    },
+    compare: {
+      button: "قارن المحددين",
+      selectOne: "تحديد للمقارنة",
+      title: "مقارنة مرشحين",
+      backToApplicants: "قائمة المتقدمين",
+      needExactlyTwo: "حدّد مرشحين بالضبط من القائمة ثم اضغط «قارن المحددين».",
+      missingEvaluation: "أحد المرشحين ليس لديه تقييم ذكاء اصطناعي منتهٍ بعد.",
+      overallScore: "الدرجة الإجمالية",
+      higher: "أعلى",
     },
   },
 
@@ -1094,6 +1147,7 @@ export const ar = {
       interview: "المقابلة",
     },
     screeningTitle: "إجابات أسئلة التقديم",
+    screeningFlag: "يحتاج انتباهك",
     appliedTo: "الوظيفة",
     appliedAt: "تاريخ التقديم",
     refCode: "رمز المتابعة",

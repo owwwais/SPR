@@ -38,7 +38,11 @@ import {
 import { scoreBandClass } from "@/components/admin/score-badge";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { ExtractedCV, ScoreBreakdown } from "@/lib/validations/evaluation";
+import {
+  BREAKDOWN_MAX,
+  ExtractedCV,
+  ScoreBreakdown,
+} from "@/lib/validations/evaluation";
 import { ar } from "@/lib/i18n/ar";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { reRunAnalysis } from "../actions";
@@ -73,14 +77,6 @@ const StoredEvaluation = z.object({
     })
   ),
 });
-
-const BREAKDOWN_MAX = {
-  required_skills: 40,
-  experience_relevance: 30,
-  experience_years: 15,
-  education_fit: 10,
-  bonus_signals: 5,
-} as const;
 
 export default async function ApplicationPage({
   params,
@@ -287,16 +283,37 @@ export default async function ApplicationPage({
                     {ar.application.screeningTitle}
                   </h3>
                   <dl className="flex flex-col gap-3">
-                    {screeningAnswers.map((entry) => (
-                      <div key={entry.question_id} className="text-sm">
-                        <dt className="font-medium">{entry.label}</dt>
-                        <dd className="mt-0.5 whitespace-pre-wrap text-muted-foreground">
-                          {Array.isArray(entry.answer)
-                            ? entry.answer.join("، ")
-                            : entry.answer}
-                        </dd>
-                      </div>
-                    ))}
+                    {screeningAnswers.map((entry) => {
+                      // #11: a flag for HR's attention only — never an
+                      // auto-reject (D4). "لا" is the literal value yes_no
+                      // answers are stored as (apply-form.tsx), not a code.
+                      const flagged =
+                        entry.disqualifying && entry.answer === "لا";
+                      return (
+                        <div key={entry.question_id} className="text-sm">
+                          <dt className="flex items-center gap-1.5 font-medium">
+                            {entry.label}
+                            {flagged && (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500 text-amber-700 dark:text-amber-400"
+                              >
+                                <TriangleAlert
+                                  className="size-3"
+                                  aria-hidden
+                                />
+                                {ar.application.screeningFlag}
+                              </Badge>
+                            )}
+                          </dt>
+                          <dd className="mt-0.5 whitespace-pre-wrap text-muted-foreground">
+                            {Array.isArray(entry.answer)
+                              ? entry.answer.join("، ")
+                              : entry.answer}
+                          </dd>
+                        </div>
+                      );
+                    })}
                   </dl>
                 </div>
               )}

@@ -416,6 +416,33 @@ select 'transparency report: carries public_reason and the superseded evaluation
          ) t
        ) as pass;
 
+-- 0020 #6: candidate search by skill, across jobs.
+reset role;
+update ai_evaluations set extracted = '{"skills": ["React", "PostgreSQL"]}'
+where application_id = (select id from applications where ref_code = 'TRK-TEST-001');
+
+set local role authenticated;
+set local request.jwt.claims to
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';
+
+select 'search_candidates: matches a partial, case-insensitive skill' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001'), 'react'
+        ) ->> 'total')::int) = 1
+       as pass;
+
+select 'search_candidates: no match for an unrelated skill' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001'), 'rust'
+        ) ->> 'total')::int) = 0
+       as pass;
+
+select 'search_candidates: null skill returns every analyzed applicant' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001')
+        ) ->> 'total')::int) >= 1
+       as pass;
+
 -- ============================================================
 -- owner (seeded: admin@example.com)
 -- ============================================================
