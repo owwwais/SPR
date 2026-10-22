@@ -1,5 +1,5 @@
 # CLAUDE.md — Smart Recruitment Portal (SRP)
-## AI Coding Agent Specification (v1.0)
+## AI Coding Agent Specification (v3.0)
 
 > **READ THIS ENTIRE FILE BEFORE WRITING ANY CODE.**
 > A human software engineer supervises this project and reviews all output. Follow this spec exactly. When the spec and your instinct conflict, **the spec wins**. When something is ambiguous, **STOP and ask the supervising engineer**. Do not invent features.
@@ -8,10 +8,12 @@
 
 ## 1. Project Summary
 
-A recruitment website for a single company, with two faces:
+A recruitment platform with two sides (v3, approved 2026-10-16 — see §2.2):
 
-1. **Public portal:** visitors browse open jobs, view details, and apply by submitting a form + CV file (PDF/DOCX). No account required.
+1. **Public portal:** visitors browse open jobs, view details, and apply by submitting a form + CV file (PDF/DOCX). Guest applying needs no account and stays (D21).
 2. **HR dashboard (authenticated):** HR staff publish/manage jobs, and review applicants **ranked by an AI fit score**. For each applicant the AI provides: extracted structured CV data, a fit score (0–100), a written justification (strengths / gaps / red flags), and tailored interview questions.
+3. **Seeker portal (authenticated, D26):** a job seeker signs up, uploads a CV once, completes contact details, browses jobs with explainable recommendations, and applies without re-uploading.
+4. **Virtual first-round interview (D30):** a separately deployed agent turns a job's requirements and an applicant's CV into a question bank, runs a timed text or voice interview the company dispatches, and returns an advisory report.
 
 **Ethical rule baked into the product:** the AI score is advisory. Accept/reject is always a human action. Every score is displayed WITH its justification. This is non-negotiable.
 
@@ -25,14 +27,14 @@ A recruitment website for a single company, with two faces:
 |---|----------|
 | D1 | **Stack:** Next.js (App Router) + TypeScript strict + Tailwind + shadcn/ui on Vercel. **Supabase** for Postgres, Auth, Storage, Edge Functions. |
 | D2 | **AI model: Google Gemini 3.5 Flash** (`gemini-3.5-flash`) via the official `@google/genai` SDK. One model for all AI tasks (extraction + scoring + questions) in a single call per application. _(Changed from `gemini-2.5-flash` by engineer decision, 2026-07-10.)_ |
-| D3 | **The Gemini API key never reaches the browser or Next.js client code.** All AI calls happen inside one Supabase Edge Function: `analyze-application`. |
+| D3 | **The Gemini API key never reaches the browser or Next.js client code.** All AI calls happen inside one Supabase Edge Function: `analyze-application`. _(One approved exception, 2026-10-16: the separately deployed `interview-agent` service (D30) calls the model for interviews. Its key lives in that server's environment only — never in Next.js, never in the repo.)_ |
 | D4 | **Applying never fails because of AI.** Submission writes the application row + uploads the CV, then triggers analysis asynchronously. `applications.analysis_status` tracks: `pending → processing → done | failed`. Failed analyses are retryable (max 3 attempts) and re-runnable from the dashboard. |
 | D5 | **Structured output only.** Gemini is called with `responseMimeType: "application/json"` + a `responseSchema`. The Edge Function validates the response with zod before persisting. If validation fails → mark `failed`, store raw error, never store malformed data. |
 | D6 | **Prompts are versioned assets.** They live in `supabase/functions/analyze-application/prompts.ts`, exported with a `PROMPT_VERSION` constant. Every evaluation row stores the `prompt_version` and `model` used. |
 | D7 | Authorization = **RLS on every table**. Public (anon) role can: read published jobs, insert applications, upload to the CV bucket. Everything else requires an authenticated HR/admin user. |
 | D8 | CVs are sensitive personal data: private Storage bucket (`cvs`), served to HR via short-lived signed URLs only. A scheduled cleanup deletes CVs + applications older than `retention_months` (setting, default 12). Applicant data is never used for model training and never logged in full. |
 | D9 | Soft deletes on `jobs`. Applications are never hard-deleted except by the retention job. Every status change is recorded in `status_history`. |
-| D10 | Allowed dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `@google/genai` (Edge Function only), `zod`, `react-hook-form`, `mammoth` (DOCX text extraction, Edge Function only), `date-fns`, `recharts`, `lucide-react`, `@base-ui/react` (the UI primitives the shadcn components are built on — recorded 2026-08-29 after an audit found it in use but unlisted), `resend`. `shadcn` itself is a CLI and belongs in `devDependencies`. **Ask before adding anything else.** No ORM, no state library, no i18n framework (single `ar.ts` dictionary). |
+| D10 | Allowed dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `@google/genai` (Edge Function only), `zod`, `react-hook-form`, `mammoth` (DOCX text extraction, Edge Function only), `date-fns`, `recharts`, `lucide-react`, `@base-ui/react` (the UI primitives the shadcn components are built on — recorded 2026-08-29 after an audit found it in use but unlisted), `resend`. `shadcn` itself is a CLI and belongs in `devDependencies`. **Approved 2026-10-16 (v3):** `gsap` + `@gsap/react` and `lenis` (marketing routes only, D29); React Bits components copied in as source (any component that pulls a further package — `motion`, `ogl`, `three` — is asked for separately); CodeMirror 6 (interview room code editor); `@playwright/test` (devDependency, end-to-end checks); the `pgvector` database extension (recommendations v2 only). `interview-agent/` has its own `package.json`, limited to `hono`, `@hono/node-server`, `postgres`, `pg-boss`, `zod`, `jose`, `@google/genai`. **Ask before adding anything else.** No ORM, no state library, no i18n framework (single `ar.ts` dictionary). |
 
 ### 2.1 SaaS Conversion Decisions (v2.0 — approved 2026-08-06)
 
@@ -57,6 +59,28 @@ one platform owner. Full rationale in `docs/SAAS_PLAN.md`.
 | **D24** | "No score without justification" and "the decision is always human" are **product promises**, not just internal rules. They get a public page and an exportable transparency report. |
 | **D25** | **The product is named حكيم (`hakeem`).** It lives as `PRODUCT_NAME` / `PRODUCT_SLUG` in `lib/i18n/ar.ts` and nowhere else — no page, email or migration may hard-code it. The name carries the positioning: a حكيم advises, it does not rule (D24). Root domain is read from `NEXT_PUBLIC_ROOT_DOMAIN` so subdomain routing (D17) is never coupled to a literal. |
 
+### 2.2 Two-Sided Portal & Interview Agent (v3 — approved 2026-10-16)
+
+Full rationale in `docs/PLATFORM-V3-PLAN.md` and `docs/INTERVIEW-AGENT-DESIGN.md`.
+The owner approved every recommendation in both documents on 2026-10-16.
+
+| # | Decision |
+|---|----------|
+| **D26** | **Seeker accounts.** One `auth.users` identity; the "hat" comes from rows, never from `user_metadata`: a `memberships` row means a company workspace, a `talent.profiles` row with `user_id` means the seeker portal. One account may wear both, with a switcher. The products cross only through the auth user id and `public.talent_*` functions — never a foreign key from `public` into `talent`. Email verification precedes any paid analysis. The accountless talent flow is superseded; its public pages (`/t/{token}`) keep working, and an old profile is linked to an account only with its owner's explicit consent. |
+| **D27** | **Applying with a stored CV** goes through `submit-application` (D15) with the seeker's JWT. Consent is asked per application, and the company receives its **own copy** of the CV at `cvs/{org_id}/{application_id}.{ext}`, so a seeker deleting their account never touches a submitted application, and company retention (D8) never touches the seeker's profile. |
+| **D28** | **Recommendations are explainable.** Computed in SQL, never by a model call at render (§8). The seeker sees the reasons ("4 of 6 skills match"), never a number. |
+| **D29** | **`srp/DESIGN.md` is the visual source of truth.** Motion libraries run on the marketing routes only, and its Arabic rules bind: no per-character text splitting, no negative letter-spacing on Arabic, motion direction mirrored by `dir`, `prefers-reduced-motion` honoured everywhere. |
+| **D30** | **The virtual interview is a separate service** (`interview-agent/`, its own server), integrated through an HMAC-signed contract in both directions and short-lived candidate session tokens. The harness is a state machine with bounded model calls, not a free agent. Its report is advisory and never changes an application's status. Bank review by HR is mandatory for a job's core bank. |
+| **D31** | **No "AI-generated or human" verdict, ever.** The agent reports authenticity signals with their evidence and raw numbers and an attention level ("worth asking about"). No auto-reject on them, and they are never shown to the candidate. No webcam proctoring, face or emotion analysis, or voice-based inference — voice answers are scored on their transcript only. |
+| **D32** | **Candidate code runs in an isolated sandbox host** (self-hosted Judge0) with no outbound network. Hidden tests never leave the server; a generated task is shown only after its reference solution passes its own tests. |
+| **D33** | **Interviews are their own quota unit:** a monthly interview allowance per plan, enforced inside the agent before any model call (the D16 pattern). |
+
+Interview-specific amendments: D2's single model covers interview text; the
+audio models (speech synthesis and transcription) are chosen and recorded at
+milestone I5. D2's "single call per application" and §8's cost guard apply to
+CV analysis; an interview is a separate unit with its own per-interview call
+budget enforced in the harness.
+
 **The isolation invariant (the one rule that outranks convenience):**
 > Every query against a tenant-scoped table filters by `org_id` **in application code**
 > *and* is constrained by RLS. Two independent layers, always. A page that relies on
@@ -66,11 +90,16 @@ one platform owner. Full rationale in `docs/SAAS_PLAN.md`.
 
 ## 3. Repository Structure
 
-Target structure for v2.0. Sections marked ☐ are not built yet — do not
+Target structure for v3. Sections marked ☐ are not built yet — do not
 create them ahead of their milestone.
 
 ```
+interview-agent/                     # D30: separate service, own server (I0+)
+├── src/                             # api · auth · orchestrator · contract · db · webhooks
+├── migrations/                      # its own Postgres
+└── tests/
 srp/
+├── DESIGN.md                        # D29: visual source of truth
 ├── app/
 │   ├── (public)/
 │   │   ├── page.tsx                 # marketing landing (S6)
@@ -80,6 +109,7 @@ srp/
 │   │   ├── c/[slug]/                # per-tenant careers page (S3)
 │   │   ├── companies/               # company directory (S6)
 │   │   └── track/[ref]/             # applicant status tracking by reference code
+│   ├── (seeker)/me/                 # P1: seeker portal (D26)
 │   ├── (dashboard)/admin/           # TENANT workspace, scoped to one org
 │   │   ├── jobs/                    # FR-01 manage jobs
 │   │   ├── jobs/[id]/applicants/    # FR-06 ranked applicants
@@ -105,6 +135,8 @@ srp/
 │   │   ├── submit-application/      # D15: the ONLY write path for applicants
 │   │   ├── manage-users/            # team accounts (org-scoped)
 │   │   ├── housekeeping/            # cron: analysis retries + per-org retention
+│   │   ├── interview-gateway/       # D30: srp -> agent calls (holds the agent secret)
+│   │   ├── interview-webhook/       # D30: agent -> srp signed events
 │   │   └── send-email/              # Resend wrapper
 │   ├── scripts/                     # one-off operational scripts (service role)
 │   ├── tests/                       # RLS + tenant-isolation checks
@@ -261,8 +293,11 @@ application to another org's job. Triggers enforce that
 | `can_manage_application(app) → bool` | Used by Edge Functions to authorize a re-run against the application's own org. |
 
 In policies, always call these wrapped in a subquery —
-`org_id = any ((select public.current_org_ids()))` — so Postgres evaluates
-them once per statement instead of once per row.
+`org_id in (select unnest(public.current_org_ids()))` — so Postgres evaluates
+them once per statement instead of once per row. _(Corrected 2026-10-16: the
+`= any ((select …))` form previously written here does not compile — Postgres
+reads the parenthesised select as a subquery and compares `uuid` with
+`uuid[]`. Every migration since `0006` uses the `in (select unnest(…))` form.)_
 
 ### 4.1 RLS Matrix (enable RLS on every table)
 
@@ -484,7 +519,7 @@ Call parameters: `model: "gemini-3.5-flash"`, `temperature: 0.2`, JSON mode + sc
 
 - **RTL Arabic UI:** `dir="rtl"`, Tailwind logical properties only (`ms-/me-/ps-/pe-`), IBM Plex Sans Arabic, all strings from `lib/i18n/ar.ts`.
 - **Privacy:** never log CV contents or Gemini responses containing personal data; signed URLs for CVs expire in 10 minutes; retention cleanup per D8.
-- **Cost guard:** exactly one Gemini call per application analysis; manual re-run allowed; no AI calls on page render, ever.
+- **Cost guard:** exactly one Gemini call per application analysis; manual re-run allowed; no AI calls on page render, ever. An interview (D30) runs under a per-interview call and token ceiling enforced in the harness, and never exceeds it.
 - **Resilience:** every AI failure path leaves the application usable by HR (they can read the CV manually).
 - Pagination on all dashboard lists; ISR on public pages.
 
@@ -542,9 +577,35 @@ toward Nitaqat.
 schema `talent` (`0017`): upload, email verification that gates the paid
 analysis, a review screen, two separate consents, and an unguessable public
 page. Matching and invitations are deliberately absent. **The rule that keeps
-the two products separable: nothing joins `public.*` to `talent.*` directly.
-The schema is not exposed through the API; a handful of `public.talent_*`
-wrappers are its entire surface.**
+the two products separable: nothing joins `public.*` to `talent.*` directly.**
+_(Corrected 2026-10-16: the schema IS exposed through the API since `813c547`,
+because the Edge Functions reach it through PostgREST. RLS on every `talent`
+table is therefore the protection, exactly as for `public`; the `public.talent_*`
+functions remain the only crossing between the two products.)_
+
+### 9.2 v3 — two-sided portal, interview agent, redesign (approved 2026-10-16)
+
+Plans: `docs/PLATFORM-V3-PLAN.md` (P-series) and
+`docs/INTERVIEW-AGENT-DESIGN.md` (I-series). Same rule: **stop for engineer
+approval after each.** Sequence: P0 → P1 → I2 → I3 → P2 → P3 → I4 → P4 → I5 → I6,
+with I0 and I1 running alongside P1.
+
+- **P0 – Foundation.** These amendments, `srp/DESIGN.md`, design tokens and
+  fonts, base components and shells restyled.
+- **P1 – Seeker accounts.** Signup tabs, CV-first onboarding, `/me`, applying
+  with a stored CV, `my_applications()`, seeker isolation tests.
+- **P2 – Recommendations & discovery.** Skill taxonomy expansion, explainable
+  recommendations, "suggested candidates" for companies, invitations with limits.
+- **P3 – Landing page.** GSAP + Lenis + React Bits, within the D29 rules.
+- **P4 – Internal redesign.** Existing company pages rebuilt to `DESIGN.md`.
+- **I0 – Contract & skeleton · I1 – Question bank · I2 – Text interview ·
+  I3 – Evaluation & report · I4 – Code sandbox · I5 – Voice · I6 – Hardening.**
+
+**Status (2026-10-18): P0, I0, P3, P1 and I1 complete** (P3 pulled forward at the owner's request, with a larger root type size site-wide and Google sign-in) — see `docs/V3-PROGRESS.md`. Migrations run to `0022`. Interviews stay switched off until the owner sets `organizations.monthly_interview_quota` per plan (D33; default 0).
+Test suites: `tenant_isolation.sql` (55), `onboarding.sql` (23),
+`interview_isolation.sql` (79), `seeker_isolation.sql` (132), `rls_check.sql`,
+and the agent's own `npm test` (210, including a byte-parity check of the
+shared contract).
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
@@ -558,9 +619,9 @@ check belongs inside `analyze-application` (D16).
 
 ## 10. Forbidden Actions
 
-1. No features/tables/roles beyond this spec. No candidate accounts, no chat features. (Multi-company support is now in scope per §2.1 — but only as specified there.)
+1. No features/tables/roles beyond this spec. No chat features — the virtual interview (D30) is a structured interview with bounded follow-ups, not a chat. (Multi-company support is in scope per §2.1, and seeker accounts per §2.2 — but only as specified there.)
 2. No new dependencies without approval (D10). No LangChain or AI framework wrappers — call `@google/genai` directly.
-3. Gemini key only in Edge Function env. Never in Next.js env vars (not even server-side ones), never in the repo.
+3. Gemini key only in Edge Function env, or the `interview-agent` server env (D3 exception). Never in Next.js env vars (not even server-side ones), never in the repo.
 4. Never let the AI decide status. No auto-reject, no auto-shortlist. The word "advisory" must survive in the UI.
 5. Never store or display AI output that failed zod validation.
 6. No hard deletes outside the retention job; no editing `ai_evaluations` originals (HR edits live separately).

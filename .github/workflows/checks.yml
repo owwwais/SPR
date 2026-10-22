@@ -58,3 +58,38 @@ jobs:
       - name: Run RLS and tenant-isolation suites
         working-directory: srp
         run: PGBIN=/usr/lib/postgresql/16/bin npm run test:db
+
+  interview-agent:
+    name: Interview agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: interview-agent/package-lock.json
+
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+
+      - name: Install
+        working-directory: interview-agent
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: interview-agent
+        run: npm run typecheck
+
+      # Includes the parity test: the contract and signing code copied into
+      # srp/supabase/functions/_shared must match the agent's byte for byte.
+      - name: Test
+        working-directory: interview-agent
+        run: PGBIN=/usr/lib/postgresql/16/bin npm test
+
+      - name: Build
+        working-directory: interview-agent
+        run: npm run build

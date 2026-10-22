@@ -5,9 +5,11 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  UserRound,
   Users,
 } from "lucide-react";
 import { canAdminister, requireMembership } from "@/lib/auth";
+import { getHats } from "@/lib/seeker";
 import { signOut } from "@/app/login/actions";
 import { NavLink } from "@/components/admin/nav-link";
 import { OrgSwitcher } from "@/components/admin/org-switcher";
@@ -21,10 +23,13 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }>) {
   const session = await requireMembership();
+  // The switcher to the seeker hat (D26): shown when this account also has
+  // a seeker profile. A routing hint only — /me runs its own gate.
+  const hats = await getHats();
 
   return (
     <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="flex flex-col gap-4 border-b bg-background p-4 md:min-h-full md:w-60 md:border-b-0 md:border-e">
+      <aside className="flex flex-col gap-4 border-b bg-sidebar p-4 md:sticky md:top-0 md:h-dvh md:w-62 md:overflow-y-auto md:shrink-0 md:border-b-0 md:border-e">
         <OrgSwitcher
           current={{ id: session.org.id, name: session.org.name }}
           memberships={session.memberships}
@@ -56,6 +61,12 @@ export default async function AdminLayout({
               {ar.admin.settings}
             </NavLink>
           )}
+          {hats.seeker && (
+            <NavLink href="/me" exact>
+              <UserRound className="size-4" aria-hidden />
+              {ar.seekerPortal.admin.seekerAccountLink}
+            </NavLink>
+          )}
         </nav>
         <div className="mt-auto flex items-center justify-between gap-2 border-t pt-4">
           <div className="flex min-w-0 flex-col">
@@ -79,7 +90,9 @@ export default async function AdminLayout({
           </form>
         </div>
       </aside>
-      <main className="flex-1 p-6">{children}</main>
+      <main id="main" className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+        {children}
+      </main>
     </div>
   );
 }

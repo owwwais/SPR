@@ -10,3 +10,10 @@
 // rather than two that can drift. Application code keeps importing
 // @/lib/validations/application as before.
 export * from "../../supabase/functions/_shared/application";
+
+// What a browser may send through a Next.js server action. Lower than
+// CV_MAX_BYTES (what submit-application and talent-upload accept) because
+// the file crosses the web tier first, and Vercel refuses a request body over
+// 4.5 MB before the action runs — the user then saw the generic error page
+// instead of an Arabic message. 4 MB leaves room for the multipart envelope.
+export const CV_FORM_MAX_BYTES = 4 * 1024 * 1024;

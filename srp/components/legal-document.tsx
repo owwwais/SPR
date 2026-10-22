@@ -15,9 +15,9 @@ export function LegalDocument({
     <article className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-16">
       <header className="flex flex-col gap-3">
         <h1 className="text-3xl font-bold">{title}</h1>
-        <div className="flex gap-3 rounded-lg border-s-2 border-amber-500 bg-amber-50 p-4 text-sm dark:bg-amber-950/30">
+        <div className="flex gap-3 rounded-lg border-s-2 border-warning bg-warning-soft p-4 text-sm">
           <Info
-            className="mt-0.5 size-4 shrink-0 text-amber-600"
+            className="mt-0.5 size-4 shrink-0 text-warning"
             aria-hidden
           />
           <p className="text-muted-foreground">{ar.legal.reviewNotice}</p>

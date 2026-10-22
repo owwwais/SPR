@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Download,
+  ListChecks,
   Loader2,
   RefreshCw,
   TriangleAlert,
@@ -126,15 +127,27 @@ export default async function ApplicantsPage({
           <h1 className="text-2xl font-bold">
             {ar.applicants.title}: {job.title}
           </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<a href={`${currentPath}/export`} />}
-          >
-            <Download className="size-4" aria-hidden />
-            {ar.applicants.export.button}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* I1: the job's core question bank for virtual interviews. */}
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/admin/jobs/${id}/interview-bank`} />}
+            >
+              <ListChecks className="size-4" aria-hidden />
+              {ar.interviewBank.applicantsLink}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<a href={`${currentPath}/export`} />}
+            >
+              <Download className="size-4" aria-hidden />
+              {ar.applicants.export.button}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -364,7 +377,7 @@ function AnalysisIndicator({
   }
   return (
     <span className="flex items-center gap-1 text-sm text-muted-foreground">
-      <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
+      <CheckCircle2 className="size-4 text-success" aria-hidden />
     </span>
   );
 }

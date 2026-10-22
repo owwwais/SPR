@@ -436,6 +436,20 @@ select pg_temp.chk_denied('guard: an org cannot lose its last owner',
 select pg_temp.chk_denied('guard: a slug cannot shadow a platform route',
   $$insert into organizations (slug, name) values ('admin','x')$$);
 
+-- §10.11 as a property of the catalog, not of each migration remembering:
+-- anon holds no write privilege anywhere, and no client role holds TRUNCATE
+-- (which RLS does not govern), REFERENCES or TRIGGER (0022).
+select pg_temp.chk('grants: anon holds no write privilege on any public or talent table',
+  not exists (
+    select 1 from information_schema.role_table_grants
+    where grantee = 'anon' and table_schema in ('public', 'talent')
+      and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')));
+select pg_temp.chk('grants: no client role holds TRUNCATE, REFERENCES or TRIGGER',
+  not exists (
+    select 1 from information_schema.role_table_grants
+    where grantee in ('anon', 'authenticated') and table_schema in ('public', 'talent')
+      and privilege_type in ('TRUNCATE','REFERENCES','TRIGGER')));
+
 select pg_temp.chk_rows('guard: deleting an org still cascades cleanly',
   $$delete from organizations
     where id = '0b000000-0000-4000-8000-000000000001'$$, 1);

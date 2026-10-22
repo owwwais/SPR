@@ -2,7 +2,7 @@
 
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import {
-  CV_MAX_BYTES,
+  CV_FORM_MAX_BYTES,
   CV_MIME_TYPES,
 } from "@/lib/validations/application";
 import { ar } from "@/lib/i18n/ar";
@@ -77,7 +77,7 @@ export async function submitApplication(
   if (!(cv.type in CV_MIME_TYPES)) {
     return fail(ar.apply.errors.invalidInput, { cv: ar.apply.errors.cvType });
   }
-  if (cv.size > CV_MAX_BYTES) {
+  if (cv.size > CV_FORM_MAX_BYTES) {
     return fail(ar.apply.errors.invalidInput, { cv: ar.apply.errors.cvSize });
   }
 

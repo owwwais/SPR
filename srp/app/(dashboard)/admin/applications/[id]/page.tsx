@@ -29,6 +29,8 @@ import {
   type InterviewQuestion,
 } from "@/components/admin/interview-questions";
 import { InterviewManager } from "@/components/admin/interview-manager";
+import { VirtualInterviewPanel } from "@/components/admin/virtual-interview/virtual-interview-panel";
+import { loadVirtualInterview } from "@/lib/interviews";
 import { StatusChanger } from "@/components/admin/status-changer";
 import { SaudizationControl } from "@/components/admin/saudization-control";
 import {
@@ -36,7 +38,7 @@ import {
   ScreeningAnswers,
 } from "@/lib/validations/screening";
 import { scoreBandClass } from "@/components/admin/score-badge";
-import { requireMembership } from "@/lib/auth";
+import { canWrite, requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   BREAKDOWN_MAX,
@@ -97,7 +99,7 @@ export default async function ApplicationPage({
   const { data: application } = await supabase
     .from("applications")
     .select(
-      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, counts_toward_saudization, created_at, jobs(title)"
+      "id, job_id, ref_code, full_name, email, phone, cv_path, cover_note, status, analysis_status, analysis_attempts, analysis_error, screening_answers, interview_at, interview_qa, counts_toward_saudization, via_account, created_at, jobs(title)"
     )
     .eq("id", id)
     .eq("org_id", session.org.id)
@@ -119,7 +121,7 @@ export default async function ApplicationPage({
   // on nothing from each other. Awaiting them in sequence put two round trips
   // on the critical path — a Storage API call and a database query — where
   // one suffices.
-  const [signedRes, evaluationRes] = await Promise.all([
+  const [signedRes, evaluationRes, virtualInterview] = await Promise.all([
     // CV via short-lived signed URL only (D8): 10 minutes (§8).
     supabase.storage.from("cvs").createSignedUrl(application.cv_path, 600),
     // Fetched only when analysis completed; skipped without a round trip
@@ -134,6 +136,13 @@ export default async function ApplicationPage({
           .eq("org_id", session.org.id)
           .maybeSingle()
       : null,
+    // I1 virtual interview: latest assignment, the job's current locked
+    // bank and the org's quota — each filtered by this org in code.
+    loadVirtualInterview({
+      orgId: session.org.id,
+      applicationId: application.id,
+      jobId: application.job_id,
+    }),
   ]);
 
   const cvUrl = signedRes.data?.signedUrl ?? null;
@@ -184,6 +193,18 @@ export default async function ApplicationPage({
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{application.full_name}</h1>
           <Badge variant="secondary">{ar.status[application.status]}</Badge>
+          {/* D27: applied from a seeker account with the stored profile.
+              The badge adds no data — the company sees exactly what the
+              applicant chose to share in this application. */}
+          {application.via_account && (
+            <Badge variant="outline" title={ar.seekerPortal.admin.viaAccountHint}>
+              {ar.seekerPortal.admin.viaAccountBadge}
+              <span className="sr-only">
+                {" — "}
+                {ar.seekerPortal.admin.viaAccountHint}
+              </span>
+            </Badge>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
           <span>
@@ -421,7 +442,7 @@ export default async function ApplicationPage({
                       {evaluation.justification.confidence === "low" && (
                         <Badge
                           variant="outline"
-                          className="border-amber-500 text-amber-700 dark:text-amber-400"
+                          className="border-warning text-warning"
                         >
                           <TriangleAlert className="size-3" aria-hidden />
                           {t.confidenceLow}
@@ -475,7 +496,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.strengths}
                       icon={
                         <CircleCheck
-                          className="size-4 shrink-0 text-emerald-600"
+                          className="size-4 shrink-0 text-success"
                           aria-hidden
                         />
                       }
@@ -485,7 +506,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.gaps}
                       icon={
                         <CircleAlert
-                          className="size-4 shrink-0 text-amber-600"
+                          className="size-4 shrink-0 text-warning"
                           aria-hidden
                         />
                       }
@@ -495,7 +516,7 @@ export default async function ApplicationPage({
                       items={evaluation.justification.red_flags}
                       icon={
                         <Flag
-                          className="size-4 shrink-0 text-red-600"
+                          className="size-4 shrink-0 text-destructive"
                           aria-hidden
                         />
                       }
@@ -539,6 +560,13 @@ export default async function ApplicationPage({
 
         {/* ------------------------------ المقابلة ----------------------------- */}
         <TabsContent value="interview">
+          <VirtualInterviewPanel
+            applicationId={application.id}
+            jobId={application.job_id}
+            analysisDone={application.analysis_status === "done"}
+            canEdit={canWrite(session.role)}
+            data={virtualInterview}
+          />
           <Card>
             <CardContent className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">

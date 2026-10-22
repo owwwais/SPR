@@ -37,10 +37,10 @@ export function NavLink({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+        "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors duration-150",
         active
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          ? "bg-primary-soft font-medium text-primary-soft-foreground"
+          : "text-muted-foreground hover:bg-surface-sunken/70 hover:text-foreground"
       )}
     >
       {children}

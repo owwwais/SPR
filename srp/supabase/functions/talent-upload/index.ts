@@ -1,20 +1,30 @@
-// talent-upload — step one of the three-step journey.
+// talent-upload — a signed-in seeker's CV, stored as a new version.
 //
-// Takes a CV and an email, stores both, and sends a verification link. It
-// does NOT analyse anything: the model call happens after the link is
-// clicked, in talent-analyze.
+// The accountless journey this function used to serve (CV + email, then a
+// verification link) is superseded by seeker accounts (D26). The cost rule it
+// was built around stays exactly where it was: nothing is spent until an
+// email address has proved it exists. The proof is now the account's own
+// confirmed address instead of a link we mailed, so the analysis can start
+// the moment the file lands — while the person fills in their contact
+// details — rather than after a round trip through their inbox.
 //
-// That ordering is the whole cost control. Every upload is a paid call made
-// by someone we do not know — ten thousand of them overnight is roughly $169
-// — so nothing is spent until an address has proved it exists. The user waits
-// for the analysis inside a step they were taking anyway, so the journey is
-// still three steps and not four.
+// Contract: POST multipart/form-data with `cv` (File), and
+//   Authorization: Bearer <the user's access token>
+// forwarded by the Next.js server action. The anon key is not enough: there
+// is no anonymous path any more.
+//
+// Every upload becomes a row in talent.cv_versions, because an application
+// copies one SPECIFIC version (D27) and a person may want to apply with last
+// month's CV while this month's is still being read. At most three are kept.
 //
 // Secrets: platform-injected SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY, plus
-// TURNSTILE_SECRET_KEY and THROTTLE_SALT.
-import { createClient } from "@supabase/supabase-js";
-import { z } from "zod";
+// THROTTLE_SALT.
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { newTraceId, makeLogger, isSchemaMissingError } from "../_shared/trace.ts";
+
+// Provided by the Supabase Edge Runtime, absent under plain `deno run`. Lets
+// a response go out while work it started keeps running.
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
 const CV_MIME_TYPES = {
   "application/pdf": "pdf",
@@ -25,9 +35,17 @@ type CvMime = keyof typeof CV_MIME_TYPES;
 
 const CV_MAX_BYTES = 5 * 1024 * 1024;
 
-const uploadSchema = z.object({
-  email: z.email().max(200).transform((v) => v.toLowerCase()),
-});
+// Older versions are pruned beyond this. Three covers "the one I applied with
+// last week" without turning the bucket into an archive of everything a
+// person ever uploaded.
+const KEEP_VERSIONS = 3;
+
+// A version still pending or processing after this long lost its analysis —
+// a dropped invocation, or a worker killed at its wall-clock limit. Treating
+// it as failed lets the same file be uploaded again; otherwise the "same
+// file, same answer" rule below would hand back a version that will never
+// finish. Comfortably above the runtime's longest request.
+const STALE_ANALYSIS_MS = 10 * 60 * 1000;
 
 function json(status: number, body: Record<string, unknown>, trace?: string): Response {
   return new Response(JSON.stringify(trace ? { ...body, request_id: trace } : body), {
@@ -45,19 +63,6 @@ async function sha256Hex(data: ArrayBuffer | string): Promise<string> {
     .join("");
 }
 
-// Rightmost hop, never the leftmost: proxies append, so the first entry is
-// whatever the caller wrote. Same reasoning as submit-application.
-function clientIp(req: Request): string {
-  const direct =
-    req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip");
-  if (direct?.trim()) return direct.trim();
-  const hops = (req.headers.get("x-forwarded-for") ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean);
-  return hops.length > 0 ? hops[hops.length - 1]! : "unknown";
-}
-
 // Leading bytes, not the browser's claim about them.
 async function sniffMime(file: File): Promise<CvMime | null> {
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
@@ -69,58 +74,56 @@ async function sniffMime(file: File): Promise<CvMime | null> {
   return null;
 }
 
-// Unlike the recruitment form, this one fails CLOSED without a captcha:
-// nothing is lost by refusing a bot here, whereas refusing a job applicant
-// costs a real person a real opportunity.
-//
-// Returns a reason alongside ok/not-ok because "rejected" has three very
-// different causes that all looked identical to the caller before this:
-//   not_configured   TURNSTILE_SECRET_KEY unset on this function -> passes
-//   no_token          the browser sent nothing. Almost always means
-//                      NEXT_PUBLIC_TURNSTILE_SITE_KEY was never set on
-//                      Vercel (or set but not redeployed), so the widget in
-//                      components/jobs/turnstile.tsx rendered nothing and no
-//                      token was ever produced.
-//   verify_failed     Cloudflare rejected the token, or the network call to
-//                      siteverify itself failed.
-async function turnstileCheck(
-  token: string | null
-): Promise<{ ok: boolean; reason: string }> {
-  const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
-  if (!secret) return { ok: true, reason: "not_configured" };
-  if (!token) return { ok: false, reason: "no_token" };
-  try {
-    const res = await fetch(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ secret, response: token }),
-      }
-    );
-    const body = (await res.json()) as {
-      success?: boolean;
-      "error-codes"?: string[];
-    };
-    if (body.success === true) return { ok: true, reason: "verified" };
-    return {
-      ok: false,
-      reason: `verify_failed:${(body["error-codes"] ?? []).join(",") || "rejected"}`,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `verify_failed:${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-}
-
 function randomToken(): string {
   const bytes = new Uint8Array(16); // 128 bits
   crypto.getRandomValues(bytes);
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+function bearerToken(req: Request): string | null {
+  const header = req.headers.get("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  return token.length > 0 ? token : null;
+}
+
+type Profile = { id: string; onboarding_step: string };
+
+// Missing schema (migrations not applied) gets its own code, as it always
+// has here: it is the most likely cause of "every upload fails" right after
+// a deploy, and it points at a different fix than a runtime error does.
+function dbError(
+  log: ReturnType<typeof makeLogger>,
+  step: string,
+  error: { code?: string; message: string },
+  trace: string
+): Response {
+  if (isSchemaMissingError(error)) {
+    log.fail(step, "TALENT SCHEMA MISSING — migrations 0017-0020 not applied", {
+      pg_code: error.code,
+    });
+    return json(500, { error: "not_configured", step }, trace);
+  }
+  log.fail(step, error.message, { pg_code: error.code });
+  return json(500, {
+    error: "server_error",
+    step,
+    detail: error.code ?? error.message.slice(0, 200),
+  }, trace);
+}
+
+async function findProfile(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ data: Profile | null; error: { code?: string; message: string } | null }> {
+  const { data, error } = await admin
+    .schema("talent")
+    .from("profiles")
+    .select("id, onboarding_step")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return { data: (data as Profile | null) ?? null, error };
 }
 
 Deno.serve(async (req) => {
@@ -130,6 +133,37 @@ Deno.serve(async (req) => {
 
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" }, trace);
 
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+
+  // ---- 1. who is uploading -------------------------------------------
+  const token = bearerToken(req);
+  if (!token) {
+    log.fail("auth", "no bearer token");
+    return json(401, { error: "auth_required" }, trace);
+  }
+  const { data: authData, error: authError } = await admin.auth.getUser(token);
+  const user = authData?.user ?? null;
+  if (!user) {
+    // A 5xx (or no status at all: the request never got an answer) is our
+    // outage, not the caller's credentials — say so rather than sending a
+    // signed-in person back to the login page.
+    if (authError && (!authError.status || authError.status >= 500)) {
+      log.fail("auth", authError.message, { status: authError.status });
+      return json(500, { error: "server_error", step: "auth" }, trace);
+    }
+    log.fail("auth", "token did not resolve to a user");
+    return json(401, { error: "auth_required" }, trace);
+  }
+
+  // ---- 2. D26: a confirmed address before anything is spent -----------
+  if (!user.email_confirmed_at || !user.email) {
+    log.fail("auth", "email not confirmed");
+    return json(403, { error: "email_unverified" }, trace);
+  }
+  const email = user.email.toLowerCase();
+
+  // ---- 3. the file -----------------------------------------------------
   let form: FormData;
   try {
     form = await req.formData();
@@ -137,24 +171,6 @@ Deno.serve(async (req) => {
     log.fail("parse_form", err instanceof Error ? err.message : String(err));
     return json(400, { error: "invalid_input" }, trace);
   }
-
-  const captchaToken = String(form.get("cf-turnstile-response") ?? "") || null;
-  const turnstile = await turnstileCheck(captchaToken);
-  log.step("turnstile", { ok: turnstile.ok, reason: turnstile.reason });
-  if (!turnstile.ok) {
-    // The reason (no_token vs verify_failed vs a Cloudflare error code) is
-    // deliberately kept out of the client response — telling a bot which
-    // check it failed helps it adapt. It is one log line away for a human:
-    // search this trace id in the function's logs.
-    return json(400, { error: "captcha_failed" }, trace);
-  }
-
-  const parsed = uploadSchema.safeParse({ email: form.get("email") });
-  if (!parsed.success) {
-    log.fail("validate_email", "invalid email");
-    return json(400, { error: "invalid_input", field: "email" }, trace);
-  }
-  const email = parsed.data.email;
 
   const cv = form.get("cv");
   if (!(cv instanceof File) || cv.size === 0) {
@@ -173,91 +189,122 @@ Deno.serve(async (req) => {
     });
     return json(400, { error: "invalid_input", field: "cv_type" }, trace);
   }
-  log.step("input_valid", { email_domain: email.split("@")[1], cv_bytes: cv.size });
+  const mime = sniffed;
+  log.step("input_valid", { cv_bytes: cv.size });
 
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
+  // ---- 4. throttle -----------------------------------------------------
+  // Keyed on the account id rather than the address: an address can be
+  // changed, the id cannot, so this is the key a person cannot rotate to
+  // earn a fresh allowance (3 a day). The "IP" slot of the ledger is keyed
+  // on the account too: the only caller is a Next.js server action, so the
+  // address this function sees is the web server's egress IP, shared by
+  // every seeker — as an IP limit it would cap uploads for the whole site.
   const salt = Deno.env.get("THROTTLE_SALT") ?? "";
-  const [ipHash, emailHash] = await Promise.all([
-    sha256Hex(salt + clientIp(req)),
-    sha256Hex(salt + email),
+  const [ipHash, accountHash] = await Promise.all([
+    sha256Hex(`${salt}account-ip:${user.id}`),
+    sha256Hex(salt + user.id),
   ]);
 
   const { data: throttle, error: throttleError } = await admin.rpc(
     "talent_record_upload_attempt",
-    { p_ip_hash: ipHash, p_email_hash: emailHash }
+    { p_ip_hash: ipHash, p_email_hash: accountHash }
   );
-  if (throttleError) {
-    if (isSchemaMissingError(throttleError)) {
-      // The function this call needs (talent.record_upload_attempt via the
-      // public.talent_record_upload_attempt wrapper) does not exist. This is
-      // not a runtime failure — migrations 0012 through 0017 have not been
-      // applied to this database yet, so nothing past this point can work
-      // either. Loud on purpose: this is the single most likely cause of
-      // "every upload is rejected" right after the functions are first
-      // deployed.
-      log.fail("throttle_check", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
-        pg_code: throttleError.code,
-      });
-      return json(500, { error: "not_configured", step: "throttle_check" }, trace);
-    }
-    log.fail("throttle_check", throttleError.message, { pg_code: throttleError.code });
-    return json(500, {
-      error: "server_error",
-      step: "throttle_check",
-      detail: throttleError.code ?? throttleError.message.slice(0, 200),
-    }, trace);
-  }
+  if (throttleError) return dbError(log, "throttle_check", throttleError, trace);
   if (throttle) {
     log.step("rate_limited");
     return json(429, { error: "rate_limited" }, trace);
   }
 
+  // ---- 5. the profile: found by account, created on first upload -------
+  const found = await findProfile(admin, user.id);
+  if (found.error) return dbError(log, "profile_lookup", found.error, trace);
+  let profile = found.data;
+
+  if (!profile) {
+    const { data: created, error: insertError } = await admin
+      .schema("talent")
+      .from("profiles")
+      .insert({
+        user_id: user.id,
+        email,
+        // The account's confirmed address is the verification.
+        email_verified_at: new Date().toISOString(),
+        public_token: randomToken(),
+        status: "draft",
+        onboarding_step: "cv",
+      })
+      .select("id, onboarding_step")
+      .single();
+    if (insertError) {
+      // Two uploads racing for the same new account: the other one created
+      // the row first. Use it.
+      if (insertError.code !== "23505") {
+        return dbError(log, "profile_create", insertError, trace);
+      }
+      const retry = await findProfile(admin, user.id);
+      if (retry.error) return dbError(log, "profile_lookup", retry.error, trace);
+      if (!retry.data) {
+        return dbError(log, "profile_create", insertError, trace);
+      }
+      profile = retry.data;
+    } else {
+      profile = created as Profile;
+    }
+    log.step("profile_created", { profile_id: profile.id });
+  }
+  const currentProfile: Profile = profile;
+
+  // ---- 6. same file, same answer --------------------------------------
   const bytes = await cv.arrayBuffer();
   const cvHash = await sha256Hex(bytes);
 
-  // Same file, same result. Re-analysing it would spend a second call for an
-  // answer we already have, and would tell the person nothing new.
-  const { data: existing, error: lookupError } = await admin
+  const { data: newest, error: newestError } = await admin
     .schema("talent")
-    .from("profiles")
-    .select("id, public_token, cv_sha256, analysis_status")
-    .eq("email", email)
+    .from("cv_versions")
+    .select("id, sha256, analysis_status, created_at")
+    .eq("profile_id", currentProfile.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
-  if (lookupError) {
-    if (isSchemaMissingError(lookupError)) {
-      log.fail("profile_lookup", "TALENT SCHEMA MISSING — migrations 0012-0017 not applied", {
-        pg_code: lookupError.code,
-      });
-      return json(500, { error: "not_configured", step: "profile_lookup" }, trace);
+  if (newestError) return dbError(log, "version_lookup", newestError, trace);
+
+  if (newest && newest.sha256 === cvHash) {
+    const inFlight =
+      newest.analysis_status === "pending" ||
+      newest.analysis_status === "processing";
+    const stale =
+      inFlight &&
+      Date.now() - new Date(newest.created_at).getTime() > STALE_ANALYSIS_MS;
+    if (newest.analysis_status !== "failed" && !stale) {
+      // Re-analysing would spend a second call for an answer we already
+      // have, or are about to have.
+      if (currentProfile.onboarding_step === "cv") {
+        // Only reachable if an earlier upload stored the version but not
+        // the step — move the person on rather than leaving them stuck.
+        await admin
+          .schema("talent")
+          .from("profiles")
+          .update({ onboarding_step: "contact", updated_at: new Date().toISOString() })
+          .eq("id", currentProfile.id);
+      }
+      log.step("unchanged", { version_id: newest.id });
+      return json(200, { ok: true, version_id: newest.id, unchanged: true }, trace);
     }
-    log.fail("profile_lookup", lookupError.message, { pg_code: lookupError.code });
-    return json(500, {
-      error: "server_error",
-      step: "profile_lookup",
-      detail: lookupError.code ?? lookupError.message.slice(0, 200),
-    }, trace);
   }
 
-  const verifyToken = randomToken();
-  const publicToken = existing?.public_token ?? randomToken();
-  const profileId = existing?.id ?? crypto.randomUUID();
-  const extension = CV_MIME_TYPES[cv.type as CvMime];
-  const cvPath = `${profileId}.${extension}`;
+  // ---- 7. store the new version ---------------------------------------
+  const versionId = crypto.randomUUID();
+  const cvPath = `${currentProfile.id}/${versionId}.${CV_MIME_TYPES[mime]}`;
 
   const { error: uploadError } = await admin.storage
     .from("talent-cvs")
-    .upload(cvPath, cv, { contentType: cv.type, upsert: true });
+    .upload(cvPath, bytes, { contentType: mime, upsert: false });
   if (uploadError) {
     log.fail("cv_upload", uploadError.message);
-    // A missing bucket surfaces here too (StorageApiError, "Bucket not
-    // found") — the same migrations-not-applied cause as the schema checks
-    // above, since 0017 is what creates the talent-cvs bucket. Storage
-    // errors do not carry a Postgres/PostgREST code, so this is caught by
-    // message text rather than isSchemaMissingError.
+    // A missing bucket surfaces here (StorageApiError, "Bucket not found")
+    // — the same migrations-not-applied cause as the schema checks, since
+    // 0017 creates talent-cvs. Storage errors carry no Postgres code, so
+    // this is caught by message text.
     const bucketMissing = uploadError.message.toLowerCase().includes("bucket not found");
     return json(500, {
       error: bucketMissing ? "not_configured" : "server_error",
@@ -265,59 +312,140 @@ Deno.serve(async (req) => {
       detail: uploadError.message.slice(0, 200),
     }, trace);
   }
-  log.step("cv_stored", { path: cvPath });
+  log.step("cv_stored", { version_id: versionId });
 
-  const unchanged = existing?.cv_sha256 === cvHash;
+  const removeStoredFile = async () => {
+    const { error } = await admin.storage.from("talent-cvs").remove([cvPath]);
+    if (error) log.fail("cleanup_file", error.message, { version_id: versionId });
+  };
 
-  const { error: upsertError } = await admin
+  const { error: versionError } = await admin
+    .schema("talent")
+    .from("cv_versions")
+    .insert({
+      id: versionId,
+      profile_id: currentProfile.id,
+      path: cvPath,
+      sha256: cvHash,
+      mime,
+      size_bytes: cv.size,
+      analysis_status: "pending",
+    });
+  if (versionError) {
+    await removeStoredFile();
+    return dbError(log, "version_insert", versionError, trace);
+  }
+
+  const { error: profileError } = await admin
     .schema("talent")
     .from("profiles")
-    .upsert(
-      {
-        id: profileId,
-        email,
-        public_token: publicToken,
-        cv_path: cvPath,
-        cv_sha256: cvHash,
-        verify_token: verifyToken,
-        verify_sent_at: new Date().toISOString(),
-        // An unchanged file keeps whatever analysis it already had.
-        analysis_status: unchanged ? existing!.analysis_status : "pending",
-      },
-      { onConflict: "id" }
+    .update({
+      cv_path: cvPath,
+      cv_sha256: cvHash,
+      analysis_status: "pending",
+      analysis_error: null,
+      ...(currentProfile.onboarding_step === "cv" ? { onboarding_step: "contact" } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", currentProfile.id);
+  if (profileError) {
+    // Undo the version too. Left behind, it would be the newest version
+    // with this file's hash and a pending analysis nobody started — and the
+    // next upload of the same file would be answered "unchanged".
+    const { error: undoError } = await admin
+      .schema("talent")
+      .from("cv_versions")
+      .delete()
+      .eq("id", versionId);
+    if (undoError) log.fail("cleanup_version", undoError.message, { version_id: versionId });
+    await removeStoredFile();
+    return dbError(log, "profile_update", profileError, trace);
+  }
+  log.step("version_saved", { version_id: versionId });
+
+  // ---- 8. prune beyond the newest three -------------------------------
+  // Files first, rows second: a row whose file is already gone is removed
+  // again on the next upload, whereas a file whose row is gone is a CV
+  // nobody can find to delete — not even the seeker deleting their account.
+  const { data: versions, error: listError } = await admin
+    .schema("talent")
+    .from("cv_versions")
+    .select("id, path, analysis_status")
+    .eq("profile_id", currentProfile.id)
+    .order("created_at", { ascending: false });
+  if (listError) {
+    // Not fatal: the upload succeeded and the next one prunes again.
+    log.fail("prune_list", listError.message, { pg_code: listError.code });
+  } else {
+    // The newest analysed version is never pruned, whatever its age: three
+    // failed uploads in a row must not delete the one CV the seeker can
+    // still apply with.
+    const all = (versions ?? []) as { id: string; path: string; analysis_status: string }[];
+    const keepDone = all.find((v) => v.analysis_status === "done");
+    const kept = new Set(
+      [keepDone, ...all.filter((v) => v !== keepDone)]
+        .filter((v): v is { id: string; path: string; analysis_status: string } => Boolean(v))
+        .slice(0, KEEP_VERSIONS)
+        .map((v) => v.id)
     );
-  if (upsertError) {
-    log.fail("profile_upsert", upsertError.message, { pg_code: upsertError.code });
-    return json(500, {
-      error: "server_error",
-      step: "profile_upsert",
-      detail: upsertError.code ?? upsertError.message.slice(0, 200),
-    }, trace);
+    const excess = all.filter((v) => !kept.has(v.id));
+    if (excess.length > 0) {
+      const { error: removeError } = await admin.storage
+        .from("talent-cvs")
+        .remove(excess.map((v) => v.path));
+      if (removeError) {
+        log.fail("prune_files", removeError.message, { count: excess.length });
+      } else {
+        const { error: deleteError } = await admin
+          .schema("talent")
+          .from("cv_versions")
+          .delete()
+          .in("id", excess.map((v) => v.id));
+        if (deleteError) {
+          log.fail("prune_rows", deleteError.message, { pg_code: deleteError.code });
+        } else {
+          log.step("pruned", { count: excess.length });
+        }
+      }
+    }
   }
-  log.step("profile_saved", { unchanged });
 
-  // The link carries the verify token, not the profile id: clicking it is
-  // what proves the address, and the public token must not travel until the
-  // person has decided to publish.
-  const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
-  if (!siteUrl) {
-    // Not fatal to the upload — the row and file are saved — but the link in
-    // the email the person is about to receive will be broken
-    // (https:///talent/verify/…), so flag it loudly rather than silently.
-    log.fail("site_url", "SITE_URL is not set — the verification link will be malformed");
-  }
-  const verifyUrl = `${siteUrl}/talent/verify/${verifyToken}`;
+  // ---- 9. start the analysis without making the person wait ------------
+  // talent-analyze accepts { cv_version_id } only from the service role, so
+  // this call is the one route to a paid analysis for an account upload.
+  const analysis = (async () => {
+    try {
+      const res = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/talent-analyze`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ cv_version_id: versionId }),
+        }
+      );
+      if (!res.ok) {
+        log.fail("analysis_invoke", `talent-analyze returned HTTP ${res.status}`, {
+          version_id: versionId,
+        });
+      }
+    } catch (err) {
+      log.fail("analysis_invoke", err instanceof Error ? err.message : String(err), {
+        version_id: versionId,
+      });
+    }
+  })();
 
-  const { error: mailError } = await admin.functions.invoke("send-email", {
-    body: { kind: "talent_verify", email, url: verifyUrl },
-  });
-  if (mailError) {
-    // The profile exists and the link is valid; only delivery failed. Say so
-    // rather than pretending the upload did not happen.
-    log.fail("send_email", mailError.message);
-    return json(502, { error: "email_failed" }, trace);
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime) {
+    EdgeRuntime.waitUntil(analysis);
+    log.step("analysis_started", { background: true });
+  } else {
+    await analysis;
+    log.step("analysis_started", { background: false });
   }
 
   log.step("done");
-  return json(200, { ok: true }, trace);
+  return json(200, { ok: true, version_id: versionId, unchanged: false }, trace);
 });

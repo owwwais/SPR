@@ -5,18 +5,13 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validations/auth";
 import { ACTIVE_ORG_COOKIE } from "@/lib/org-cookie";
+import { safeNext } from "@/lib/redirects";
 import { ar } from "@/lib/i18n/ar";
 
 export type LoginState = {
   error: string | null;
 };
 
-// Only same-site paths. An open redirect here would let an invitation link be
-// rewritten to bounce a freshly authenticated user somewhere hostile.
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = String(value ?? "");
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/admin";
-}
 
 export async function signIn(
   _prevState: LoginState,
@@ -42,13 +37,18 @@ export async function signIn(
     return { error: ar.auth.errors.serverError };
   }
 
-  // Outside try/catch: redirect() works by throwing.
-  redirect(safeNext(formData.get("next")));
+  // Outside try/catch: redirect() works by throwing. /onboarding routes
+  // everyone by the rows they have: a workspace to /admin, a seeker profile
+  // to /me or its next step, neither to the chooser (D26).
+  redirect(safeNext(formData.get("next"), "/onboarding"));
 }
 
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // This browser only. The default ("global") revokes every session the
+  // account has, so signing out on a phone ended the session on a laptop
+  // mid-task, and its next save failed.
+  await supabase.auth.signOut({ scope: "local" });
   // The active-org choice belongs to the session that just ended; leaving it
   // behind would preselect one account's workspace for whoever signs in next
   // on this device.
