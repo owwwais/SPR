@@ -21,6 +21,20 @@ type TemplateInput = {
   roleLabel?: string;
   /** talent_verify only: the 24-hour verification link. */
   verifyUrl?: string | null;
+  /** rejected only: a neutral, human-picked reason category (#8). Optional. */
+  rejectionReason?: string | null;
+};
+
+// Fixed, neutral vocabulary — matches the status_history.public_reason
+// check constraint (0019). Never free text, never AI-generated: the one
+// thing D24 and §10.4 both forbid is the applicant reading any evaluation
+// reasoning, and a human picking from this list is the guardrail.
+const REJECTION_REASON_LABELS: Record<string, string> = {
+  more_suitable_candidate: "تقدّم لهذه الوظيفة مرشح رأينا توافقه معها أقرب",
+  requirements_mismatch: "لم تتطابق المتطلبات الأساسية للوظيفة مع ما توفر",
+  position_filled: "تم إشغال الشاغر",
+  position_cancelled: "تم إلغاء هذا الشاغر",
+  other: "",
 };
 
 type Template = { subject: string; html: string };
@@ -115,6 +129,15 @@ export function buildEmail(
     }
     case "rejected": {
       // FR-08: respectful and generic — never any evaluation reasoning.
+      // #8: an optional, neutral, HR-picked reason sentence. "other" (or no
+      // reason at all) renders nothing extra, same tone as before this field
+      // existed.
+      const reasonLabel = input.rejectionReason
+        ? REJECTION_REASON_LABELS[input.rejectionReason]
+        : null;
+      const reasonLine = reasonLabel
+        ? `<p>${reasonLabel}.</p>`
+        : "";
       return {
         subject: `تحديث بخصوص طلبك — ${input.jobTitle}`,
         html: layout(
@@ -122,6 +145,7 @@ export function buildEmail(
           `<p>مرحباً ${input.fullName}،</p>
            <p>نشكرك على الوقت الذي خصصته للتقديم على وظيفة <strong>${input.jobTitle}</strong> وعلى اهتمامك بالانضمام إلينا.</p>
            <p>بعد دراسة الطلبات المقدمة، قررنا المضي مع مرشحين آخرين لهذه الوظيفة.</p>
+           ${reasonLine}
            <p>نقدّر جهدك ونتمنى لك كل التوفيق في مسيرتك المهنية.</p>`,
           input.companyName
         ),

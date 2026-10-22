@@ -56,6 +56,8 @@ Deno.serve(async (req) => {
     token?: string;
     email?: string;
     url?: string;
+    /** rejected only: a neutral, human-picked reason category (#8). */
+    public_reason?: string;
   };
   try {
     payload = await req.json();
@@ -201,6 +203,7 @@ Deno.serve(async (req) => {
     refCode: application.ref_code,
     trackUrl: siteUrl ? `${siteUrl}/track/${application.ref_code}` : null,
     companyName: organization?.name ?? "",
+    rejectionReason: kind === "rejected" ? payload.public_reason ?? null : null,
   });
 
   const resend = new Resend(resendKey);

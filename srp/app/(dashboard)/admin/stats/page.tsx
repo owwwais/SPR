@@ -44,6 +44,16 @@ type OrgStats = {
   per_job: { name: string; count: number; avg: number | null }[];
   funnel: { status: AppStatus; count: number }[];
   over_time: { date: string; count: number }[];
+  // 0019 #4: does the score track who actually gets hired? Only decided
+  // applications (accepted/rejected) with a score.
+  calibration: { status: "accepted" | "rejected"; count: number; avg_fit_score: number }[];
+  // 0019 #12: top ten applicant sources by volume.
+  source_quality: {
+    source: string;
+    count: number;
+    avg_fit_score: number | null;
+    accepted_count: number;
+  }[];
 };
 
 export default async function AdminStatsPage() {
@@ -85,6 +95,8 @@ export default async function AdminStatsPage() {
     per_job: [],
     funnel: [],
     over_time: [],
+    calibration: [],
+    source_quality: [],
   };
 
   const kpis = [
@@ -246,6 +258,84 @@ export default async function AdminStatsPage() {
               </Table>
             </CardContent>
           </Card>
+
+          {stats.calibration.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{ar.stats.calibration.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {ar.stats.calibration.hint}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {stats.calibration.map((row) => (
+                    <div
+                      key={row.status}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {ar.status[row.status]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {row.count} {ar.stats.applicationsUnit}
+                        </span>
+                      </div>
+                      <ScoreBadge score={row.avg_fit_score} />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {stats.source_quality.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{ar.stats.sourceQuality.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <p className="mb-2 text-sm text-muted-foreground">
+                  {ar.stats.sourceQuality.hint}
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{ar.stats.sourceQuality.source}</TableHead>
+                      <TableHead>{ar.stats.sourceQuality.count}</TableHead>
+                      <TableHead title={ar.evaluation.advisoryTooltip}>
+                        {ar.stats.perJobTable.avg} ({ar.evaluation.advisory})
+                      </TableHead>
+                      <TableHead>{ar.stats.sourceQuality.accepted}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.source_quality.map((row) => (
+                      <TableRow key={row.source}>
+                        <TableCell className="font-medium">
+                          {row.source}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {row.count}
+                        </TableCell>
+                        <TableCell>
+                          {row.avg_fit_score === null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <ScoreBadge score={row.avg_fit_score} />
+                          )}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {row.accepted_count}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

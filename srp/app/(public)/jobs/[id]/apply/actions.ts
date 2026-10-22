@@ -62,6 +62,7 @@ function translateFieldErrors(
 
 export async function submitApplication(
   jobId: string,
+  source: string | null,
   _prev: ApplyState,
   formData: FormData
 ): Promise<ApplyState> {
@@ -81,6 +82,7 @@ export async function submitApplication(
   }
 
   formData.set("job_id", jobId);
+  if (source) formData.set("source", source);
 
   let response: Response;
   try {

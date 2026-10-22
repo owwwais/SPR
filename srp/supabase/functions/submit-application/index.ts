@@ -256,6 +256,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  // #12: optional hiring-source attribution. Sanitized here too — the
+  // server action already does, but this function is the write boundary
+  // and never trusts the caller for that. Anything that doesn't match
+  // becomes null rather than an error: a malformed source is not a reason
+  // to refuse an application.
+  const rawSource = String(form.get("source") ?? "").trim().toLowerCase();
+  const source = /^[a-z0-9_-]{1,40}$/.test(rawSource) ? rawSource : null;
+
   // ---- 3. screening answers, checked against the JOB's definition ----
   // Never against a question list supplied by the client.
   const parsedQuestions = ScreeningQuestions.safeParse(job.screening_questions);
@@ -387,6 +395,7 @@ Deno.serve(async (req) => {
       cv_mime: cv.type,
       cover_note: parsed.data.cover_note,
       screening_answers: validatedAnswers.data,
+      source,
     });
 
     if (!error) {

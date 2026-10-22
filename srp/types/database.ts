@@ -313,6 +313,9 @@ export type Database = {
           screening_answers: Json;
           interview_at: string | null;
           interview_qa: Json;
+          // 0019: optional hiring-source attribution (#12), e.g. "linkedin".
+          // Sanitized by submit-application; never used in scoring.
+          source: string | null;
           created_at: string;
         };
         // org_id is omitted: the applications_set_org trigger derives it from
@@ -336,6 +339,7 @@ export type Database = {
           screening_answers?: Json;
           interview_at?: string | null;
           interview_qa?: Json;
+          source?: string | null;
           created_at?: string;
         };
         Update: {
@@ -409,6 +413,39 @@ export type Database = {
           },
         ];
       };
+      // 0019: every evaluation a re-run replaced. Written only by the
+      // ai_evaluations_archive_before_update trigger — never by application
+      // code, so there is no Insert/Update type.
+      ai_evaluation_history: {
+        Row: {
+          id: string;
+          org_id: string;
+          application_id: string;
+          model: string;
+          prompt_version: string;
+          blind: boolean;
+          fit_score: number;
+          score_breakdown: Json;
+          justification: Json;
+          evaluated_at: string;
+          superseded_at: string;
+        };
+        // Written only by the trigger, as the table owner — never through
+        // the client. Record<string, never> keeps the shape (every table
+        // needs Insert/Update to satisfy supabase-js's generic schema
+        // constraint) while making a client-side write a type error.
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_evaluation_history_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       status_history: {
         Row: {
           id: number;
@@ -418,6 +455,8 @@ export type Database = {
           to_status: AppStatus;
           changed_by: string | null;
           note: string | null;
+          // 0019: optional, human-picked, neutral reason category (#8).
+          public_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -426,6 +465,7 @@ export type Database = {
           to_status: AppStatus;
           changed_by?: string | null;
           note?: string | null;
+          public_reason?: string | null;
           created_at?: string;
         };
         Update: Record<string, never>;
@@ -456,6 +496,8 @@ export type Database = {
           p_application_id: string;
           p_new_status: AppStatus;
           p_note?: string | null;
+          // 0019: optional, human-picked, neutral reason category (#8).
+          p_public_reason?: string | null;
         };
         Returns: undefined;
       };

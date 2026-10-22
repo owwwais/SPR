@@ -51,14 +51,25 @@ export async function generateMetadata({
   return { title: job ? `${ar.apply.title}: ${job.title}` : ar.apply.title };
 }
 
+// #12: an optional ?src= on the apply link, e.g. /jobs/x/apply?src=linkedin.
+// Sanitized here to the same shape submit-application insists on, so a
+// malformed or absent value becomes null rather than reaching the server
+// action at all.
+const SOURCE_RE = /^[a-z0-9_-]{1,40}$/;
+
 export default async function ApplyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ src?: string }>;
 }) {
   const { id } = await params;
   const job = await getJob(id);
   if (!job) notFound();
+
+  const rawSource = (await searchParams).src?.trim().toLowerCase() ?? "";
+  const source = SOURCE_RE.test(rawSource) ? rawSource : null;
 
   const applicationsClosed =
     job.closes_at !== null && job.closes_at < todayISO();
@@ -83,7 +94,7 @@ export default async function ApplyPage({
         </div>
       ) : (
         <ApplyForm
-          action={submitApplication.bind(null, job.id)}
+          action={submitApplication.bind(null, job.id, source)}
           turnstileSiteKey={
             process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null
           }
