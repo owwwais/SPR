@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseEnv } from "@/lib/supabase/env";
 import { ACTIVE_ORG_COOKIE } from "@/lib/org-cookie";
@@ -148,6 +148,18 @@ export async function requireMembership(): Promise<Session> {
     redirect("/login");
   }
   return session;
+}
+
+// The platform console (D18). D13: platform staff are a separate table, never
+// a tenant role, so this asks is_platform_admin() and nothing else. Anyone
+// else gets a plain 404 — the console does not announce that it exists.
+export async function requirePlatformAdmin() {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { data: isAdmin, error } = await supabase.rpc("is_platform_admin");
+  if (error) console.error("is_platform_admin failed:", error.message);
+  if (isAdmin !== true) notFound();
+  return user;
 }
 
 // For pages only owners/admins may open (org settings, team).

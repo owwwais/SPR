@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
+import { DirectionProvider } from "@base-ui/react/direction-provider";
 import { ar } from "@/lib/i18n/ar";
 import "./globals.css";
 
@@ -66,7 +67,9 @@ export default function RootLayout({
         >
           {ar.common.skipToContent}
         </a>
-        {children}
+        {/* Base UI positions menus, popovers and sliders from this context,
+            not from the html dir attribute (UI-A6). */}
+        <DirectionProvider direction="rtl">{children}</DirectionProvider>
       </body>
     </html>
   );
