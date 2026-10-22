@@ -1,7 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Check } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +43,10 @@ const REJECTION_REASONS = [
 ] as const;
 
 const selectClass =
-  "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring/25";
+
+// The two decisions an applicant is told about as a final answer.
+const CONFIRMED: AppStatus[] = ["accepted", "rejected"];
 
 // FR-08 control. The RPC + trigger handle validation/history server-side;
 // accept/reject remains a human action — nothing here is automated.
@@ -65,11 +78,27 @@ export function StatusChanger({
   }
 
   const t = ar.application.statusChange;
+  const formRef = useRef<HTMLFormElement>(null);
+  const confirmed = useRef(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
-      <h3 className="font-semibold">{t.title}</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
+    <form
+      ref={formRef}
+      action={formAction}
+      // React skips the action when submit is prevented, so the dialog
+      // stands between the click and the RPC; confirming resubmits once.
+      onSubmit={(event) => {
+        if (CONFIRMED.includes(selected) && !confirmed.current) {
+          event.preventDefault();
+          setConfirmOpen(true);
+          return;
+        }
+        confirmed.current = false;
+      }}
+      className="flex flex-col gap-3"
+    >
+      <div className="grid gap-3">
         <div className="flex flex-col gap-2">
           <Label htmlFor="status">{t.newStatus}</Label>
           <select
@@ -92,7 +121,7 @@ export function StatusChanger({
           <Textarea id="note" name="note" rows={2} maxLength={1000} />
         </div>
         {selected === "rejected" && (
-          <div className="flex flex-col gap-2 sm:col-span-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="rejection_reason">{t.reasonLabel}</Label>
             <select
               id="rejection_reason"
@@ -130,6 +159,31 @@ export function StatusChanger({
           <span className="text-sm text-destructive">{state.error}</span>
         )}
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.confirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.confirmBody.replace("{status}", ar.status[selected])}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              variant={selected === "rejected" ? "destructive" : "default"}
+              onClick={() => {
+                confirmed.current = true;
+                setConfirmOpen(false);
+                formRef.current?.requestSubmit();
+              }}
+            >
+              {t.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

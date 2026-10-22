@@ -615,7 +615,12 @@ shipped with it: `/platform` confirms transfers, applies plans and sets
 per-org limits, behind `requirePlatformAdmin()` (D13/D18). P4a and the P4b
 shell shipped: full sidebar, mobile drawer and tab bar, and the "Today" home
 page on `workspace_today()` (`0026`). Test suites add `billing.sql` (33).
-See `docs/HANDOVER-2026-08.md`, round 10.
+See `docs/HANDOVER-2026-08.md`, round 10. Round 11 shipped the rest of P4
+except the drag-and-drop board (needs `@dnd-kit`, D10) and bulk actions:
+the applicant dossier with its decision beside the evidence and a side panel
+through an intercepted `@panel` route (P4c), job and applicant lists (P4d),
+the interviews hub (P4e), settings in tabs (P4f), and the command palette on
+`search_workspace()` (`0027`, P4g). Migrations run to `0027`.
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),

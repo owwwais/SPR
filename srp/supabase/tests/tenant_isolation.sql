@@ -185,6 +185,15 @@ select pg_temp.chk_blind('acme hr: CANNOT see globex evaluation history',
     where application_id = '0b000000-0000-4000-8000-0000000000f1'$$);
 select pg_temp.chk_denied('acme hr: CANNOT search_candidates in globex',
   $$select public.search_candidates('0b000000-0000-4000-8000-000000000001', 'engineer')$$);
+select pg_temp.chk_denied('acme hr: CANNOT search_workspace in globex',
+  $$select public.search_workspace('0b000000-0000-4000-8000-000000000001', 'متقدم')$$);
+select pg_temp.chk('acme hr: search_workspace finds own applicant by name, never globex''s',
+  (select jsonb_array_length(t->'applicants') = 1
+          and t->'applicants'->0->>'ref_code' = 'ACME-001'
+          and position('جلوبكس' in t::text) = 0
+   from (select public.search_workspace('0a000000-0000-4000-8000-000000000001', 'متقدم') as t) s));
+select pg_temp.chk('acme hr: search_workspace treats % as a literal, not a wildcard',
+  (select jsonb_array_length(public.search_workspace('0a000000-0000-4000-8000-000000000001', '%%')->'applicants') = 0));
 select pg_temp.chk_denied('acme hr: CANNOT read workspace_today of globex',
   $$select public.workspace_today('0b000000-0000-4000-8000-000000000001')$$);
 select pg_temp.chk('acme hr: workspace_today lists own new applicant, never globex''s',

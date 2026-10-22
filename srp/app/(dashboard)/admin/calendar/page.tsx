@@ -85,7 +85,7 @@ function InterviewCard({ row }: { row: InterviewRow }) {
         <Button
           nativeButton={false}
           render={
-            <Link href={`/admin/applications/${row.id}?tab=interview`} />
+            <Link href={`/admin/applications/${row.id}#interview`} />
           }
         >
           {ar.calendar.manage}
@@ -211,7 +211,7 @@ export default async function CalendarPage({
                 {dayRows.map((row) => (
                   <li key={row.id}>
                     <Link
-                      href={`/admin/applications/${row.id}?tab=interview`}
+                      href={`/admin/applications/${row.id}#interview`}
                       className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm hover:bg-surface-soft"
                     >
                       <bdi dir="ltr" className="shrink-0 font-medium tabular-nums">
@@ -266,7 +266,7 @@ export default async function CalendarPage({
                   {dayRows.map((row) => (
                     <Link
                       key={row.id}
-                      href={`/admin/applications/${row.id}?tab=interview`}
+                      href={`/admin/applications/${row.id}#interview`}
                       className="truncate rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary hover:bg-primary/20"
                       title={`${row.full_name} — ${formatDateTime(row.interview_at!)}`}
                     >

@@ -607,6 +607,15 @@ export const ar = {
       closesAt: "آخر موعد",
       createdAt: "تاريخ الإنشاء",
       actions: "إجراءات",
+      applicants: "المتقدمون",
+      newApplicants: "جديد",
+    },
+    menu: {
+      label: "إجراءات الوظيفة",
+      edit: "تعديل الوظيفة",
+      interviewBank: "بنك أسئلة المقابلة",
+      viewPublic: "عرضها كما يراها المتقدم",
+      remove: "حذف الوظيفة",
     },
     questions: {
       builderTitle: "أسئلة التقديم المخصصة",
@@ -1141,6 +1150,11 @@ export const ar = {
 
   applicants: {
     title: "المتقدمون",
+    openFull: "فتح كصفحة كاملة",
+    searchPlaceholder: "ابحث بالاسم أو البريد",
+    search: "بحث",
+    noSearchResults: "لا يطابق بحثك أحداً من المتقدمين لهذه الوظيفة.",
+    closePanel: "إغلاق",
     emptyTitle: "لا توجد طلبات تقديم",
     emptyBody: "لم يتقدّم أحد لهذه الوظيفة بعد.",
     noResultsTitle: "لا توجد نتائج مطابقة",
@@ -1203,6 +1217,11 @@ export const ar = {
     failedAnalysis: "فشل التحليل — يمكن قراءة السيرة يدوياً وإعادة المحاولة",
     unavailable: "التقييم غير متاح",
     retry: "إعادة التحليل",
+    rerunTitle: "إعادة تحليل السيرة؟",
+    rerunBody:
+      "يُحتسب تحليلاً واحداً من حصة باقتك لهذا الشهر. يحلّ التقييم الجديد محل الحالي، ويبقى الحالي محفوظاً في سجل التقييمات وتقرير الشفافية.",
+    rerunConfirm: "أعد التحليل",
+    rerunCancel: "تراجع",
     attempts: "المحاولات",
     fitScore: "درجة الملاءمة",
     scoreBreakdown: "تفصيل الدرجة",
@@ -1248,6 +1267,8 @@ export const ar = {
   interview: {
     sectionTitle: "المقابلة",
     scheduleLabel: "موعد المقابلة",
+    timeLabel: "الساعة",
+    timeZoneNote: "بتوقيت الرياض.",
     scheduleSave: "حفظ الموعد",
     scheduleSaved: "تم حفظ الموعد",
     notScheduled: "لم يُحدد موعد للمقابلة بعد",
@@ -1383,6 +1404,20 @@ export const ar = {
 
   settingsPage: {
     title: "الإعدادات",
+    tabs: {
+      company: "الشركة وصفحة التوظيف",
+      team: "الفريق والصلاحيات",
+      compliance: "الفرز والامتثال",
+      retention: "الاحتفاظ والخصوصية",
+    },
+    billingLink: "الباقة والاستهلاك",
+    rolesTitle: "ما يستطيعه كل دور",
+    roleHelp: {
+      owner: "كل شيء، ومنه نقل الملكية وإضافة المالكين.",
+      admin: "كل شيء عدا المالكين: الإعدادات والفريق والباقة والوظائف والقرارات.",
+      hr: "الوظائف والمتقدمون والقرارات والمقابلات. لا يرى الإعدادات ولا الفريق.",
+      viewer: "قراءة فقط: يرى الوظائف والمتقدمين والتقييمات ولا يغيّر شيئاً.",
+    },
     seatLimit:
       "بلغت حد المستخدمين في باقتك (الأعضاء والدعوات المعلّقة). أزل عضواً أو ألغِ دعوة، أو رقِّ الباقة من «الباقة والاستهلاك».",
     companyTitle: "الاحتفاظ بالبيانات",
@@ -1440,12 +1475,30 @@ export const ar = {
 
   application: {
     title: "ملف المتقدم",
-    tabs: {
-      profile: "الملف",
-      evaluation: "التقييم الذكي",
-      questions: "أسئلة المقابلة",
+    // P4c: one page, evidence first and the decision beside it (UI-F1).
+    sections: {
+      evaluation: "التقييم الاستشاري",
+      cv: "السيرة الذاتية",
+      extracted: "الملف المستخرج من السيرة",
+      submission: "بيانات التقديم",
       interview: "المقابلة",
+      decision: "القرار",
+      history: "سجل الحالة",
+      contact: "التواصل",
     },
+    jump: "انتقل إلى",
+    cvPreview: "معاينة السيرة الذاتية",
+    cvDocx: "السيرة بصيغة Word لا تُعرض هنا — افتحها في نافذة جديدة.",
+    openCv: "فتح في نافذة جديدة",
+    history: {
+      submitted: "قُدّم الطلب",
+      by: "بواسطة",
+      system: "النظام",
+      publicReason: "السبب المُرسل للمتقدم",
+      empty: "لم تتغيّر الحالة منذ التقديم.",
+      unavailable: "تعذّر تحميل سجل الحالة.",
+    },
+    more: "إجراءات أخرى",
     screeningTitle: "إجابات أسئلة التقديم",
     screeningFlag: "يحتاج انتباهك",
     appliedTo: "الوظيفة",
@@ -1481,6 +1534,12 @@ export const ar = {
       updating: "جارٍ التحديث…",
       updated: "تم تحديث الحالة",
       failed: "تعذّر تحديث الحالة، حاول مرة أخرى",
+      // Accepting and declining are the two decisions an applicant hears
+      // about; both ask once more (P4c).
+      confirmTitle: "تأكيد القرار",
+      confirmBody: "سيُنقل الطلب إلى «{status}» ويُرسل بريد إلى المتقدم بذلك. لا يتراجع البريد بعد إرساله.",
+      confirm: "تأكيد",
+      cancel: "تراجع",
     },
   },
 
@@ -1638,6 +1697,74 @@ export const ar = {
       ] as { key: string; label: string; href: string | null }[],
     },
     allClear: "لا شيء ينتظرك الآن. الطلبات الجديدة ستظهر هنا فور وصولها.",
+  },
+
+  // The command palette (P4g): Ctrl/⌘ K.
+  palette: {
+    trigger: "ابحث أو انتقل…",
+    title: "بحث وأوامر",
+    placeholder: "اسم متقدم، بريده، رمز متابعة، أو وظيفة…",
+    groups: { applicants: "المتقدمون", jobs: "الوظائف", commands: "انتقال وأوامر" },
+    commands: { newJob: "إنشاء وظيفة جديدة" },
+    searching: "جارٍ البحث…",
+    empty: "لا نتائج. جرّب جزءاً من الاسم أو رمز المتابعة.",
+    unavailable: "البحث في السجلات غير مفعّل بعد على هذه البيئة؛ الأوامر تعمل.",
+    hints: { move: "↑↓ للتنقل", open: "Enter للفتح", close: "Esc للإغلاق" },
+  },
+
+  // The interviews hub (P4e, PRODUCT-READINESS-PROPOSAL §4.2).
+  interviewsHub: {
+    title: "المقابلات",
+    ethics: "استشاري · التقرير لا يغيّر حالة الطلب · لا رفض آلي",
+    tabs: {
+      overview: "نظرة عامة",
+      interviews: "المقابلات",
+      banks: "بنوك الأسئلة",
+      reports: "التقارير",
+    },
+    quota: {
+      title: "رصيد المقابلات هذا الشهر",
+      notIncluded: "المقابلات الافتراضية غير مشمولة في باقتك الحالية.",
+      notIncludedHint:
+        "كل ما في هذه الصفحة يعمل دون رصيد: مراجعة بنوك الأسئلة، والمقابلات البشرية وتسجيلها في ملف المتقدم. الرصيد يفتح إرسال المقابلة الافتراضية فقط.",
+      request: "الباقات والرصيد",
+      unavailable: "تعذّر قراءة الرصيد.",
+    },
+    groups: {
+      preparing: "قيد التجهيز",
+      review: "بانتظار مراجعتك",
+      open: "مجدولة أو مفتوحة",
+      running: "جارية",
+      evaluating: "قيد التقييم",
+      ready: "تقرير جاهز",
+      closed: "منتهية أو ملغاة",
+    },
+    attention: "يحتاج انتباهك",
+    attentionEmpty: "لا شيء ينتظرك في المقابلات الآن.",
+    failedPlanning: "تعذّر تجهيز مقابلة",
+    columns: {
+      candidate: "المتقدم",
+      job: "الوظيفة",
+      status: "الحالة",
+      window: "النافذة",
+      questions: "الأسئلة",
+    },
+    minutes: "دقيقة",
+    interviewsEmpty: "لم تُنشأ مقابلات افتراضية بعد. تُنشأ من قسم «المقابلة» في ملف أي متقدم.",
+    banksEmpty: "لا بنوك أسئلة بعد. يُولَّد البنك من صفحة كل وظيفة، وتراجعه أنت قبل أي مقابلة.",
+    banksColumns: {
+      job: "الوظيفة",
+      version: "الإصدار",
+      status: "الحالة",
+      approved: "المعتمد",
+      lockedAt: "قُفل في",
+    },
+    review: "مراجعة",
+    reportsEmpty: "لم يصل أي تقرير بعد. يصل التقرير بعد أن يُكمل المتقدم المقابلة ويُقيَّم.",
+    reportScore: "الدرجة الاستشارية",
+    confidence: { high: "ثقة عالية", medium: "ثقة متوسطة", low: "ثقة منخفضة" } as Record<string, string>,
+    open: "فتح",
+    loadFailed: "تعذّر تحميل المقابلات. حاول لاحقاً.",
   },
 
   // The workspace shell (P4b): sidebar, top bar, mobile drawer and tab bar.

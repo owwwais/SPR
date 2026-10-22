@@ -11,6 +11,7 @@ type Crumb = { label: string; href?: string };
 const SECTIONS: Record<string, string> = {
   jobs: ar.admin.jobs,
   candidates: ar.candidates.title,
+  interviews: ar.interviewsHub.title,
   calendar: ar.calendar.title,
   stats: ar.admin.stats,
   settings: ar.admin.settings,
