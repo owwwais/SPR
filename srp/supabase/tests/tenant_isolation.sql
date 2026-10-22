@@ -139,6 +139,11 @@ insert into ai_evaluations (application_id, model, prompt_version, extracted, fi
   ('0a000000-0000-4000-8000-0000000000f1','gemini-3.5-flash','1.1','{}',80,'{}','{}','[]'),
   ('0b000000-0000-4000-8000-0000000000f1','gemini-3.5-flash','1.1','{}',75,'{}','{}','[]');
 
+-- Re-run globex's evaluation so ai_evaluation_history (0023 #7) has a row
+-- that belongs to globex alone, for the isolation checks below.
+update ai_evaluations set fit_score = 60
+where application_id = '0b000000-0000-4000-8000-0000000000f1';
+
 insert into storage.objects (bucket_id, name, metadata) values
   ('cvs','0a000000-0000-4000-8000-000000000001/0a000000-0000-4000-8000-0000000000f1.pdf','{}'),
   ('cvs','0b000000-0000-4000-8000-000000000001/0b000000-0000-4000-8000-0000000000f1.pdf','{}');
@@ -175,6 +180,11 @@ select pg_temp.chk_blind('acme hr: CANNOT see globex applications',
 select pg_temp.chk_blind('acme hr: CANNOT see globex evaluations',
   $$select count(*) from ai_evaluations
     where application_id = '0b000000-0000-4000-8000-0000000000f1'$$);
+select pg_temp.chk_blind('acme hr: CANNOT see globex evaluation history',
+  $$select count(*) from ai_evaluation_history
+    where application_id = '0b000000-0000-4000-8000-0000000000f1'$$);
+select pg_temp.chk_denied('acme hr: CANNOT search_candidates in globex',
+  $$select public.search_candidates('0b000000-0000-4000-8000-000000000001', 'engineer')$$);
 select pg_temp.chk_blind('acme hr: CANNOT see globex status history',
   $$select count(*) from status_history
     where org_id = '0b000000-0000-4000-8000-000000000001'$$);
@@ -285,6 +295,8 @@ select pg_temp.chk_blind('outsider: sees no applications at all',
   $$select count(*) from applications$$);
 select pg_temp.chk_blind('outsider: sees no evaluations at all',
   $$select count(*) from ai_evaluations$$);
+select pg_temp.chk_blind('outsider: sees no evaluation history at all',
+  $$select count(*) from ai_evaluation_history$$);
 select pg_temp.chk_blind('outsider: sees no memberships at all',
   $$select count(*) from memberships$$);
 select pg_temp.chk_blind('outsider: sees no CV objects at all',

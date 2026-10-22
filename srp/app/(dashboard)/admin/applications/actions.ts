@@ -69,6 +69,17 @@ const APP_STATUSES: AppStatus[] = [
   "rejected",
 ];
 
+// #8: the only values status_history.public_reason's check constraint
+// (0023) accepts. Validated here too so a bad value fails before the RPC
+// round trip, with the same message as any other invalid submission.
+const PUBLIC_REASONS = [
+  "more_suitable_candidate",
+  "requirements_mismatch",
+  "position_filled",
+  "position_cancelled",
+  "other",
+] as const;
+
 // Applicant emails per status ("received" goes out at submission time;
 // under_review sends nothing). Acceptance email added by engineer request.
 const STATUS_EMAIL_KIND: Partial<Record<AppStatus, string>> = {
@@ -95,11 +106,20 @@ export async function changeApplicationStatus(
     return { changed: false, error: ar.application.statusChange.failed };
   }
 
+  // #8: only meaningful (and only ever sent by the form) alongside "rejected".
+  const rawReason = String(formData.get("rejection_reason") ?? "");
+  const publicReason =
+    newStatus === "rejected" &&
+    (PUBLIC_REASONS as readonly string[]).includes(rawReason)
+      ? rawReason
+      : null;
+
   const supabase = await createClient();
   const { error } = await supabase.rpc("change_application_status", {
     p_application_id: applicationId,
     p_new_status: newStatus,
     p_note: note.length > 0 ? note : null,
+    p_public_reason: publicReason,
   });
   if (error) {
     console.error("change_application_status failed:", error.message);
@@ -113,7 +133,13 @@ export async function changeApplicationStatus(
       const publicClient = createPublicClient();
       const { error: emailError } = await publicClient.functions.invoke(
         "send-email",
-        { body: { kind: emailKind, application_id: applicationId } }
+        {
+          body: {
+            kind: emailKind,
+            application_id: applicationId,
+            public_reason: publicReason,
+          },
+        }
       );
       if (emailError) console.warn("status email failed:", emailError.message);
     } catch (err) {

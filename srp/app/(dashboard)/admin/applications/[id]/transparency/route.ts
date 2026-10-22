@@ -35,6 +35,15 @@ type Report = {
     prompt_version: string;
     evaluated_at: string;
   } | null;
+  // #7: evaluations a re-run replaced — so the report stays honest about
+  // what was live when an earlier decision in decision_trail was made.
+  superseded_evaluations: {
+    fit_score: number;
+    model: string;
+    prompt_version: string;
+    evaluated_at: string;
+    superseded_at: string;
+  }[];
   decision_trail: {
     from_status: string | null;
     to_status: string;
@@ -42,6 +51,8 @@ type Report = {
     changed_by: string | null;
     decided_by_human: boolean;
     note: string | null;
+    // #8: optional, neutral reason category sent with the rejection email.
+    public_reason: string | null;
   }[];
 };
 
@@ -115,7 +126,27 @@ export async function GET(
         <td>${esc(statusLabel(h.from_status))} ← ${esc(statusLabel(h.to_status))}</td>
         <td>${esc(h.changed_by ?? t.system)}</td>
         <td>${h.decided_by_human ? esc(t.humanDecision) : "—"}</td>
-        <td>${esc(h.note ?? "—")}</td>
+        <td>${esc(h.note ?? "—")}${
+          h.public_reason
+            ? `<br><span class="meta">${esc(t.publicReason)}: ${esc(
+                ar.application.statusChange.reasons[
+                  h.public_reason as keyof typeof ar.application.statusChange.reasons
+                ] ?? h.public_reason
+              )}</span>`
+            : ""
+        }</td>
+      </tr>`
+    )
+    .join("");
+
+  const supersededRows = report.superseded_evaluations
+    .map(
+      (s) => `<tr>
+        <td class="n">${esc(s.fit_score)}</td>
+        <td>${esc(s.prompt_version)}</td>
+        <td>${esc(s.model)}</td>
+        <td>${esc(fmt(s.evaluated_at))}</td>
+        <td>${esc(fmt(s.superseded_at))}</td>
       </tr>`
     )
     .join("");
@@ -169,6 +200,20 @@ ${
          <tr><th>${esc(t.evaluatedAt)}</th><td>${esc(fmt(e.evaluated_at))}</td></tr>
        </table>`
     : `<p>${esc(t.noEvaluation)}</p>`
+}
+
+${
+  report.superseded_evaluations.length > 0
+    ? `<h2>${esc(t.supersededTitle)}</h2>
+       <p class="meta">${esc(t.supersededHint)}</p>
+       <table>
+         <thead><tr>
+           <th>${esc(t.score)}</th><th>${esc(t.promptVersion)}</th>
+           <th>${esc(t.model)}</th><th>${esc(t.evaluatedAt)}</th><th>${esc(t.supersededAt)}</th>
+         </tr></thead>
+         <tbody>${supersededRows}</tbody>
+       </table>`
+    : ""
 }
 
 <h2>${esc(t.trail)}</h2>

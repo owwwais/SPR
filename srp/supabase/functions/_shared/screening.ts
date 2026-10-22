@@ -20,6 +20,11 @@ export const ScreeningQuestion = z
     type: z.enum(QUESTION_TYPES),
     required: z.boolean(),
     options: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+    // Advanced feature #11: a yes_no question whose "لا" answer flags the
+    // application for HR's attention — it never rejects anything, the
+    // decision stays human (D4/§10.4). Meaningless outside yes_no; the
+    // builder only shows the toggle there and clears it for every other type.
+    disqualifying: z.boolean().default(false),
   })
   .superRefine((question, ctx) => {
     if (
@@ -48,6 +53,10 @@ export const ScreeningAnswer = z.object({
     z.string().max(2000),
     z.array(z.string().max(200)).max(10),
   ]),
+  // Denormalized from the question at submission time, same reasoning as
+  // label/type above: whether the job still asks this, or asks it the same
+  // way, should not change how an already-submitted answer reads.
+  disqualifying: z.boolean().default(false),
 });
 
 export const ScreeningAnswers = z.array(ScreeningAnswer).max(10);

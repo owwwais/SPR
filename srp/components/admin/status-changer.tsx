@@ -20,6 +20,18 @@ const APP_STATUSES: AppStatus[] = [
   "rejected",
 ];
 
+// #8: fixed, neutral options only — matches status_history.public_reason's
+// check constraint (0023). Never free text: this is the one sentence class
+// that reaches the applicant, so it stays out of anyone's hands but a
+// short, pre-approved list.
+const REJECTION_REASONS = [
+  "more_suitable_candidate",
+  "requirements_mismatch",
+  "position_filled",
+  "position_cancelled",
+  "other",
+] as const;
+
 const selectClass =
   "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -79,6 +91,25 @@ export function StatusChanger({
           <Label htmlFor="note">{t.noteLabel}</Label>
           <Textarea id="note" name="note" rows={2} maxLength={1000} />
         </div>
+        {selected === "rejected" && (
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="rejection_reason">{t.reasonLabel}</Label>
+            <select
+              id="rejection_reason"
+              name="rejection_reason"
+              defaultValue=""
+              className={selectClass}
+            >
+              <option value="">{t.reasonNone}</option>
+              {REJECTION_REASONS.map((reason) => (
+                <option key={reason} value={reason}>
+                  {t.reasons[reason]}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">{t.reasonHint}</p>
+          </div>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">{t.emailHint}</p>
       <div className="flex items-center gap-3">

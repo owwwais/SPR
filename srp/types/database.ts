@@ -338,6 +338,9 @@ export type Database = {
           screening_answers: Json;
           interview_at: string | null;
           interview_qa: Json;
+          // 0023: optional hiring-source attribution (#12), e.g. "linkedin".
+          // Sanitized by submit-application; never used in scoring.
+          source: string | null;
           // 0020 (D27): set only by submit-application for a seeker who applied
           // with their stored profile. Nulled if they delete their seeker data;
           // via_account stays true so the badge survives.
@@ -366,6 +369,7 @@ export type Database = {
           screening_answers?: Json;
           interview_at?: string | null;
           interview_qa?: Json;
+          source?: string | null;
           created_at?: string;
         };
         Update: {
@@ -439,6 +443,39 @@ export type Database = {
           },
         ];
       };
+      // 0023: every evaluation a re-run replaced. Written only by the
+      // ai_evaluations_archive_before_update trigger — never by application
+      // code, so there is no Insert/Update type.
+      ai_evaluation_history: {
+        Row: {
+          id: string;
+          org_id: string;
+          application_id: string;
+          model: string;
+          prompt_version: string;
+          blind: boolean;
+          fit_score: number;
+          score_breakdown: Json;
+          justification: Json;
+          evaluated_at: string;
+          superseded_at: string;
+        };
+        // Written only by the trigger, as the table owner — never through
+        // the client. Record<string, never> keeps the shape (every table
+        // needs Insert/Update to satisfy supabase-js's generic schema
+        // constraint) while making a client-side write a type error.
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "ai_evaluation_history_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       status_history: {
         Row: {
           id: number;
@@ -448,6 +485,8 @@ export type Database = {
           to_status: AppStatus;
           changed_by: string | null;
           note: string | null;
+          // 0023: optional, human-picked, neutral reason category (#8).
+          public_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -456,6 +495,7 @@ export type Database = {
           to_status: AppStatus;
           changed_by?: string | null;
           note?: string | null;
+          public_reason?: string | null;
           created_at?: string;
         };
         Update: Record<string, never>;
@@ -556,6 +596,8 @@ export type Database = {
           p_application_id: string;
           p_new_status: AppStatus;
           p_note?: string | null;
+          // 0023: optional, human-picked, neutral reason category (#8).
+          p_public_reason?: string | null;
         };
         Returns: undefined;
       };
@@ -622,6 +664,16 @@ export type Database = {
       // 0013: dashboard aggregates computed in the database.
       org_stats: {
         Args: { p_org: string };
+        Returns: unknown;
+      };
+      // 0024: org-wide candidate search by extracted skill (#6).
+      search_candidates: {
+        Args: {
+          p_org: string;
+          p_skill?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
         Returns: unknown;
       };
       // 0017: the talent schema is not exposed through the API; these

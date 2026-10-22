@@ -318,6 +318,131 @@ exception when sqlstate '42501' then
   raise notice 'PASS: hr cannot update AI originals (fit_score)';
 end $$;
 
+-- 0023 #7: the interview_notes update two blocks up changed a real column
+-- but not fit_score, and must NOT have archived anything — the WHEN clause
+-- on the trigger exists specifically to keep a routine HR edit from being
+-- read back later as "an evaluation this application once had".
+select 'ai_evaluation_history: untouched by an interview_notes-only update' as test,
+       (select count(*) from ai_evaluation_history
+        where application_id = (select id from applications where ref_code = 'TRK-TEST-001')) = 0
+       as pass;
+
+-- 0023 #7: simulate analyze-application's real re-run (service role,
+-- upsert semantics — ON CONFLICT DO UPDATE fires the same BEFORE UPDATE
+-- trigger as this plain UPDATE). fit_score changes, so this one DOES archive.
+reset role;
+update ai_evaluations
+set fit_score = 85, prompt_version = '1.2',
+    score_breakdown = '{}', justification = '{}', interview_questions = '[]'
+where application_id = (select id from applications where ref_code = 'TRK-TEST-001');
+
+select 'ai_evaluation_history: re-run archived exactly the prior evaluation' as test,
+       (select count(*) from ai_evaluation_history
+        where application_id = (select id from applications where ref_code = 'TRK-TEST-001')
+          and fit_score = 70 and prompt_version = '1.1') = 1
+       as pass;
+
+set local role authenticated;
+set local request.jwt.claims to
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';
+
+-- hr reads the history through RLS, same org scoping as ai_evaluations itself
+select 'hr: can read its own org''s evaluation history' as test,
+       (select count(*) from ai_evaluation_history
+        where application_id = (select id from applications where ref_code = 'TRK-TEST-001')) = 1
+       as pass;
+
+-- 0023 #8: a neutral, human-picked rejection reason travels with the status
+-- change, separate from the free-text note.
+select public.change_application_status(
+  (select id from applications where ref_code = 'TRK-TEST-001'),
+  'rejected',
+  null,
+  'position_filled'
+);
+select 'hr: rejection recorded with its public_reason' as test,
+       exists (
+         select 1 from status_history h
+         join applications a on a.id = h.application_id
+         where a.ref_code = 'TRK-TEST-001'
+           and h.to_status = 'rejected'
+           and h.public_reason = 'position_filled'
+       ) as pass;
+
+-- Not from the fixed vocabulary: the function's own defense-in-depth check
+-- (the column check constraint is the authority; this just fails earlier).
+do $$
+begin
+  perform public.change_application_status(
+    (select id from applications where ref_code = 'TRK-TEST-001'),
+    'accepted',
+    null,
+    'because I said so'
+  );
+  raise notice 'FAIL: change_application_status accepted an arbitrary public_reason';
+exception when sqlstate '22023' then
+  raise notice 'PASS: change_application_status rejects an arbitrary public_reason';
+end $$;
+
+-- 0023 #4/#12: org_stats carries the two new aggregates and they are shaped
+-- as expected for this fixture (one rejected application with a score).
+select 'org_stats: calibration reflects the rejected fixture' as test,
+       (select (public.org_stats(
+          (select org_id from applications where ref_code = 'TRK-TEST-001')
+        ) -> 'calibration') @> '[{"status":"rejected","count":1,"avg_fit_score":85}]'::jsonb)
+       as pass;
+
+select 'org_stats: source_quality includes the fixture as "direct"' as test,
+       exists (
+         select 1 from jsonb_array_elements(
+           public.org_stats(
+             (select org_id from applications where ref_code = 'TRK-TEST-001')
+           ) -> 'source_quality'
+         ) s
+         where s ->> 'source' = 'direct' and (s ->> 'count')::int >= 1
+       ) as pass;
+
+-- 0023 #7/#8: both land in the D24 transparency export too.
+select 'transparency report: carries public_reason and the superseded evaluation' as test,
+       (
+         select
+           (report -> 'decision_trail' -> -1 ->> 'public_reason') = 'position_filled'
+           and jsonb_array_length(report -> 'superseded_evaluations') = 1
+           and (report -> 'superseded_evaluations' -> 0 ->> 'fit_score') = '70'
+         from (
+           select public.application_transparency_report(
+             (select id from applications where ref_code = 'TRK-TEST-001')
+           ) as report
+         ) t
+       ) as pass;
+
+-- 0024 #6: candidate search by skill, across jobs.
+reset role;
+update ai_evaluations set extracted = '{"skills": ["React", "PostgreSQL"]}'
+where application_id = (select id from applications where ref_code = 'TRK-TEST-001');
+
+set local role authenticated;
+set local request.jwt.claims to
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';
+
+select 'search_candidates: matches a partial, case-insensitive skill' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001'), 'react'
+        ) ->> 'total')::int) = 1
+       as pass;
+
+select 'search_candidates: no match for an unrelated skill' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001'), 'rust'
+        ) ->> 'total')::int) = 0
+       as pass;
+
+select 'search_candidates: null skill returns every analyzed applicant' as test,
+       (select (public.search_candidates(
+          (select org_id from applications where ref_code = 'TRK-TEST-001')
+        ) ->> 'total')::int) >= 1
+       as pass;
+
 -- ============================================================
 -- owner (seeded: admin@example.com)
 -- ============================================================
