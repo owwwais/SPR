@@ -2,13 +2,13 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export type SettingsTab = { value: string; label: string; content: React.ReactNode };
+export type PageTab = { value: string; label: string; content: React.ReactNode };
 
-// P4f: settings as underline tabs (DESIGN.md §9), one save per tab, instead
-// of one 2,400px page with four save buttons (UI-H1). The open tab is kept
-// in ?tab= through the History API — no server round trip — so a refresh or
-// a link from elsewhere lands on the same tab.
-export function SettingsTabs({ tabs, initial }: { tabs: SettingsTab[]; initial: string }) {
+// Underline tabs for a whole page (DESIGN.md §9): settings (P4f, one save
+// per tab instead of one 2,400px page — UI-H1) and the interviews hub (P4e).
+// The open tab is kept in ?tab= through the History API — no server round
+// trip — so a refresh or a link from elsewhere lands on the same tab.
+export function PageTabs({ tabs, initial }: { tabs: PageTab[]; initial: string }) {
   return (
     <Tabs
       defaultValue={initial}

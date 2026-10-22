@@ -7,6 +7,7 @@ import {
   ExternalLink,
   House,
   LogOut,
+  MessagesSquare,
   Settings,
   ShieldCheck,
   UserRound,
@@ -35,9 +36,12 @@ export function Sidebar({
   billing,
   seeker,
   platformAdmin,
+  banksToReview,
 }: {
   session: Session;
   jobs: SidebarJob[];
+  /** Question banks waiting for the mandatory HR review (D30). */
+  banksToReview: number;
   billing: BillingOverview | null;
   seeker: boolean;
   platformAdmin: boolean;
@@ -84,6 +88,10 @@ export function Sidebar({
         <NavLink href="/admin/candidates">
           <Users className={icon} strokeWidth={stroke} aria-hidden />
           {ar.candidates.title}
+        </NavLink>
+        <NavLink href="/admin/interviews" badge={banksToReview} badgeLabel={ar.today.banks.title}>
+          <MessagesSquare className={icon} strokeWidth={stroke} aria-hidden />
+          {ar.interviewsHub.title}
         </NavLink>
         <NavLink href="/admin/calendar">
           <CalendarDays className={icon} strokeWidth={stroke} aria-hidden />

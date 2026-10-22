@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BrandingForm } from "@/components/admin/branding-form";
-import { SettingsTabs } from "@/components/admin/settings-tabs";
+import { PageTabs } from "@/components/admin/page-tabs";
 import {
   AddMemberForm,
   CompanySettingsForm,
@@ -133,7 +133,7 @@ export default async function AdminSettingsPage({
         </Link>
       </div>
 
-      <SettingsTabs
+      <PageTabs
         initial={initialTab}
         tabs={[
           {

@@ -36,6 +36,19 @@ async function sidebarJobs(orgId: string): Promise<SidebarJob[]> {
   }));
 }
 
+// The sidebar badge on "المقابلات". A count on the (org_id, status) path;
+// zero on any error rather than a broken shell.
+async function banksAwaitingReview(orgId: string): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("interview_job_banks")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("status", "awaiting_review");
+  if (error) console.error("banks count failed:", error.code, error.message);
+  return count ?? 0;
+}
+
 export default async function AdminLayout({
   children,
   panel,
@@ -47,11 +60,12 @@ export default async function AdminLayout({
   const session = await requireMembership();
   // getHats(): the switcher to the seeker hat (D26), a routing hint only —
   // /me runs its own gate. getBillingOverview() is null before 0025.
-  const [hats, platformAdmin, billing, jobs] = await Promise.all([
+  const [hats, platformAdmin, billing, jobs, banksToReview] = await Promise.all([
     getHats(),
     isPlatformAdmin(),
     getBillingOverview(session.org.id),
     sidebarJobs(session.org.id),
+    banksAwaitingReview(session.org.id),
   ]);
 
   const sidebar = (
@@ -61,6 +75,7 @@ export default async function AdminLayout({
       billing={billing}
       seeker={hats.seeker}
       platformAdmin={platformAdmin}
+      banksToReview={banksToReview}
     />
   );
 

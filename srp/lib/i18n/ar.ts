@@ -1699,6 +1699,61 @@ export const ar = {
     allClear: "لا شيء ينتظرك الآن. الطلبات الجديدة ستظهر هنا فور وصولها.",
   },
 
+  // The interviews hub (P4e, PRODUCT-READINESS-PROPOSAL §4.2).
+  interviewsHub: {
+    title: "المقابلات",
+    ethics: "استشاري · التقرير لا يغيّر حالة الطلب · لا رفض آلي",
+    tabs: {
+      overview: "نظرة عامة",
+      interviews: "المقابلات",
+      banks: "بنوك الأسئلة",
+      reports: "التقارير",
+    },
+    quota: {
+      title: "رصيد المقابلات هذا الشهر",
+      notIncluded: "المقابلات الافتراضية غير مشمولة في باقتك الحالية.",
+      notIncludedHint:
+        "كل ما في هذه الصفحة يعمل دون رصيد: مراجعة بنوك الأسئلة، والمقابلات البشرية وتسجيلها في ملف المتقدم. الرصيد يفتح إرسال المقابلة الافتراضية فقط.",
+      request: "الباقات والرصيد",
+      unavailable: "تعذّر قراءة الرصيد.",
+    },
+    groups: {
+      preparing: "قيد التجهيز",
+      review: "بانتظار مراجعتك",
+      open: "مجدولة أو مفتوحة",
+      running: "جارية",
+      evaluating: "قيد التقييم",
+      ready: "تقرير جاهز",
+      closed: "منتهية أو ملغاة",
+    },
+    attention: "يحتاج انتباهك",
+    attentionEmpty: "لا شيء ينتظرك في المقابلات الآن.",
+    failedPlanning: "تعذّر تجهيز مقابلة",
+    columns: {
+      candidate: "المتقدم",
+      job: "الوظيفة",
+      status: "الحالة",
+      window: "النافذة",
+      questions: "الأسئلة",
+    },
+    minutes: "دقيقة",
+    interviewsEmpty: "لم تُنشأ مقابلات افتراضية بعد. تُنشأ من قسم «المقابلة» في ملف أي متقدم.",
+    banksEmpty: "لا بنوك أسئلة بعد. يُولَّد البنك من صفحة كل وظيفة، وتراجعه أنت قبل أي مقابلة.",
+    banksColumns: {
+      job: "الوظيفة",
+      version: "الإصدار",
+      status: "الحالة",
+      approved: "المعتمد",
+      lockedAt: "قُفل في",
+    },
+    review: "مراجعة",
+    reportsEmpty: "لم يصل أي تقرير بعد. يصل التقرير بعد أن يُكمل المتقدم المقابلة ويُقيَّم.",
+    reportScore: "الدرجة الاستشارية",
+    confidence: { high: "ثقة عالية", medium: "ثقة متوسطة", low: "ثقة منخفضة" } as Record<string, string>,
+    open: "فتح",
+    loadFailed: "تعذّر تحميل المقابلات. حاول لاحقاً.",
+  },
+
   // The workspace shell (P4b): sidebar, top bar, mobile drawer and tab bar.
   shell: {
     primaryNav: "القائمة الرئيسية",
