@@ -218,6 +218,11 @@ tighter than their containers.
 | **Skeleton** | `surface-sunken`, shaped like the content it replaces. |
 | **Focus** | Every interactive element shows a visible focus ring; never `outline: none` without a replacement. |
 | **Navigation** | Active item: `primary-soft` background with `primary-soft-ink` text. |
+| **Workspace shell** | Sidebar `w-62` on `sidebar` with a hairline at the end edge: org switcher, then the work (Today, jobs with up to five published jobs nested beneath and a count badge, candidates, calendar, statistics), then the organisation (careers page, plan, settings), then usage, switches and the account at the bottom. Top bar 48px on `canvas`: breadcrumb (derived from the URL, `ChevronLeft` separators) and the one primary action. Below `md`: the sidebar moves into a drawer from the start edge (Base UI `Dialog`, 240ms transform, mirrored by `dir`, no blur) and a 56px tab bar holds four places, every target ≥ 44px. |
+| **Usage meter** | Base UI `Meter`: label and `<bdi>used من limit</bdi>` above a 6px `surface-sunken` track; `primary` fill, `warning` from 80%, `danger` at 100%. No limit → "بلا حد" and no bar; limit 0 → "غير مشمولة في الباقة". |
+| **File field** | The native input stays in the form, visually hidden; a dashed `hairline-strong` box shows an Arabic prompt or the chosen file name (`dir="ltr"`), accepts a drop, and shows focus through `has-[:focus-visible]`. Never the browser's own control (it speaks the browser's language). |
+| **Date field** | Day, month and year selects with Arabic labels writing one hidden `YYYY-MM-DD` value; never `<input type="date">`, which shows the browser's format. |
+| **Product scene** | Real product UI rendered in code on marketing and sign-in surfaces (the scored applicant with its reasons and the human decision; recommended jobs with their reasons), always captioned "مثال توضيحي". Static: nothing in it animates on load. |
 
 ## 10. Motion
 

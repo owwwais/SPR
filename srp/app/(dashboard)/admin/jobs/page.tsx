@@ -90,7 +90,17 @@ export default async function AdminJobsPage({
       {errorMessage && (
         <Alert variant="destructive">
           <AlertCircle className="size-4" aria-hidden />
-          <AlertDescription>{errorMessage}</AlertDescription>
+          <AlertDescription>
+            {errorMessage}
+            {errorKey === "activeJobLimit" && (
+              <>
+                {" "}
+                <Link href="/admin/billing" className="font-medium underline underline-offset-4">
+                  {ar.shell.billing}
+                </Link>
+              </>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
