@@ -37,11 +37,11 @@ function Feedback({ state, pending }: { state: SettingsState; pending: boolean }
   return null;
 }
 
+// Retention only. The company name is edited once, in the branding form
+// next to the careers-page URL (UI-H2: it used to sit in both).
 export function CompanySettingsForm({
-  companyName,
   retentionMonths,
 }: {
-  companyName: string;
   retentionMonths: number;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -51,31 +51,16 @@ export function CompanySettingsForm({
   // Controlled fields synced with the server values after revalidation
   // (uncontrolled defaultValue must never change after mount — Base UI
   // warns and the displayed value would go stale).
-  const [name, setName] = useState(companyName);
   const [months, setMonths] = useState(String(retentionMonths));
-  const [prev, setPrev] = useState({ companyName, retentionMonths });
-  if (
-    prev.companyName !== companyName ||
-    prev.retentionMonths !== retentionMonths
-  ) {
-    setPrev({ companyName, retentionMonths });
-    setName(companyName);
+  const [prev, setPrev] = useState(retentionMonths);
+  if (prev !== retentionMonths) {
+    setPrev(retentionMonths);
     setMonths(String(retentionMonths));
   }
   const t = ar.settingsPage;
 
   return (
     <form action={formAction} className="flex max-w-xl flex-col gap-5">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="company_name">{t.companyName}</Label>
-        <Input
-          id="company_name"
-          name="company_name"
-          maxLength={200}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="retention_months">{t.retention}</Label>
         <Input

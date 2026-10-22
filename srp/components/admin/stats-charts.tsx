@@ -14,7 +14,10 @@ import {
 
 // FR-09 charts. Each chart carries exactly one series (title names it — no
 // legend needed) with a single theme hue; grid and axes stay recessive.
-// Wrapped in dir="ltr" so axis geometry never mirrors; labels remain Arabic.
+// Recharts lays out in LTR geometry, so the RTL reading order is built in
+// explicitly (UI-G2): category labels and the value axis sit at the start
+// (right) edge, bars grow from it, and time runs right to left. Nothing
+// animates on load (DESIGN.md §10, UI-G1).
 
 export type NamedCount = { name: string; count: number };
 export type DailyCount = { date: string; count: number };
@@ -49,7 +52,7 @@ export function HorizontalCountChart({
   return (
     <div dir="ltr" className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ left: 8, right: 24 }}>
+        <BarChart data={data} layout="vertical" margin={{ left: 24, right: 8 }}>
           <CartesianGrid
             horizontal={false}
             stroke="var(--border)"
@@ -57,6 +60,7 @@ export function HorizontalCountChart({
           />
           <XAxis
             type="number"
+            reversed
             allowDecimals={false}
             tick={AXIS_TICK}
             axisLine={false}
@@ -65,6 +69,7 @@ export function HorizontalCountChart({
           <YAxis
             type="category"
             dataKey="name"
+            orientation="right"
             width={140}
             tick={AXIS_TICK}
             tickFormatter={(v: string) => truncate(v)}
@@ -80,7 +85,8 @@ export function HorizontalCountChart({
             dataKey="count"
             fill={color}
             barSize={18}
-            radius={[0, 4, 4, 0]}
+            radius={[4, 0, 0, 4]}
+            isAnimationActive={false}
           />
         </BarChart>
       </ResponsiveContainer>
@@ -92,7 +98,7 @@ export function DailyAreaChart({ data }: { data: DailyCount[] }) {
   return (
     <div dir="ltr" className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ left: 0, right: 24, top: 8 }}>
+        <AreaChart data={data} margin={{ left: 24, right: 0, top: 8 }}>
           <CartesianGrid
             vertical={false}
             stroke="var(--border)"
@@ -100,6 +106,7 @@ export function DailyAreaChart({ data }: { data: DailyCount[] }) {
           />
           <XAxis
             dataKey="date"
+            reversed
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
@@ -108,6 +115,7 @@ export function DailyAreaChart({ data }: { data: DailyCount[] }) {
           />
           <YAxis
             allowDecimals={false}
+            orientation="right"
             width={32}
             tick={AXIS_TICK}
             axisLine={false}
@@ -126,6 +134,7 @@ export function DailyAreaChart({ data }: { data: DailyCount[] }) {
             fillOpacity={0.15}
             dot={false}
             activeDot={{ r: 4 }}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>

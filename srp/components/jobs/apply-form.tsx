@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { FileField } from "@/components/ui/file-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -219,15 +220,16 @@ export function ApplyForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="cv">{t.cv}</Label>
-        <Input
+        <FileField
           id="cv"
           name="cv"
-          type="file"
           required
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          onChange={(e) => checkFile(e.target.files?.[0])}
+          invalid={Boolean(cvError ?? state.fieldErrors.cv)}
+          describedBy="cv-hint"
+          onFile={checkFile}
         />
-        <p className="text-xs text-muted-foreground">{t.cvHint}</p>
+        <p id="cv-hint" className="text-xs text-muted-foreground">{t.cvHint}</p>
         <FieldError message={cvError ?? state.fieldErrors.cv} />
       </div>
 

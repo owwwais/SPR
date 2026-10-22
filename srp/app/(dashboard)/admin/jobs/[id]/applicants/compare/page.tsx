@@ -148,7 +148,7 @@ export default async function CompareApplicantsPage({
                     <span className="ms-1 text-xs">/ {max}</span>
                   </td>
                   <td
-                    className={`p-3 tabular-nums ${va > vb ? "font-bold text-emerald-700 dark:text-emerald-400" : ""}`}
+                    className={`p-3 tabular-nums ${va > vb ? "font-bold text-success" : ""}`}
                   >
                     {va}
                     {va > vb && (
@@ -158,7 +158,7 @@ export default async function CompareApplicantsPage({
                     )}
                   </td>
                   <td
-                    className={`p-3 tabular-nums ${vb > va ? "font-bold text-emerald-700 dark:text-emerald-400" : ""}`}
+                    className={`p-3 tabular-nums ${vb > va ? "font-bold text-success" : ""}`}
                   >
                     {vb}
                     {vb > va && (

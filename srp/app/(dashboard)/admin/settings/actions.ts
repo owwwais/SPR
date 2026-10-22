@@ -14,8 +14,8 @@ export type SettingsState = { saved: boolean; error: string | null };
 // here scopes to the caller's own org id AND is gated by RLS — two layers,
 // per the isolation invariant (§2.1).
 
+// The name is saved by the branding form (UI-H2); this one keeps retention.
 const orgSchema = z.object({
-  name: z.string().trim().min(2).max(200),
   retention_months: z.coerce.number().int().min(1).max(60),
 });
 
@@ -26,7 +26,6 @@ export async function updateSettings(
   const session = await requireOrgAdmin();
 
   const parsed = orgSchema.safeParse({
-    name: formData.get("company_name"),
     retention_months: formData.get("retention_months"),
   });
   if (!parsed.success) {
