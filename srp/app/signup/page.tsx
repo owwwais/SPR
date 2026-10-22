@@ -1,16 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import { safeNext } from "@/lib/redirects";
 import { SignupForm } from "./signup-form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
-import { BrandMark } from "@/components/brand-mark";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { AudienceTabs } from "@/components/seeker/onboarding/audience-tabs";
 import { ar } from "@/lib/i18n/ar";
@@ -46,45 +39,37 @@ export default async function SignupPage({
     target === "/onboarding" ? "/login" : `/login?next=${encodeURIComponent(target)}`;
 
   return (
-    <main
-      id="main"
-      className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16"
-    >
-      <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/35">
-        <BrandMark />
-      </Link>
-      <Card className="w-full max-w-md">
-        <CardHeader className="gap-4">
-          <AudienceTabs
-            label={ar.auth.tabs.label}
-            tabs={[
-              {
-                href: withNext("/signup?as=seeker"),
-                label: ar.auth.tabs.seeker,
-                active: as === "seeker",
-              },
-              {
-                href: withNext("/signup?as=company"),
-                label: ar.auth.tabs.company,
-                active: as === "company",
-              },
-            ]}
-          />
-          <div className="flex flex-col gap-1.5 text-center">
-            <h1 className="text-xl leading-snug font-semibold">{ar.auth.signupTitle}</h1>
-            <CardDescription>
-              {as === "seeker" ? ar.auth.signupSubtitleSeeker : ar.auth.signupSubtitleCompany}
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
+    <AuthShell audience={as}>
+      <div className="flex flex-col gap-6">
+        <AudienceTabs
+          label={ar.auth.tabs.label}
+          tabs={[
+            {
+              href: withNext("/signup?as=seeker"),
+              label: ar.auth.tabs.seeker,
+              active: as === "seeker",
+            },
+            {
+              href: withNext("/signup?as=company"),
+              label: ar.auth.tabs.company,
+              active: as === "company",
+            },
+          ]}
+        />
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-2xl leading-snug font-semibold">{ar.auth.signupTitle}</h1>
+          <p className="text-sm text-muted-foreground">
+            {as === "seeker" ? ar.auth.signupSubtitleSeeker : ar.auth.signupSubtitleCompany}
+          </p>
+        </div>
+        <div className="flex flex-col gap-5">
           {/* A Google account arrives with a verified email, so nothing paid
               ever runs for an unproven address (D26). */}
           <GoogleButton next={target} />
           <AuthDivider />
           <SignupForm as={as} next={next} loginHref={loginHref} />
-        </CardContent>
-      </Card>
-    </main>
+        </div>
+      </div>
+    </AuthShell>
   );
 }

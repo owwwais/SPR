@@ -1484,6 +1484,55 @@ export const ar = {
     },
   },
 
+  // The product side of the sign-in and sign-up pages: everything the
+  // account opens, and one real screen of it (an illustration, labelled).
+  authShowcase: {
+    label: "ما يفتحه لك الحساب",
+    eyebrow: {
+      both: "للشركات والباحثين عن عمل",
+      company: "للشركات",
+      seeker: "للباحثين عن عمل",
+    },
+    titleCompany: "كل متقدم مقروء ومرتّب، والقرار لك",
+    titleSeeker: "سيرة واحدة، وكل الوظائف المناسبة لك",
+    bodyCompany:
+      "يقرأ حكيم كل سيرة بالعربية والإنجليزية ويعطيها درجة مكتوبٌ سببها، ثم يقف عند هذا الحد: القبول والاعتذار قرار بشري دائماً.",
+    bodySeeker:
+      "ارفع سيرتك مرة واحدة، وتقدّم بنقرة، واعرف لماذا اقتُرحت عليك كل وظيفة وأين وصل كل طلب.",
+    companyHeading: "للشركات",
+    seekerHeading: "للباحثين عن عمل",
+    company: [
+      { icon: "analysis", text: "تحليل كل سيرة بدرجة ملاءمة وتبرير مكتوب" },
+      { icon: "rank", text: "ترتيب المتقدمين لكل وظيفة ومقارنتهم" },
+      { icon: "questions", text: "أسئلة مقابلة مخصصة لكل مرشح" },
+      { icon: "interview", text: "مقابلة أولية افتراضية نصية أو صوتية", soon: true },
+      { icon: "careers", text: "صفحة توظيف باسم شركتك وفي دليل الوظائف" },
+      { icon: "calendar", text: "تقويم المقابلات وإحصاءات التوظيف" },
+      { icon: "fairness", text: "فرز مُعمّى وتقرير شفافية لكل قرار" },
+      { icon: "team", text: "فريق بأدوار وصلاحيات واضحة" },
+    ] as { icon: string; text: string; soon?: boolean }[],
+    seeker: [
+      { icon: "upload", text: "ارفع سيرتك مرة وتقدّم دون إعادة رفعها" },
+      { icon: "match", text: "وظائف مقترحة مع سبب كل اقتراح" },
+      { icon: "track", text: "حالة كل طلب في مكان واحد" },
+      { icon: "privacy", text: "بياناتك لك: تعديلها وحذفها بيدك" },
+    ] as { icon: string; text: string; soon?: boolean }[],
+    scene: {
+      name: "متقدم 1",
+      why: "لماذا هذه الدرجة",
+      strengths: [
+        "أربع سنوات في React مع أمثلة منشورة في السيرة",
+        "قاد ترحيل واجهة كاملة إلى TypeScript",
+      ],
+      probe: "فجوة سبعة أشهر — سؤال للمقابلة، لا حكم",
+      decide: "القرار لك",
+      interview: "دعوة لمقابلة",
+      decline: "اعتذار",
+    },
+    browseJobs: "تصفّح الوظائف",
+    legal: { privacy: "الخصوصية", terms: "الشروط", fairness: "الإنصاف" },
+  },
+
   auth: {
     signupTitle: "أنشئ حساباً",
     // P1 (D26): one account, two doors. The tab only decides where the new
