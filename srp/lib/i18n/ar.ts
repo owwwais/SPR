@@ -607,6 +607,15 @@ export const ar = {
       closesAt: "آخر موعد",
       createdAt: "تاريخ الإنشاء",
       actions: "إجراءات",
+      applicants: "المتقدمون",
+      newApplicants: "جديد",
+    },
+    menu: {
+      label: "إجراءات الوظيفة",
+      edit: "تعديل الوظيفة",
+      interviewBank: "بنك أسئلة المقابلة",
+      viewPublic: "عرضها كما يراها المتقدم",
+      remove: "حذف الوظيفة",
     },
     questions: {
       builderTitle: "أسئلة التقديم المخصصة",
@@ -1142,6 +1151,9 @@ export const ar = {
   applicants: {
     title: "المتقدمون",
     openFull: "فتح كصفحة كاملة",
+    searchPlaceholder: "ابحث بالاسم أو البريد",
+    search: "بحث",
+    noSearchResults: "لا يطابق بحثك أحداً من المتقدمين لهذه الوظيفة.",
     closePanel: "إغلاق",
     emptyTitle: "لا توجد طلبات تقديم",
     emptyBody: "لم يتقدّم أحد لهذه الوظيفة بعد.",

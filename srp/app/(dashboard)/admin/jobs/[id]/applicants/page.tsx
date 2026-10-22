@@ -9,6 +9,7 @@ import {
   ListChecks,
   Loader2,
   RefreshCw,
+  Search,
   TriangleAlert,
   Users,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { ScreeningAnswers } from "@/lib/validations/screening";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -53,7 +55,7 @@ export default async function ApplicantsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ status?: string; page?: string; error?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; error?: string; q?: string }>;
 }) {
   const session = await requireMembership();
   const { id } = await params;
@@ -65,6 +67,10 @@ export default async function ApplicantsPage({
     : null;
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const showRetryError = sp.error === "retryFailed";
+  // Name or email. Characters that mean something in a PostgREST filter
+  // (, ( ) and the wildcards) are dropped, not escaped: nobody's name needs
+  // them, and the term goes into an or() expression.
+  const search = (sp.q ?? "").replace(/[,()%*\\]/g, " ").trim().slice(0, 80);
 
   const supabase = await createClient();
   const { data: job } = await supabase
@@ -97,19 +103,43 @@ export default async function ApplicantsPage({
     .order("created_at", { ascending: true })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (statusFilter) query = query.eq("status", statusFilter);
+  if (search) query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
 
-  const { data: applicants, count, error } = await query;
+  // UI-E1: how many are in each stage, on the chips themselves. Six head
+  // counts on the (org_id, job_id, status) index, in parallel with the page.
+  const countFor = (status: AppStatus | null) => {
+    let q = supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", session.org.id)
+      .eq("job_id", id);
+    if (status) q = q.eq("status", status);
+    return q;
+  };
+  const [{ data: applicants, count, error }, ...stageCounts] = await Promise.all([
+    query,
+    countFor(null),
+    ...APP_STATUSES.map((status) => countFor(status)),
+  ]);
   if (error) console.error("applicants query failed:", error.message);
+  const chipCount = (status: AppStatus | null) =>
+    stageCounts[status === null ? 0 : APP_STATUSES.indexOf(status) + 1]?.count ?? null;
 
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPath = `/admin/jobs/${id}/applicants`;
 
-  const filterHref = (status: AppStatus | null) =>
-    status ? `${currentPath}?status=${status}` : currentPath;
+  const filterHref = (status: AppStatus | null) => {
+    const params = new URLSearchParams({
+      ...(status ? { status } : {}),
+      ...(search ? { q: search } : {}),
+    }).toString();
+    return params ? `${currentPath}?${params}` : currentPath;
+  };
   const pageHref = (p: number) =>
     `${currentPath}?${new URLSearchParams({
       ...(statusFilter ? { status: statusFilter } : {}),
+      ...(search ? { q: search } : {}),
       page: String(p),
     })}`;
 
@@ -124,7 +154,7 @@ export default async function ApplicantsPage({
           {ar.adminJobs.title}
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-xl font-bold">
             {ar.applicants.title}: {job.title}
           </h1>
           <div className="flex flex-wrap gap-2">
@@ -158,38 +188,61 @@ export default async function ApplicantsPage({
         </Alert>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={statusFilter === null ? "default" : "outline"}
-          size="sm"
-          nativeButton={false}
-          render={<Link href={filterHref(null)} />}
-        >
-          {ar.applicants.filterAll}
-        </Button>
-        {APP_STATUSES.map((status) => (
-          <Button
-            key={status}
-            variant={statusFilter === status ? "default" : "outline"}
-            size="sm"
-            nativeButton={false}
-            render={<Link href={filterHref(status)} />}
-          >
-            {ar.status[status]}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {([null, ...APP_STATUSES] as (AppStatus | null)[]).map((status) => {
+            const n = chipCount(status);
+            return (
+              <Button
+                key={status ?? "all"}
+                variant={statusFilter === status ? "default" : "outline"}
+                size="sm"
+                nativeButton={false}
+                render={<Link href={filterHref(status)} />}
+              >
+                {status ? ar.status[status] : ar.applicants.filterAll}
+                {n !== null && (
+                  <span className="text-xs tabular-nums opacity-80">
+                    <bdi>{n}</bdi>
+                  </span>
+                )}
+              </Button>
+            );
+          })}
+        </div>
+        <form role="search" className="flex w-full items-center gap-2 sm:w-72">
+          {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+          <label htmlFor="applicant-q" className="sr-only">
+            {ar.applicants.searchPlaceholder}
+          </label>
+          <Input
+            id="applicant-q"
+            name="q"
+            defaultValue={search}
+            placeholder={ar.applicants.searchPlaceholder}
+            className="h-8"
+          />
+          <Button type="submit" variant="outline" size="icon-sm" title={ar.applicants.search}>
+            <Search className="size-4" aria-hidden />
+            <span className="sr-only">{ar.applicants.search}</span>
           </Button>
-        ))}
+        </form>
       </div>
 
       {!applicants || applicants.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-20 text-center">
           <Users className="size-10 text-muted-foreground" aria-hidden />
           <h2 className="text-lg font-semibold">
-            {statusFilter
+            {statusFilter || search
               ? ar.applicants.noResultsTitle
               : ar.applicants.emptyTitle}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {statusFilter ? ar.applicants.noResultsBody : ar.applicants.emptyBody}
+            {search
+              ? ar.applicants.noSearchResults
+              : statusFilter
+                ? ar.applicants.noResultsBody
+                : ar.applicants.emptyBody}
           </p>
         </div>
       ) : (
@@ -207,15 +260,14 @@ export default async function ApplicantsPage({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>{ar.applicants.table.rank}</TableHead>
+                <TableHead className="hidden sm:table-cell">{ar.applicants.table.rank}</TableHead>
                 <TableHead>{ar.applicants.table.name}</TableHead>
                 <TableHead title={ar.evaluation.advisoryTooltip}>
                   {ar.applicants.table.score} ({ar.evaluation.advisory})
                 </TableHead>
-                <TableHead>{ar.applicants.table.appStatus}</TableHead>
-                <TableHead>{ar.applicants.table.analysis}</TableHead>
-                <TableHead>{ar.applicants.table.appliedAt}</TableHead>
-                <TableHead>{ar.applicants.table.actions}</TableHead>
+                <TableHead className="hidden md:table-cell">{ar.applicants.table.appStatus}</TableHead>
+                <TableHead className="hidden lg:table-cell">{ar.applicants.table.analysis}</TableHead>
+                <TableHead className="hidden lg:table-cell">{ar.applicants.table.appliedAt}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -242,13 +294,18 @@ export default async function ApplicantsPage({
                         aria-label={ar.applicants.compare.selectOne}
                       />
                     </TableCell>
-                    <TableCell className="text-muted-foreground tabular-nums">
+                    <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
                       {(page - 1) * PAGE_SIZE + index + 1}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          {applicant.full_name}
+                    <TableCell className="max-w-72">
+                      {/* The name opens the dossier — as a side panel from
+                          here (P4c), or the full page in a new tab. */}
+                      <Link
+                        href={`/admin/applications/${applicant.id}`}
+                        className="group flex min-w-0 flex-col items-start rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
+                      >
+                        <span className="flex max-w-full items-center gap-1.5 font-medium group-hover:text-primary">
+                          <span className="truncate">{applicant.full_name}</span>
                           {flagged && (
                             <TriangleAlert
                               className="size-3.5 text-warning"
@@ -259,10 +316,13 @@ export default async function ApplicantsPage({
                             {flagged ? ar.application.screeningFlag : ""}
                           </span>
                         </span>
-                        <span dir="ltr" className="text-xs text-muted-foreground">
+                        <bdi dir="ltr" className="max-w-full truncate text-xs text-muted-foreground">
                           {applicant.email}
+                        </bdi>
+                        <span className="mt-1 text-xs text-muted-foreground md:hidden">
+                          {ar.status[applicant.status]}
                         </span>
-                      </div>
+                      </Link>
                     </TableCell>
                     <TableCell>
                       {fitScore !== null ? (
@@ -271,12 +331,12 @@ export default async function ApplicantsPage({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <Badge variant="secondary">
                         {ar.status[applicant.status]}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden lg:table-cell">
                       <AnalysisIndicator
                         status={applicant.analysis_status}
                         attempts={applicant.analysis_attempts}
@@ -284,20 +344,8 @@ export default async function ApplicantsPage({
                         returnPath={currentPath}
                       />
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(applicant.created_at)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        nativeButton={false}
-                        render={
-                          <Link href={`/admin/applications/${applicant.id}`} />
-                        }
-                      >
-                        {ar.applicants.view}
-                      </Button>
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
+                      <bdi>{formatDate(applicant.created_at)}</bdi>
                     </TableCell>
                   </TableRow>
                 );

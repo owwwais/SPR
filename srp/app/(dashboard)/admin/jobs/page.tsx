@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertCircle, Briefcase, Plus } from "lucide-react";
+import { AlertCircle, Briefcase } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DeleteJobButton } from "@/components/admin/delete-job-button";
+import { JobRowMenu } from "@/components/admin/job-row-menu";
 import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ar } from "@/lib/i18n/ar";
 import { formatDate } from "@/lib/format";
 import type { JobStatus } from "@/types/database";
-import { closeJob, publishJob } from "./actions";
+import { closeJob, deleteJob, publishJob } from "./actions";
 
 export const metadata: Metadata = {
   title: ar.adminJobs.title,
@@ -54,17 +54,34 @@ export default async function AdminJobsPage({
   const supabase = await createClient();
   let query = supabase
     .from("jobs")
-    .select("id,title,department,type,status,closes_at,created_at", {
-      count: "exact",
-    })
+    // Applicant counts ride along as two filtered aggregates, so the list
+    // says which job needs attention without a query per row.
+    .select(
+      "id,title,department,type,status,closes_at,created_at,total:applications(count),fresh:applications(count)",
+      { count: "exact" }
+    )
     .eq("org_id", session.org.id)
     .is("deleted_at", null)
+    .eq("total.org_id", session.org.id)
+    .eq("fresh.org_id", session.org.id)
+    .eq("fresh.status", "new")
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (statusFilter) query = query.eq("status", statusFilter);
 
-  const { data: jobs, count, error } = await query;
+  const { data, count, error } = await query;
   if (error) console.error("admin jobs query failed:", error.message);
+  type JobRow = {
+    id: string;
+    title: string;
+    department: string | null;
+    type: keyof typeof ar.jobs.typeLabels;
+    status: JobStatus;
+    closes_at: string | null;
+    total: { count: number }[] | null;
+    fresh: { count: number }[] | null;
+  };
+  const jobs = data as unknown as JobRow[] | null;
 
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -80,11 +97,8 @@ export default async function AdminJobsPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{ar.adminJobs.title}</h1>
-        <Button nativeButton={false} render={<Link href="/admin/jobs/new" />}>
-          <Plus className="size-4" aria-hidden />
-          {ar.adminJobs.newJob}
-        </Button>
+        <h1 className="text-xl font-bold">{ar.adminJobs.title}</h1>
+        {/* "وظيفة جديدة" lives in the top bar on every workspace page. */}
       </div>
 
       {errorMessage && (
@@ -142,72 +156,76 @@ export default async function AdminJobsPage({
             <TableHeader>
               <TableRow>
                 <TableHead>{ar.adminJobs.table.jobTitle}</TableHead>
-                <TableHead>{ar.adminJobs.table.department}</TableHead>
-                <TableHead>{ar.adminJobs.table.type}</TableHead>
+                <TableHead>{ar.adminJobs.table.applicants}</TableHead>
                 <TableHead>{ar.adminJobs.table.status}</TableHead>
-                <TableHead>{ar.adminJobs.table.closesAt}</TableHead>
-                <TableHead>{ar.adminJobs.table.actions}</TableHead>
+                <TableHead className="hidden md:table-cell">{ar.adminJobs.table.closesAt}</TableHead>
+                <TableHead className="text-end">
+                  <span className="sr-only">{ar.adminJobs.table.actions}</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {jobs.map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell className="font-medium">{job.title}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {job.department ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {ar.jobs.typeLabels[job.type]}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadgeVariant[job.status]}>
-                      {ar.adminJobs.statusLabels[job.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {job.closes_at ? formatDate(job.closes_at) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        nativeButton={false}
-                        render={
-                          <Link href={`/admin/jobs/${job.id}/applicants`} />
-                        }
+              {jobs.map((job) => {
+                const total = job.total?.[0]?.count ?? 0;
+                const fresh = job.fresh?.[0]?.count ?? 0;
+                return (
+                  <TableRow key={job.id}>
+                    <TableCell className="max-w-80">
+                      <Link
+                        href={`/admin/jobs/${job.id}/applicants`}
+                        className="flex flex-col gap-0.5 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/35"
                       >
-                        {ar.adminJobs.actions.applicants}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        nativeButton={false}
-                        render={<Link href={`/admin/jobs/${job.id}/edit`} />}
-                      >
-                        {ar.adminJobs.actions.edit}
-                      </Button>
-                      {job.status !== "published" && (
-                        <form action={publishJob.bind(null, job.id)}>
-                          <Button type="submit" size="sm">
-                            {job.status === "closed"
-                              ? ar.adminJobs.actions.republish
-                              : ar.adminJobs.actions.publish}
-                          </Button>
-                        </form>
-                      )}
-                      {job.status === "published" && (
-                        <form action={closeJob.bind(null, job.id)}>
-                          <Button type="submit" variant="secondary" size="sm">
-                            {ar.adminJobs.actions.close}
-                          </Button>
-                        </form>
-                      )}
-                      <DeleteJobButton id={job.id} />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <span className="truncate font-medium hover:text-primary">{job.title}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {[job.department, ar.jobs.typeLabels[job.type]].filter(Boolean).join(" · ")}
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2 tabular-nums">
+                        <bdi>{total}</bdi>
+                        {fresh > 0 && (
+                          <span className="rounded-sm bg-primary-soft px-1.5 text-xs font-semibold text-primary-soft-foreground">
+                            <bdi>{fresh}</bdi> {ar.adminJobs.table.newApplicants}
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusBadgeVariant[job.status]}>
+                        {ar.adminJobs.statusLabels[job.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                      {job.closes_at ? <bdi>{formatDate(job.closes_at)}</bdi> : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        {job.status !== "published" ? (
+                          <form action={publishJob.bind(null, job.id)}>
+                            <Button type="submit" variant="outline" size="sm">
+                              {job.status === "closed"
+                                ? ar.adminJobs.actions.republish
+                                : ar.adminJobs.actions.publish}
+                            </Button>
+                          </form>
+                        ) : (
+                          <form action={closeJob.bind(null, job.id)}>
+                            <Button type="submit" variant="ghost" size="sm">
+                              {ar.adminJobs.actions.close}
+                            </Button>
+                          </form>
+                        )}
+                        <JobRowMenu
+                          jobId={job.id}
+                          published={job.status === "published"}
+                          deleteAction={deleteJob.bind(null, job.id)}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
