@@ -1518,6 +1518,91 @@ export const ar = {
     },
   },
 
+  // The workspace home: what needs a person today (P4b, 0026).
+  today: {
+    title: "اليوم",
+    greeting: "مرحباً",
+    unavailable:
+      "تظهر هنا مهام اليوم بعد تطبيق آخر تحديثات قاعدة البيانات. إلى ذلك الحين، هذه الأرقام الأساسية:",
+    counts: {
+      new: "بانتظار المراجعة",
+      thisWeek: "طلبات هذا الأسبوع",
+      analyzing: "قيد التحليل",
+      publishedJobs: "وظائف منشورة",
+    },
+    review: {
+      title: "متقدمون بانتظار مراجعتك",
+      hint: "الأعلى درجةً أولاً. الدرجة استشارية، والقرار لك.",
+      empty: "لا متقدمين جدد بانتظارك.",
+      viewAll: "كل المتقدمين الجدد",
+      noScore: "بلا درجة بعد",
+    },
+    failed: {
+      title: "تحليلات تعثّرت",
+      hint: "الطلب نفسه سليم ويمكن قراءة السيرة يدوياً. أعد التحليل من ملف المتقدم.",
+      attempts: "محاولات",
+      open: "افتح الملف",
+    },
+    interviews: {
+      title: "مقابلات هذا الأسبوع",
+      empty: "لا مقابلات مجدولة خلال سبعة أيام.",
+      calendar: "التقويم",
+    },
+    reports: {
+      title: "تقارير مقابلات وصلت حديثاً",
+    },
+    banks: {
+      title: "بنوك أسئلة بانتظار مراجعتك",
+      hint: "مراجعة البنك إلزامية قبل إرسال أي مقابلة افتراضية.",
+      questions: "سؤالاً",
+    },
+    attention: {
+      title: "وظائف تحتاج انتباهاً",
+      closesOn: "تُغلق في",
+      quiet: "لا متقدمين بعد أسبوع من النشر",
+    },
+    firstSteps: {
+      title: "خطواتك الأولى",
+      done: "تمّ",
+      items: [
+        { key: "published_job", label: "انشر أول وظيفة", href: "/admin/jobs/new" },
+        { key: "branding", label: "أضف شعار الشركة ونبذة عنها", href: "/admin/settings" },
+        { key: "team", label: "ادعُ زميلاً إلى الفريق", href: "/admin/settings" },
+        { key: "first_application", label: "شارك رابط صفحة التوظيف لتصلك أول الطلبات", href: null },
+      ] as { key: string; label: string; href: string | null }[],
+    },
+    allClear: "لا شيء ينتظرك الآن. الطلبات الجديدة ستظهر هنا فور وصولها.",
+  },
+
+  // The workspace shell (P4b): sidebar, top bar, mobile drawer and tab bar.
+  shell: {
+    primaryNav: "القائمة الرئيسية",
+    today: "اليوم",
+    activeJobs: "الوظائف المنشورة",
+    newApplicants: "متقدمون جدد",
+    orgSection: "المؤسسة",
+    careersPage: "صفحة التوظيف",
+    opensInNewTab: "(تفتح في نافذة جديدة)",
+    billing: "الباقة والاستهلاك",
+    platform: "لوحة المنصة",
+    plan: "الباقة",
+    analysesThisMonth: "تحليلات هذا الشهر",
+    manageBilling: "الباقة والاستهلاك",
+    menu: "القائمة",
+    closeMenu: "إغلاق القائمة",
+    more: "المزيد",
+    newJob: "وظيفة جديدة",
+    breadcrumb: "مسار التنقل",
+    crumbs: {
+      newJob: "وظيفة جديدة",
+      edit: "تعديل الوظيفة",
+      applicants: "المتقدمون",
+      compare: "مقارنة المتقدمين",
+      interviewBank: "بنك المقابلة",
+      application: "ملف المتقدم",
+    },
+  },
+
   admin: {
     dashboard: "لوحة التحكم",
     jobs: "الوظائف",

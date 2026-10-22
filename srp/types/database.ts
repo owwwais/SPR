@@ -706,6 +706,10 @@ export type Database = {
         Args: { p_request: string };
         Returns: undefined;
       };
+      workspace_today: {
+        Args: { p_org: string };
+        Returns: unknown;
+      };
       platform_billing_overview: {
         Args: Record<PropertyKey, never>;
         Returns: unknown;

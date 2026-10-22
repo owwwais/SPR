@@ -26,7 +26,7 @@ import { requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { ar } from "@/lib/i18n/ar";
-import { formatDateTime } from "@/lib/format";
+import { formatClock, formatDateTime, riyadhDayKey } from "@/lib/format";
 import { InterviewQa } from "@/lib/validations/screening";
 
 export const metadata: Metadata = {
@@ -112,7 +112,7 @@ export default async function CalendarPage({
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 6 });
   const gridEnd = endOfWeek(endOfMonth(monthBase), { weekStartsOn: 6 });
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-  const todayKey = format(new Date(), "yyyy-MM-dd");
+  const todayKey = riyadhDayKey(new Date());
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -135,7 +135,7 @@ export default async function CalendarPage({
   // interviews per visible day (local day key)
   const byDay = new Map<string, InterviewRow[]>();
   for (const row of scheduled) {
-    const key = format(new Date(row.interview_at!), "yyyy-MM-dd");
+    const key = riyadhDayKey(row.interview_at!);
     byDay.set(key, [...(byDay.get(key) ?? []), row]);
   }
 
@@ -224,7 +224,7 @@ export default async function CalendarPage({
                       title={`${row.full_name} — ${formatDateTime(row.interview_at!)}`}
                     >
                       <span dir="ltr" className="tabular-nums">
-                        {format(new Date(row.interview_at!), "HH:mm")}
+                        {formatClock(row.interview_at!)}
                       </span>{" "}
                       {row.full_name}
                     </Link>

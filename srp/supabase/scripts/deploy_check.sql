@@ -81,7 +81,9 @@ checks (migration, applied) as (values
     exists (select 1 from fn where name = 'search_candidates')),
   ('0025_billing',
     to_regclass('public.plans') is not null
-    and exists (select 1 from fn where name = 'platform_confirm_request'))
+    and exists (select 1 from fn where name = 'platform_confirm_request')),
+  ('0026_workspace_today',
+    exists (select 1 from fn where name = 'workspace_today'))
 )
 select
   migration,

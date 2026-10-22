@@ -28,9 +28,9 @@ export function ScoreBadge({
       )}
     >
       {score}
-      <span className="text-[10px] font-normal opacity-75">
-        {ar.evaluation.advisory}
-      </span>
+      {/* UI-F7: 12px at full band color — at 10px and 75% opacity it read
+          at about 3:1, and this word is the product promise (D24). */}
+      <span className="text-xs font-medium">{ar.evaluation.advisory}</span>
     </span>
   );
 }
