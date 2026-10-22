@@ -185,6 +185,13 @@ select pg_temp.chk_blind('acme hr: CANNOT see globex evaluation history',
     where application_id = '0b000000-0000-4000-8000-0000000000f1'$$);
 select pg_temp.chk_denied('acme hr: CANNOT search_candidates in globex',
   $$select public.search_candidates('0b000000-0000-4000-8000-000000000001', 'engineer')$$);
+select pg_temp.chk_denied('acme hr: CANNOT read workspace_today of globex',
+  $$select public.workspace_today('0b000000-0000-4000-8000-000000000001')$$);
+select pg_temp.chk('acme hr: workspace_today lists own new applicant, never globex''s',
+  (select t->'new_by_job'->0->>'title' = 'وظيفة أكمي المنشورة'
+          and (t->'counts'->>'new')::int = 1
+          and position('جلوبكس' in t::text) = 0
+   from (select public.workspace_today('0a000000-0000-4000-8000-000000000001') as t) s));
 select pg_temp.chk_blind('acme hr: CANNOT see globex status history',
   $$select count(*) from status_history
     where org_id = '0b000000-0000-4000-8000-000000000001'$$);

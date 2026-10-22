@@ -6,6 +6,7 @@ import { canWrite, requireMembership, type Session } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { jobSchema } from "@/lib/validations/job";
 import { ar } from "@/lib/i18n/ar";
+import { LIMIT_CODES } from "@/lib/billing";
 
 export type JobFormState = { error: string | null };
 
@@ -126,6 +127,11 @@ export async function publishJob(id: string): Promise<void> {
     .eq("id", id)
     .eq("org_id", session.org.id);
   if (error) {
+    // The plan's active-job ceiling (0025 trigger). Said plainly, with the
+    // way out, rather than as a generic failure.
+    if (error.code === LIMIT_CODES.activeJobs) {
+      redirect("/admin/jobs?error=activeJobLimit");
+    }
     console.error("publishJob failed:", error.message);
     redirect("/admin/jobs?error=serverError");
   }

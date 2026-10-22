@@ -217,7 +217,7 @@ export default async function ApplicationPage({
             </Link>
           </span>
           <span>
-            {ar.application.appliedAt}: {formatDate(application.created_at)}
+            {ar.application.appliedAt}: <bdi>{formatDate(application.created_at)}</bdi>
           </span>
           <span>
             {ar.application.refCode}:{" "}
@@ -229,11 +229,15 @@ export default async function ApplicationPage({
       </div>
 
       <Tabs defaultValue={activeTab}>
-        <TabsList className="w-full sm:w-fit">
-          <TabsTrigger value="profile">{tabs.profile}</TabsTrigger>
-          <TabsTrigger value="evaluation">{tabs.evaluation}</TabsTrigger>
-          <TabsTrigger value="questions">{tabs.questions}</TabsTrigger>
-          <TabsTrigger value="interview">{tabs.interview}</TabsTrigger>
+        {/* DESIGN.md §9: underline tabs (UI-F12), the bar sitting on the rule. */}
+        <TabsList
+          variant="line"
+          className="h-10! w-full justify-start gap-5 overflow-x-auto rounded-none border-b p-0"
+        >
+          <TabsTrigger value="profile" className="flex-none px-0.5 after:bottom-[-1px]!">{tabs.profile}</TabsTrigger>
+          <TabsTrigger value="evaluation" className="flex-none px-0.5 after:bottom-[-1px]!">{tabs.evaluation}</TabsTrigger>
+          <TabsTrigger value="questions" className="flex-none px-0.5 after:bottom-[-1px]!">{tabs.questions}</TabsTrigger>
+          <TabsTrigger value="interview" className="flex-none px-0.5 after:bottom-[-1px]!">{tabs.interview}</TabsTrigger>
         </TabsList>
 
         {/* ------------------------------ الملف ------------------------------ */}
@@ -315,10 +319,7 @@ export default async function ApplicationPage({
                           <dt className="flex items-center gap-1.5 font-medium">
                             {entry.label}
                             {flagged && (
-                              <Badge
-                                variant="outline"
-                                className="border-amber-500 text-amber-700 dark:text-amber-400"
-                              >
+                              <Badge variant="warning">
                                 <TriangleAlert
                                   className="size-3"
                                   aria-hidden
@@ -382,6 +383,7 @@ export default async function ApplicationPage({
                   <Button
                     variant="outline"
                     size="sm"
+                    nativeButton={false}
                     render={
                       <a
                         href={`/admin/applications/${id}/transparency`}
@@ -529,7 +531,7 @@ export default async function ApplicationPage({
                     {t.meta
                       .replace("{model}", evaluationMeta.model)
                       .replace("{version}", evaluationMeta.prompt_version)}{" "}
-                    — {formatDateTime(evaluationMeta.created_at)}
+                    — <bdi>{formatDateTime(evaluationMeta.created_at)}</bdi>
                   </p>
                 </>
               )}
@@ -570,9 +572,13 @@ export default async function ApplicationPage({
           <Card>
             <CardContent className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                {application.interview_at
-                  ? `${ar.interview.scheduleLabel}: ${formatDateTime(application.interview_at)}`
-                  : ar.interview.notScheduled}
+                {application.interview_at ? (
+                  <>
+                    {ar.interview.scheduleLabel}: <bdi>{formatDateTime(application.interview_at)}</bdi>
+                  </>
+                ) : (
+                  ar.interview.notScheduled
+                )}
               </p>
               <InterviewManager
                 applicationId={id}

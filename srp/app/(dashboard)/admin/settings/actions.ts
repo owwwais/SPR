@@ -14,8 +14,8 @@ export type SettingsState = { saved: boolean; error: string | null };
 // here scopes to the caller's own org id AND is gated by RLS — two layers,
 // per the isolation invariant (§2.1).
 
+// The name is saved by the branding form (UI-H2); this one keeps retention.
 const orgSchema = z.object({
-  name: z.string().trim().min(2).max(200),
   retention_months: z.coerce.number().int().min(1).max(60),
 });
 
@@ -26,7 +26,6 @@ export async function updateSettings(
   const session = await requireOrgAdmin();
 
   const parsed = orgSchema.safeParse({
-    name: formData.get("company_name"),
     retention_months: formData.get("retention_months"),
   });
   if (!parsed.success) {
@@ -97,6 +96,18 @@ const newMemberSchema = z.object({
   role: z.enum(["owner", "admin", "hr", "viewer"]),
 });
 
+// manage-users answers errors as { error: "<code>" }; supabase-js hides the
+// body behind error.context.
+async function functionErrorCode(error: unknown): Promise<string> {
+  try {
+    const context = (error as { context?: Response }).context;
+    if (context) return ((await context.json()) as { error?: string }).error ?? "";
+  } catch {
+    // An unreadable body is just an unknown error.
+  }
+  return "";
+}
+
 // Team account creation. The privileged work happens in the manage-users
 // Edge Function (the service role lives only there — D3/D7); this action
 // relays the request with the admin's own JWT, which the function
@@ -126,21 +137,16 @@ export async function createMember(
     body: { action: "create", org_id: session.org.id, ...parsed.data },
   });
   if (error) {
-    // Read the function's structured error when available.
-    let detail = "";
-    try {
-      const context = (error as { context?: Response }).context;
-      if (context) detail = ((await context.json()) as { error?: string }).error ?? "";
-    } catch {
-      // ignore body parse issues
-    }
+    const detail = await functionErrorCode(error);
     console.error("createMember failed:", error.message, detail);
     return {
       saved: false,
       error:
-        detail === "email exists" || detail === "already a member"
-          ? ar.settingsPage.addMember.duplicate
-          : ar.settingsPage.addMember.failed,
+        detail === "seat_limit"
+          ? ar.settingsPage.seatLimit
+          : detail === "email exists" || detail === "already a member"
+            ? ar.settingsPage.addMember.duplicate
+            : ar.settingsPage.addMember.failed,
     };
   }
   if (!data?.ok) {
@@ -181,8 +187,15 @@ export async function inviteMember(
     body: { action: "invite", org_id: session.org.id, ...parsed.data },
   });
   if (error) {
-    console.error("inviteMember failed:", error.message);
-    return { saved: false, error: ar.settingsPage.invite.failed };
+    const detail = await functionErrorCode(error);
+    console.error("inviteMember failed:", error.message, detail);
+    return {
+      saved: false,
+      error:
+        detail === "seat_limit"
+          ? ar.settingsPage.seatLimit
+          : ar.settingsPage.invite.failed,
+    };
   }
   if (!data?.ok) {
     return { saved: false, error: ar.settingsPage.invite.failed };

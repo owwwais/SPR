@@ -29,6 +29,21 @@ export const ar = {
     comingSoonBody: "هذه الصفحة قيد الإنشاء وستتوفر قريباً.",
     advisory: "استشاري",
     skipToContent: "تخطَّ إلى المحتوى",
+    dateField: {
+      day: "اليوم",
+      month: "الشهر",
+      year: "السنة",
+      clear: "مسح التاريخ",
+    },
+    months: [
+      "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+      "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+    ],
+    fileField: {
+      prompt: "اختر ملفاً أو اسحبه إلى هنا",
+      browse: "استعراض",
+      change: "تغيير",
+    },
   },
 
   nav: {
@@ -624,8 +639,9 @@ export const ar = {
       department: "القسم",
       location: "الموقع",
       type: "نوع الدوام",
-      description: "وصف الوظيفة (Markdown)",
-      requirements: "المتطلبات (Markdown) — تُستخدم في المطابقة بالذكاء الاصطناعي",
+      description: "وصف الوظيفة",
+      requirements: "المتطلبات — تُستخدم في المطابقة بالذكاء الاصطناعي",
+      formattingHint: "للعناوين ابدأ السطر بـ # وللقوائم بـ - ، ويظهر ذلك منسقاً في صفحة الوظيفة.",
       skills: "المهارات المطلوبة (افصل بينها بفاصلة)",
       skillsPlaceholder: "مثال: React, TypeScript, SQL",
       minYears: "الحد الأدنى من سنوات الخبرة",
@@ -652,6 +668,8 @@ export const ar = {
     errors: {
       invalidInput: "يرجى التحقق من الحقول المدخلة",
       publishNoRequirements: "لا يمكن نشر الوظيفة بدون نص المتطلبات",
+      activeJobLimit:
+        "بلغت حد الوظائف المنشورة في باقتك. أغلق وظيفة منشورة أو رقِّ الباقة لنشر المزيد.",
       notFound: "الوظيفة غير موجودة",
       forbidden: "صلاحيتك في هذه المؤسسة للاطّلاع فقط",
       serverError: "حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى",
@@ -947,6 +965,159 @@ export const ar = {
     },
   },
 
+  billing: {
+    title: "الباقة والاستهلاك",
+    subtitle: "ما تشمله باقتك، وما استهلكته هذا الشهر، والانتقال إلى باقة أخرى.",
+    unavailable:
+      "الباقات غير مفعّلة بعد على هذه البيئة. ستظهر هنا فور تطبيق آخر تحديثات قاعدة البيانات.",
+    free: "مجاناً",
+    custom: "تسعير مخصص",
+    perMonth: "ر.س / شهرياً",
+    sar: "ر.س",
+    paidUntil: "مدفوعة حتى",
+    statuses: {
+      trial: "تجربة",
+      active: "نشطة",
+      past_due: "متأخرة السداد",
+      suspended: "موقوفة",
+      cancelled: "ملغاة",
+    },
+    usageTitle: "الاستهلاك",
+    usageHint:
+      "التحليلات والمقابلات من أول الشهر الجاري. الوظائف المنشورة والمستخدمون عددهم الآن.",
+    meter: {
+      of: "من",
+      unlimited: "بلا حد",
+      notIncluded: "غير مشمولة في الباقة",
+    },
+    limits: {
+      analyses: "تحليل السير الذاتية",
+      interviews: "المقابلات الافتراضية",
+      activeJobs: "الوظائف المنشورة",
+      seats: "المستخدمون والدعوات المعلّقة",
+    },
+    plansTitle: "الباقات",
+    plansHint:
+      "الدفع حالياً بتحويل بنكي: تختار الباقة فنُصدر لك رقماً مرجعياً، وتُفعَّل فور تأكيد التحويل.",
+    current: "باقتك الحالية",
+    recommended: "الأكثر اختياراً",
+    request: "اطلب هذه الباقة",
+    requestDowngrade: "اطلب الانتقال إليها",
+    contact: "اطلب عرضاً",
+    askOwner: "يطلب تغيير الباقة مالكُ الحساب أو مديره.",
+    unlimitedShort: "بلا حد",
+    notIncludedShort: "—",
+    comingSoon: "قريباً",
+    // Sold on /pricing but not built yet (PRODUCT-READINESS-PROPOSAL §2.4.6):
+    // labelled rather than silently promised. Shared with the pricing page.
+    soonFeatures: ["نطاق مخصص", "إزالة علامة حكيم", "واجهة برمجية وWebhooks"] as string[],
+    planRows: {
+      jobs: "وظائف منشورة",
+      seats: "مستخدمون",
+      analyses: "تحليلات شهرياً",
+      interviews: "مقابلات شهرياً",
+    },
+    // Only what the plan adds beyond its numeric limits; the limits come
+    // from the plans table so they can never disagree with enforcement.
+    extras: {
+      trial: ["صفحة توظيف خاصة", "الظهور في دليل الوظائف"],
+      starter: ["صفحة توظيف خاصة", "تقرير شفافية التقييم"],
+      growth: ["نطاق مخصص", "إزالة علامة حكيم", "دعم بأولوية"],
+      enterprise: ["واجهة برمجية وWebhooks", "اتفاقية معالجة بيانات", "مدير حساب مخصص"],
+    } as Record<string, string[]>,
+    pending: {
+      title: "طلب قيد التأكيد",
+      body: "طلبت الانتقال إلى باقة",
+      activation: "تُفعَّل الباقة فور تأكيد التحويل، ونُصدر لك فاتورتها.",
+      reference: "الرقم المرجعي",
+      referenceHint: "اكتبه في وصف التحويل ليُربط بطلبك.",
+      subtotal: "قيمة الباقة لشهر",
+      vat: "ضريبة القيمة المضافة 15%",
+      total: "الإجمالي",
+      bankTitle: "بيانات التحويل",
+      accountName: "اسم المستفيد",
+      bankName: "البنك",
+      iban: "الآيبان",
+      noBank: "سنرسل إليك بيانات التحويل على بريد الحساب خلال يوم عمل.",
+      contactBody: "طلبت عرض باقة المؤسسات. سنتواصل معك لتحديد الحدود والسعر.",
+      cancel: "إلغاء الطلب",
+    },
+    requested: "سُجّل طلبك. أكمل التحويل بالرقم المرجعي الظاهر أدناه.",
+    errors: {
+      requestFailed: "تعذّر تسجيل الطلب. حاول مرة أخرى.",
+      cancelFailed: "تعذّر إلغاء الطلب. حاول مرة أخرى.",
+    } as Record<string, string>,
+    invoicesTitle: "الفواتير",
+    invoicesEmpty: "لا فواتير بعد — تظهر هنا بعد أول تحويل مؤكَّد.",
+    invoice: {
+      number: "رقم الفاتورة",
+      plan: "الباقة",
+      total: "الإجمالي شامل الضريبة",
+      paidAt: "تاريخ الدفع",
+      periodEnd: "تغطي حتى",
+    },
+  },
+
+  // The platform console (D18): the platform owner's side, never a tenant's.
+  platform: {
+    title: "لوحة المنصة",
+    subtitle:
+      "طلبات الباقات بانتظار تأكيد التحويل، وباقة كل مؤسسة واستهلاكها. كل إجراء هنا يُسجَّل في سجل التدقيق.",
+    backToWorkspace: "مساحة العمل",
+    unavailable:
+      "لوحة المنصة تحتاج تحديث قاعدة البيانات الخاص بالباقات (0025). شغّل تطبيق قاعدة البيانات ثم أعد المحاولة.",
+    pendingTitle: "طلبات بانتظار التأكيد",
+    pendingEmpty: "لا طلبات معلّقة.",
+    requested: "طلبت",
+    currentPlan: "الحالية:",
+    total: "الإجمالي شامل الضريبة",
+    contactRequest: "طلب عرض مؤسسات — بلا مبلغ، يُتفق عليه",
+    contactHint:
+      "بعد الاتفاق: طبّق الباقة وحدودها من قائمة المؤسسات أدناه، ثم أغلق الطلب.",
+    closeRequest: "إغلاق الطلب",
+    search: "ابحث باسم المؤسسة أو رابطها",
+    searchButton: "بحث",
+    usageShort: {
+      analyses: "تحليلات",
+      activeJobs: "وظائف",
+      seats: "مستخدمون",
+    },
+    paymentRef: "مرجع التحويل في كشف البنك",
+    paymentRefPlaceholder: "اختياري",
+    confirm: "تأكيد الدفع وتفعيل الباقة",
+    rejectNote: "سبب الرفض",
+    reject: "رفض الطلب",
+    orgsTitle: "المؤسسات",
+    orgsCount: "مؤسسة",
+    orgsEmpty: "لا مؤسسات بعد.",
+    columns: {
+      org: "المؤسسة",
+      plan: "الباقة",
+      usage: "الاستهلاك",
+      periodEnd: "مدفوعة حتى",
+    },
+    manage: "تغيير الباقة أو الحدود",
+    applyTitle: "تطبيق باقة دون دفع",
+    applyHint:
+      "لصفقة يدوية أو تصحيح أو لتجربة الباقات على حساباتك. تُنسخ حدود الباقة إلى المؤسسة فوراً.",
+    planLabel: "الباقة",
+    noteLabel: "ملاحظة للسجل",
+    apply: "تطبيق الباقة",
+    limitsTitle: "حدود خاصة بهذه المؤسسة",
+    limitsHint: "اترك الحقل فارغاً ليكون بلا حد، واكتب 0 لإيقاف الميزة.",
+    saveLimits: "حفظ الحدود",
+    done: {
+      apply: "طُبّقت الباقة.",
+      confirm: "أُكّد الدفع وصدرت الفاتورة وفُعّلت الباقة.",
+      reject: "رُفض الطلب.",
+      limits: "حُفظت الحدود.",
+    } as Record<string, string>,
+    errors: {
+      failed: "تعذّر تنفيذ الإجراء. ربما تغيّر الطلب أو المؤسسة — حدّث الصفحة وحاول مجدداً.",
+      invalid: "قيمة غير صالحة. الحدود أعداد صحيحة من 0 فأكثر.",
+    } as Record<string, string>,
+  },
+
   candidates: {
     title: "بنك المرشحين",
     hint: "بحث بالمهارة عبر كل من تقدّم لأي وظيفة في مؤسستك — لا يُعاد تحليل أحد، ولا يدخل هذا البحث في أي درجة.",
@@ -1101,6 +1272,7 @@ export const ar = {
     today: "اليوم",
     prevMonth: "الشهر السابق",
     nextMonth: "الشهر التالي",
+    monthEmpty: "لا مقابلات مجدولة في هذا الشهر.",
     weekdays: [
       "السبت",
       "الأحد",
@@ -1135,7 +1307,7 @@ export const ar = {
     color: "لون الشركة",
     colorHint: "يظهر في غلاف صفحة التوظيف",
     about: "نبذة عن الشركة",
-    aboutHint: "يدعم تنسيق Markdown — عرّف بالشركة وبيئة العمل فيها.",
+    aboutHint: "عرّف بالشركة وبيئة العمل فيها. للقوائم ابدأ السطر بـ - .",
     logo: "الشعار",
     cover: "صورة الغلاف",
     imageHint: "PNG أو JPG أو WEBP بحجم أقصاه 2 ميجابايت",
@@ -1204,12 +1376,16 @@ export const ar = {
       expired: "انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة",
       invalid: "الدعوة غير صالحة لهذا الحساب — تأكد أنك دخلت بالبريد المدعوّ",
       serverError: "تعذّر قبول الدعوة، حاول مرة أخرى",
+      seatLimit:
+        "بلغت الشركة حد المستخدمين في باقتها. اطلب من مدير الفريق ترقية الباقة أو إزالة عضو، ثم اقبل الدعوة مجدداً.",
     },
   },
 
   settingsPage: {
     title: "الإعدادات",
-    companyTitle: "بيانات الشركة والاحتفاظ",
+    seatLimit:
+      "بلغت حد المستخدمين في باقتك (الأعضاء والدعوات المعلّقة). أزل عضواً أو ألغِ دعوة، أو رقِّ الباقة من «الباقة والاستهلاك».",
+    companyTitle: "الاحتفاظ بالبيانات",
     companyName: "اسم الشركة",
     retention: "مدة الاحتفاظ بالطلبات (بالأشهر)",
     retentionHint:
@@ -1308,6 +1484,55 @@ export const ar = {
     },
   },
 
+  // The product side of the sign-in and sign-up pages: everything the
+  // account opens, and one real screen of it (an illustration, labelled).
+  authShowcase: {
+    label: "ما يفتحه لك الحساب",
+    eyebrow: {
+      both: "للشركات والباحثين عن عمل",
+      company: "للشركات",
+      seeker: "للباحثين عن عمل",
+    },
+    titleCompany: "كل متقدم مقروء ومرتّب، والقرار لك",
+    titleSeeker: "سيرة واحدة، وكل الوظائف المناسبة لك",
+    bodyCompany:
+      "يقرأ حكيم كل سيرة بالعربية والإنجليزية ويعطيها درجة مكتوبٌ سببها، ثم يقف عند هذا الحد: القبول والاعتذار قرار بشري دائماً.",
+    bodySeeker:
+      "ارفع سيرتك مرة واحدة، وتقدّم بنقرة، واعرف لماذا اقتُرحت عليك كل وظيفة وأين وصل كل طلب.",
+    companyHeading: "للشركات",
+    seekerHeading: "للباحثين عن عمل",
+    company: [
+      { icon: "analysis", text: "تحليل كل سيرة بدرجة ملاءمة وتبرير مكتوب" },
+      { icon: "rank", text: "ترتيب المتقدمين لكل وظيفة ومقارنتهم" },
+      { icon: "questions", text: "أسئلة مقابلة مخصصة لكل مرشح" },
+      { icon: "interview", text: "مقابلة أولية افتراضية نصية أو صوتية", soon: true },
+      { icon: "careers", text: "صفحة توظيف باسم شركتك وفي دليل الوظائف" },
+      { icon: "calendar", text: "تقويم المقابلات وإحصاءات التوظيف" },
+      { icon: "fairness", text: "فرز مُعمّى وتقرير شفافية لكل قرار" },
+      { icon: "team", text: "فريق بأدوار وصلاحيات واضحة" },
+    ] as { icon: string; text: string; soon?: boolean }[],
+    seeker: [
+      { icon: "upload", text: "ارفع سيرتك مرة وتقدّم دون إعادة رفعها" },
+      { icon: "match", text: "وظائف مقترحة مع سبب كل اقتراح" },
+      { icon: "track", text: "حالة كل طلب في مكان واحد" },
+      { icon: "privacy", text: "بياناتك لك: تعديلها وحذفها بيدك" },
+    ] as { icon: string; text: string; soon?: boolean }[],
+    scene: {
+      name: "متقدم 1",
+      why: "لماذا هذه الدرجة",
+      strengths: [
+        "أربع سنوات في React مع أمثلة منشورة في السيرة",
+        "قاد ترحيل واجهة كاملة إلى TypeScript",
+      ],
+      probe: "فجوة سبعة أشهر — سؤال للمقابلة، لا حكم",
+      decide: "القرار لك",
+      interview: "دعوة لمقابلة",
+      decline: "اعتذار",
+    },
+    browseJobs: "تصفّح الوظائف",
+    legal: { privacy: "الخصوصية", terms: "الشروط", fairness: "الإنصاف" },
+  },
+
   auth: {
     signupTitle: "أنشئ حساباً",
     // P1 (D26): one account, two doors. The tab only decides where the new
@@ -1356,6 +1581,91 @@ export const ar = {
       oauth: "تعذّر تسجيل الدخول عبر Google. حاول مرة أخرى، أو استخدم البريد وكلمة المرور.",
       linkExpired:
         "انتهت صلاحية رابط التأكيد أو سبق استخدامه، فلم يتأكّد بريدك بعد. أنشئ الحساب بالبريد نفسه مرة أخرى لنرسل إليك رابطاً جديداً.",
+    },
+  },
+
+  // The workspace home: what needs a person today (P4b, 0026).
+  today: {
+    title: "اليوم",
+    greeting: "مرحباً",
+    unavailable:
+      "تظهر هنا مهام اليوم بعد تطبيق آخر تحديثات قاعدة البيانات. إلى ذلك الحين، هذه الأرقام الأساسية:",
+    counts: {
+      new: "بانتظار المراجعة",
+      thisWeek: "طلبات هذا الأسبوع",
+      analyzing: "قيد التحليل",
+      publishedJobs: "وظائف منشورة",
+    },
+    review: {
+      title: "متقدمون بانتظار مراجعتك",
+      hint: "الأعلى درجةً أولاً. الدرجة استشارية، والقرار لك.",
+      empty: "لا متقدمين جدد بانتظارك.",
+      viewAll: "كل المتقدمين الجدد",
+      noScore: "بلا درجة بعد",
+    },
+    failed: {
+      title: "تحليلات تعثّرت",
+      hint: "الطلب نفسه سليم ويمكن قراءة السيرة يدوياً. أعد التحليل من ملف المتقدم.",
+      attempts: "محاولات",
+      open: "افتح الملف",
+    },
+    interviews: {
+      title: "مقابلات هذا الأسبوع",
+      empty: "لا مقابلات مجدولة خلال سبعة أيام.",
+      calendar: "التقويم",
+    },
+    reports: {
+      title: "تقارير مقابلات وصلت حديثاً",
+    },
+    banks: {
+      title: "بنوك أسئلة بانتظار مراجعتك",
+      hint: "مراجعة البنك إلزامية قبل إرسال أي مقابلة افتراضية.",
+      questions: "سؤالاً",
+    },
+    attention: {
+      title: "وظائف تحتاج انتباهاً",
+      closesOn: "تُغلق في",
+      quiet: "لا متقدمين بعد أسبوع من النشر",
+    },
+    firstSteps: {
+      title: "خطواتك الأولى",
+      done: "تمّ",
+      items: [
+        { key: "published_job", label: "انشر أول وظيفة", href: "/admin/jobs/new" },
+        { key: "branding", label: "أضف شعار الشركة ونبذة عنها", href: "/admin/settings" },
+        { key: "team", label: "ادعُ زميلاً إلى الفريق", href: "/admin/settings" },
+        { key: "first_application", label: "شارك رابط صفحة التوظيف لتصلك أول الطلبات", href: null },
+      ] as { key: string; label: string; href: string | null }[],
+    },
+    allClear: "لا شيء ينتظرك الآن. الطلبات الجديدة ستظهر هنا فور وصولها.",
+  },
+
+  // The workspace shell (P4b): sidebar, top bar, mobile drawer and tab bar.
+  shell: {
+    primaryNav: "القائمة الرئيسية",
+    today: "اليوم",
+    activeJobs: "الوظائف المنشورة",
+    newApplicants: "متقدمون جدد",
+    orgSection: "المؤسسة",
+    careersPage: "صفحة التوظيف",
+    opensInNewTab: "(تفتح في نافذة جديدة)",
+    billing: "الباقة والاستهلاك",
+    platform: "لوحة المنصة",
+    plan: "الباقة",
+    analysesThisMonth: "تحليلات هذا الشهر",
+    manageBilling: "الباقة والاستهلاك",
+    menu: "القائمة",
+    closeMenu: "إغلاق القائمة",
+    more: "المزيد",
+    newJob: "وظيفة جديدة",
+    breadcrumb: "مسار التنقل",
+    crumbs: {
+      newJob: "وظيفة جديدة",
+      edit: "تعديل الوظيفة",
+      applicants: "المتقدمون",
+      compare: "مقارنة المتقدمين",
+      interviewBank: "بنك المقابلة",
+      application: "ملف المتقدم",
     },
   },
 

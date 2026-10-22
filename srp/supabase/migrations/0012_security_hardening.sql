@@ -21,10 +21,20 @@ begin
     -- Deliberately loud: on the hosted project this means the daily retention
     -- and retry job is NOT running, which is a D8 obligation.
     raise warning 'app.housekeeping_url / app.housekeeping_key not set — daily housekeeping is NOT scheduled';
-    if exists (select 1 from cron.job where jobname = 'srp-daily-housekeeping') then
-      perform cron.unschedule('srp-daily-housekeeping');
+    -- "Available" is not "installed": on a fresh project 0004 skipped
+    -- creating the extension (no URL yet), so there is no cron schema and
+    -- naming cron.job here failed the whole migration. Only a project that
+    -- already has the extension can have a job to remove. Nested, not
+    -- `and`: plpgsql plans a condition as one query, so cron.job would
+    -- still be resolved even with the first half false.
+    if exists (select 1 from pg_extension where extname = 'pg_cron') then
+      if exists (select 1 from cron.job where jobname = 'srp-daily-housekeeping') then
+        perform cron.unschedule('srp-daily-housekeeping');
+      end if;
     end if;
   else
+    create extension if not exists pg_cron;
+    create extension if not exists pg_net;
     if exists (select 1 from cron.job where jobname = 'srp-daily-housekeeping') then
       perform cron.unschedule('srp-daily-housekeeping');
     end if;

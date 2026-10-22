@@ -116,7 +116,7 @@ srp/
 │   │   ├── applications/[id]/       # applicant detail: CV, AI eval, questions, status
 │   │   ├── stats/                   # FR-09
 │   │   └── settings/                # org profile, retention, team (admin only)
-│   ├── (platform)/platform/         # ☐ S4: PLATFORM console (owner only)
+│   ├── (platform)/platform/         # S4 (billing slice): PLATFORM console (owner only)
 │   ├── login/ signup/ onboarding/   # auth + org creation (S2)
 │   ├── invite/[token]/              # invitation acceptance (S2)
 │   ├── sitemap.ts robots.ts         # SEO (S6)
@@ -606,6 +606,16 @@ Test suites: `tenant_isolation.sql` (55), `onboarding.sql` (23),
 `interview_isolation.sql` (79), `seeker_isolation.sql` (132), `rls_check.sql`,
 and the agent's own `npm test` (210, including a byte-parity check of the
 shared contract).
+
+**Status (2026-10-22):** migrations run to `0026`. A short S5 shipped: plans
+with enforced limits (active jobs and seats by trigger, beside the 0014
+analysis quota), plan requests paid by manual bank transfer (D20), and gapless
+internal invoices (`0025`) — not yet ZATCA e-invoices. A first slice of S4
+shipped with it: `/platform` confirms transfers, applies plans and sets
+per-org limits, behind `requirePlatformAdmin()` (D13/D18). P4a and the P4b
+shell shipped: full sidebar, mobile drawer and tab bar, and the "Today" home
+page on `workspace_today()` (`0026`). Test suites add `billing.sql` (33).
+See `docs/HANDOVER-2026-08.md`, round 10.
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),

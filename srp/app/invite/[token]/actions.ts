@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ACTIVE_ORG_COOKIE, ACTIVE_ORG_COOKIE_OPTIONS } from "@/lib/org-cookie";
 import { ar } from "@/lib/i18n/ar";
+import { LIMIT_CODES } from "@/lib/billing";
 
 export type AcceptState = { error: string | null };
 
@@ -28,6 +29,11 @@ export async function acceptInvitation(
   });
 
   if (error) {
+    // The company is at its plan's seat ceiling (0025). Only the company can
+    // fix that, so the invitee is told whom to ask.
+    if (error.code === LIMIT_CODES.seats) {
+      return { error: ar.invite.errors.seatLimit };
+    }
     const message = error.message.toLowerCase();
     if (message.includes("expired")) {
       return { error: ar.invite.errors.expired };

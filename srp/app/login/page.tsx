@@ -1,17 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertCircle, CircleCheck, MailCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { homePath } from "@/lib/seeker";
 import { LoginForm } from "./login-form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
-import { BrandMark } from "@/components/brand-mark";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { safeNext } from "@/lib/redirects";
@@ -54,19 +47,13 @@ export default async function LoginPage({
   if (await getUser()) redirect(target ?? (await homePath()));
 
   return (
-    <main
-      id="main"
-      className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16"
-    >
-      <Link href="/" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/35">
-        <BrandMark />
-      </Link>
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <h1 className="text-xl leading-snug font-semibold">{ar.auth.loginTitle}</h1>
-          <CardDescription>{ar.auth.loginSubtitle}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
+    <AuthShell audience="both">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-2xl leading-snug font-semibold">{ar.auth.loginTitle}</h1>
+          <p className="text-sm text-muted-foreground">{ar.auth.loginSubtitle}</p>
+        </div>
+        <div className="flex flex-col gap-5">
           {error === "oauth" && (
             <Alert variant="destructive">
               <AlertCircle className="size-4" aria-hidden />
@@ -101,8 +88,8 @@ export default async function LoginPage({
           <GoogleButton next={target ?? undefined} />
           <AuthDivider />
           <LoginForm next={target ?? undefined} signupHref={signupHrefFor(target)} />
-        </CardContent>
-      </Card>
-    </main>
+        </div>
+      </div>
+    </AuthShell>
   );
 }

@@ -145,7 +145,6 @@ export default async function AdminSettingsPage() {
         </CardHeader>
         <CardContent>
           <CompanySettingsForm
-            companyName={session.org.name}
             retentionMonths={session.org.retentionMonths}
           />
         </CardContent>

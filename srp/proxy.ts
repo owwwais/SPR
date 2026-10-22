@@ -56,6 +56,7 @@ export const config = {
   // signs in like the workspace does, so its sessions refresh here too.
   matcher: [
     "/admin/:path*",
+    "/platform/:path*",
     "/login",
     "/signup",
     "/onboarding/:path*",

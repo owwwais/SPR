@@ -8,6 +8,7 @@ import {
 } from "@/app/(dashboard)/admin/settings/branding-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { FileField } from "@/components/ui/file-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -196,11 +197,11 @@ export function BrandingForm({
               className="size-16 rounded-md border object-contain"
             />
           )}
-          <Input
+          <FileField
             id="logo"
             name="logo"
-            type="file"
             accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            invalid={Boolean(state.fieldErrors.logo)}
           />
           <p className="text-xs text-muted-foreground">{t.imageHint}</p>
           <FieldError message={state.fieldErrors.logo} />
@@ -216,11 +217,11 @@ export function BrandingForm({
               className="h-16 w-full rounded-md border object-cover"
             />
           )}
-          <Input
+          <FileField
             id="cover"
             name="cover"
-            type="file"
             accept="image/png,image/jpeg,image/webp"
+            invalid={Boolean(state.fieldErrors.cover)}
           />
           <p className="text-xs text-muted-foreground">{t.imageHint}</p>
           <FieldError message={state.fieldErrors.cover} />

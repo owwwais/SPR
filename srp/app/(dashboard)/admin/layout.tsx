@@ -1,21 +1,40 @@
-import {
-  Briefcase,
-  CalendarDays,
-  ChartColumn,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  UserRound,
-  Users,
-} from "lucide-react";
-import { canAdminister, requireMembership } from "@/lib/auth";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { canWrite, isPlatformAdmin, requireMembership } from "@/lib/auth";
+import { getBillingOverview } from "@/lib/billing";
 import { getHats } from "@/lib/seeker";
-import { signOut } from "@/app/login/actions";
-import { NavLink } from "@/components/admin/nav-link";
-import { OrgSwitcher } from "@/components/admin/org-switcher";
-import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/server";
+import { Breadcrumbs } from "@/components/admin/breadcrumbs";
+import { MobileNavDrawer, MobileNavTrigger, MobileTabBar } from "@/components/admin/mobile-nav";
+import { Sidebar, type SidebarJob } from "@/components/admin/sidebar";
 import { Button } from "@/components/ui/button";
 import { ar } from "@/lib/i18n/ar";
+
+// Up to five published jobs sit under "الوظائف" with their unreviewed count,
+// so the most common next step — "who applied?" — is one click from anywhere.
+async function sidebarJobs(orgId: string): Promise<SidebarJob[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id, title, applications(count)")
+    .eq("org_id", orgId)
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .eq("applications.org_id", orgId)
+    .eq("applications.status", "new")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error) {
+    console.error("sidebar jobs failed:", error.code, error.message);
+    return [];
+  }
+  type Row = { id: string; title: string; applications: { count: number }[] | null };
+  return ((data ?? []) as unknown as Row[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    newApplicants: row.applications?.[0]?.count ?? 0,
+  }));
+}
 
 export default async function AdminLayout({
   children,
@@ -23,76 +42,53 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }>) {
   const session = await requireMembership();
-  // The switcher to the seeker hat (D26): shown when this account also has
-  // a seeker profile. A routing hint only — /me runs its own gate.
-  const hats = await getHats();
+  // getHats(): the switcher to the seeker hat (D26), a routing hint only —
+  // /me runs its own gate. getBillingOverview() is null before 0025.
+  const [hats, platformAdmin, billing, jobs] = await Promise.all([
+    getHats(),
+    isPlatformAdmin(),
+    getBillingOverview(session.org.id),
+    sidebarJobs(session.org.id),
+  ]);
+
+  const sidebar = (
+    <Sidebar
+      session={session}
+      jobs={jobs}
+      billing={billing}
+      seeker={hats.seeker}
+      platformAdmin={platformAdmin}
+    />
+  );
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="flex flex-col gap-4 border-b bg-sidebar p-4 md:sticky md:top-0 md:h-dvh md:w-62 md:overflow-y-auto md:shrink-0 md:border-b-0 md:border-e">
-        <OrgSwitcher
-          current={{ id: session.org.id, name: session.org.name }}
-          memberships={session.memberships}
-        />
-        <nav className="flex flex-row gap-1 overflow-x-auto md:flex-col">
-          <NavLink href="/admin" exact>
-            <LayoutDashboard className="size-4" aria-hidden />
-            {ar.admin.dashboard}
-          </NavLink>
-          <NavLink href="/admin/jobs">
-            <Briefcase className="size-4" aria-hidden />
-            {ar.admin.jobs}
-          </NavLink>
-          <NavLink href="/admin/calendar">
-            <CalendarDays className="size-4" aria-hidden />
-            {ar.calendar.title}
-          </NavLink>
-          <NavLink href="/admin/candidates">
-            <Users className="size-4" aria-hidden />
-            {ar.candidates.title}
-          </NavLink>
-          <NavLink href="/admin/stats">
-            <ChartColumn className="size-4" aria-hidden />
-            {ar.admin.stats}
-          </NavLink>
-          {canAdminister(session.role) && (
-            <NavLink href="/admin/settings">
-              <Settings className="size-4" aria-hidden />
-              {ar.admin.settings}
-            </NavLink>
-          )}
-          {hats.seeker && (
-            <NavLink href="/me" exact>
-              <UserRound className="size-4" aria-hidden />
-              {ar.seekerPortal.admin.seekerAccountLink}
-            </NavLink>
-          )}
-        </nav>
-        <div className="mt-auto flex items-center justify-between gap-2 border-t pt-4">
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-medium">
-              {session.fullName}
-            </span>
-            <Badge variant="secondary" className="w-fit">
-              {ar.admin.roles[session.role]}
-            </Badge>
-          </div>
-          <form action={signOut}>
-            <Button
-              type="submit"
-              variant="ghost"
-              size="icon"
-              title={ar.admin.logout}
-            >
-              <LogOut className="size-4" aria-hidden />
-              <span className="sr-only">{ar.admin.logout}</span>
-            </Button>
-          </form>
-        </div>
+    <div className="flex flex-1">
+      <aside className="sticky top-0 hidden h-dvh w-62 shrink-0 overflow-y-auto border-e bg-sidebar md:block">
+        {sidebar}
       </aside>
-      <main id="main" className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-        {children}
-      </main>
+      <MobileNavDrawer>{sidebar}</MobileNavDrawer>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-4 sm:px-6">
+          <MobileNavTrigger />
+          <Breadcrumbs orgName={session.org.name} />
+          {canWrite(session.role) && (
+            <Button
+              size="sm"
+              className="ms-auto"
+              nativeButton={false}
+              render={<Link href="/admin/jobs/new" />}
+            >
+              <Plus className="size-4" aria-hidden />
+              {ar.shell.newJob}
+            </Button>
+          )}
+        </header>
+        <main id="main" className="min-w-0 flex-1 px-4 pt-5 pb-24 sm:px-6 sm:pt-6 md:pb-8">
+          {children}
+        </main>
+      </div>
+      <MobileTabBar />
     </div>
   );
 }

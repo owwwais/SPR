@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -111,12 +112,7 @@ export function JobForm({
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="closes_at">{t.closesAt}</Label>
-          <Input
-            id="closes_at"
-            name="closes_at"
-            type="date"
-            defaultValue={defaultValues?.closes_at}
-          />
+          <DateField id="closes_at" name="closes_at" defaultValue={defaultValues?.closes_at} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="skills">{t.skills}</Label>
@@ -144,7 +140,11 @@ export function JobForm({
             name="requirements"
             rows={8}
             defaultValue={defaultValues?.requirements}
+            aria-describedby="formatting-hint"
           />
+          <p id="formatting-hint" className="text-xs text-muted-foreground">
+            {t.formattingHint}
+          </p>
         </div>
         <QuestionsBuilder
           initialQuestions={defaultValues?.screening_questions ?? []}

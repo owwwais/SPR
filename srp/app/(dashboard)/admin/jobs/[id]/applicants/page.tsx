@@ -251,7 +251,7 @@ export default async function ApplicantsPage({
                           {applicant.full_name}
                           {flagged && (
                             <TriangleAlert
-                              className="size-3.5 text-amber-600 dark:text-amber-400"
+                              className="size-3.5 text-warning"
                               aria-hidden
                             />
                           )}

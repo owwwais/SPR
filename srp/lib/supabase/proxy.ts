@@ -79,7 +79,7 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (!user && pathname.startsWith("/admin")) {
+  if (!user && (pathname.startsWith("/admin") || pathname.startsWith("/platform"))) {
     return redirectTo("/login");
   }
   // /onboarding needs a session but NOT a membership — that is exactly the
