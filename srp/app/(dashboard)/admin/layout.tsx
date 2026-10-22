@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { canWrite, isPlatformAdmin, requireMembership } from "@/lib/auth";
+import { canAdminister, canWrite, isPlatformAdmin, requireMembership } from "@/lib/auth";
 import { getBillingOverview } from "@/lib/billing";
 import { getHats } from "@/lib/seeker";
 import { createClient } from "@/lib/supabase/server";
 import { Breadcrumbs } from "@/components/admin/breadcrumbs";
+import { CommandPalette } from "@/components/admin/command-palette";
 import { MobileNavDrawer, MobileNavTrigger, MobileTabBar } from "@/components/admin/mobile-nav";
 import { Sidebar, type SidebarJob } from "@/components/admin/sidebar";
 import { Button } from "@/components/ui/button";
@@ -90,17 +91,15 @@ export default async function AdminLayout({
         <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-4 sm:px-6">
           <MobileNavTrigger />
           <Breadcrumbs orgName={session.org.name} />
-          {canWrite(session.role) && (
-            <Button
-              size="sm"
-              className="ms-auto"
-              nativeButton={false}
-              render={<Link href="/admin/jobs/new" />}
-            >
-              <Plus className="size-4" aria-hidden />
-              {ar.shell.newJob}
-            </Button>
-          )}
+          <div className="ms-auto flex shrink-0 items-center gap-2">
+            <CommandPalette canWrite={canWrite(session.role)} canAdmin={canAdminister(session.role)} />
+            {canWrite(session.role) && (
+              <Button size="sm" nativeButton={false} render={<Link href="/admin/jobs/new" />}>
+                <Plus className="size-4" aria-hidden />
+                <span className="max-sm:sr-only">{ar.shell.newJob}</span>
+              </Button>
+            )}
+          </div>
         </header>
         <main id="main" className="min-w-0 flex-1 px-4 pt-5 pb-24 sm:px-6 sm:pt-6 md:pb-8">
           {children}

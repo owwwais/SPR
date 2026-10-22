@@ -710,6 +710,10 @@ export type Database = {
         Args: { p_org: string };
         Returns: unknown;
       };
+      search_workspace: {
+        Args: { p_org: string; p_q: string };
+        Returns: unknown;
+      };
       platform_billing_overview: {
         Args: Record<PropertyKey, never>;
         Returns: unknown;

@@ -1699,6 +1699,19 @@ export const ar = {
     allClear: "لا شيء ينتظرك الآن. الطلبات الجديدة ستظهر هنا فور وصولها.",
   },
 
+  // The command palette (P4g): Ctrl/⌘ K.
+  palette: {
+    trigger: "ابحث أو انتقل…",
+    title: "بحث وأوامر",
+    placeholder: "اسم متقدم، بريده، رمز متابعة، أو وظيفة…",
+    groups: { applicants: "المتقدمون", jobs: "الوظائف", commands: "انتقال وأوامر" },
+    commands: { newJob: "إنشاء وظيفة جديدة" },
+    searching: "جارٍ البحث…",
+    empty: "لا نتائج. جرّب جزءاً من الاسم أو رمز المتابعة.",
+    unavailable: "البحث في السجلات غير مفعّل بعد على هذه البيئة؛ الأوامر تعمل.",
+    hints: { move: "↑↓ للتنقل", open: "Enter للفتح", close: "Esc للإغلاق" },
+  },
+
   // The interviews hub (P4e, PRODUCT-READINESS-PROPOSAL §4.2).
   interviewsHub: {
     title: "المقابلات",
