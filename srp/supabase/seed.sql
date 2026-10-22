@@ -91,6 +91,10 @@ set name = 'شركة الأفق للتقنية',
     listed_publicly = true
 where slug = 'default';
 
+-- The demo company is on النمو: two live jobs and a team of two would not fit
+-- the trial limits 0025 enforces. (Superuser only — never a client call.)
+select public.apply_plan_limits(id, 'growth') from organizations where slug = 'default';
+
 insert into memberships (org_id, user_id, role)
 values
   ((select id from organizations where slug = 'default'),

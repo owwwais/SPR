@@ -10,11 +10,9 @@ export const metadata: Metadata = {
   description: ar.pricing.subtitle,
 };
 
-// D19: seats plus a monthly analysis quota. The plans are presented here but
-// not yet ENFORCED — quota checking lives inside analyze-application and
-// arrives with billing in S5 (D16). Until then these are the published terms,
-// and the numbers live in lib/i18n/ar.ts so marketing copy and the future
-// `plans` table cannot drift apart silently.
+// D19: seats plus a monthly analysis quota. Enforced since 0014 (analyses)
+// and 0025 (active jobs, seats) from the `plans` table — whose numbers must
+// match the copy here; /admin/billing reads the table itself.
 export default function PricingPage() {
   const t = ar.pricing;
 
@@ -63,7 +61,15 @@ export default function PricingPage() {
                       className="mt-0.5 size-4 shrink-0 text-primary"
                       aria-hidden
                     />
-                    <span className="text-muted-foreground">{feature}</span>
+                    <span className="text-muted-foreground">
+                      {feature}
+                      {/* Sold but not built yet — labelled, not promised. */}
+                      {ar.billing.soonFeatures.includes(feature) && (
+                        <Badge variant="outline" className="ms-1.5 align-middle text-[0.7rem]">
+                          {ar.billing.comingSoon}
+                        </Badge>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>

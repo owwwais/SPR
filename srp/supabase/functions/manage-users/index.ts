@@ -176,6 +176,8 @@ Deno.serve(async (req) => {
       .select("id")
       .single();
     if (inviteError || !invitation) {
+      // The plan's seat ceiling (0025 trigger) — the caller shows the way out.
+      if (inviteError?.code === "HK002") return json(402, { error: "seat_limit" });
       console.error("invitation insert failed:", inviteError?.message);
       return json(500, { error: "invite failed" });
     }
@@ -256,10 +258,11 @@ Deno.serve(async (req) => {
     .from("memberships")
     .insert({ org_id: orgId, user_id: userId, role });
   if (membershipError) {
-    console.error("membership insert failed:", membershipError.message);
     // Roll back only an account we ourselves created; never delete one that
     // already existed for another organization.
     if (isNewAccount) await admin.auth.admin.deleteUser(userId);
+    if (membershipError.code === "HK002") return json(402, { error: "seat_limit" });
+    console.error("membership insert failed:", membershipError.message);
     return json(500, { error: "membership failed" });
   }
 

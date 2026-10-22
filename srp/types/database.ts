@@ -87,6 +87,9 @@ export type Database = {
           monthly_analysis_quota: number | null;
           // 0021 (D33): interviews per month. NULL = uncapped, 0 = none.
           monthly_interview_quota: number | null;
+          // 0025: copied from plans; NULL = uncapped. Not client-writable.
+          max_active_jobs: number | null;
+          max_seats: number | null;
           blind_screening: boolean;
           nitaqat_band: NitaqatBand | null;
           saudization_target: number | null;
@@ -588,9 +591,147 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      // 0025: billing. Every table below is written only by security
+      // definer functions — never through the client — hence the empty
+      // Insert/Update shapes (all four keys are still required by
+      // supabase-js's schema constraint).
+      plans: {
+        Row: {
+          code: string;
+          name_ar: string;
+          price_monthly_halalas: number;
+          price_yearly_halalas: number;
+          max_active_jobs: number | null;
+          max_seats: number | null;
+          monthly_analysis_quota: number | null;
+          monthly_interview_quota: number | null;
+          custom_domain: boolean;
+          remove_branding: boolean;
+          api_access: boolean;
+          self_serve: boolean;
+          is_public: boolean;
+          sort_order: number;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          org_id: string;
+          plan_code: string;
+          billing_cycle: "monthly" | "yearly";
+          current_period_start: string;
+          current_period_end: string | null;
+          provider: string;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      plan_requests: {
+        Row: {
+          id: string;
+          org_id: string;
+          plan_code: string;
+          billing_cycle: "monthly" | "yearly";
+          amount_halalas: number;
+          vat_halalas: number;
+          reference: string;
+          status: "pending" | "approved" | "rejected" | "cancelled";
+          requested_by: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      invoices: {
+        Row: {
+          id: string;
+          org_id: string;
+          number: string;
+          plan_code: string;
+          request_id: string | null;
+          amount_halalas: number;
+          vat_halalas: number;
+          status: "open" | "paid" | "void" | "refunded";
+          provider: string;
+          provider_payment_id: string | null;
+          period_start: string | null;
+          period_end: string | null;
+          zatca_uuid: string | null;
+          zatca_hash: string | null;
+          zatca_qr: string | null;
+          issued_at: string;
+          paid_at: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      audit_log: {
+        Row: {
+          id: number;
+          org_id: string | null;
+          actor_user_id: string | null;
+          actor_kind: "user" | "platform_admin" | "system";
+          action: string;
+          target_type: string | null;
+          target_id: string | null;
+          meta: Json;
+          created_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      // 0025: billing
+      org_billing_overview: {
+        Args: { p_org: string };
+        Returns: unknown;
+      };
+      request_plan_change: {
+        Args: { p_org: string; p_plan: string };
+        Returns: unknown;
+      };
+      cancel_plan_request: {
+        Args: { p_request: string };
+        Returns: undefined;
+      };
+      platform_billing_overview: {
+        Args: Record<PropertyKey, never>;
+        Returns: unknown;
+      };
+      platform_apply_plan: {
+        Args: { p_org: string; p_plan: string; p_note?: string | null };
+        Returns: undefined;
+      };
+      platform_confirm_request: {
+        Args: { p_request: string; p_payment_ref?: string | null };
+        Returns: unknown;
+      };
+      platform_reject_request: {
+        Args: { p_request: string; p_note?: string | null };
+        Returns: undefined;
+      };
+      platform_set_limits: {
+        Args: {
+          p_org: string;
+          p_analyses: number | null;
+          p_interviews: number | null;
+          p_active_jobs: number | null;
+          p_seats: number | null;
+        };
+        Returns: undefined;
+      };
       change_application_status: {
         Args: {
           p_application_id: string;

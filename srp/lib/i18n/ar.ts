@@ -652,6 +652,8 @@ export const ar = {
     errors: {
       invalidInput: "يرجى التحقق من الحقول المدخلة",
       publishNoRequirements: "لا يمكن نشر الوظيفة بدون نص المتطلبات",
+      activeJobLimit:
+        "بلغت حد الوظائف المنشورة في باقتك. أغلق وظيفة منشورة أو رقِّ الباقة لنشر المزيد.",
       notFound: "الوظيفة غير موجودة",
       forbidden: "صلاحيتك في هذه المؤسسة للاطّلاع فقط",
       serverError: "حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى",
@@ -947,6 +949,99 @@ export const ar = {
     },
   },
 
+  billing: {
+    title: "الباقة والاستهلاك",
+    subtitle: "ما تشمله باقتك، وما استهلكته هذا الشهر، والانتقال إلى باقة أخرى.",
+    unavailable:
+      "الباقات غير مفعّلة بعد على هذه البيئة. ستظهر هنا فور تطبيق آخر تحديثات قاعدة البيانات.",
+    free: "مجاناً",
+    custom: "تسعير مخصص",
+    perMonth: "ر.س / شهرياً",
+    sar: "ر.س",
+    paidUntil: "مدفوعة حتى",
+    statuses: {
+      trial: "تجربة",
+      active: "نشطة",
+      past_due: "متأخرة السداد",
+      suspended: "موقوفة",
+      cancelled: "ملغاة",
+    },
+    usageTitle: "الاستهلاك",
+    usageHint:
+      "التحليلات والمقابلات من أول الشهر الجاري. الوظائف المنشورة والمستخدمون عددهم الآن.",
+    meter: {
+      of: "من",
+      unlimited: "بلا حد",
+      notIncluded: "غير مشمولة في الباقة",
+    },
+    limits: {
+      analyses: "تحليل السير الذاتية",
+      interviews: "المقابلات الافتراضية",
+      activeJobs: "الوظائف المنشورة",
+      seats: "المستخدمون والدعوات المعلّقة",
+    },
+    plansTitle: "الباقات",
+    plansHint:
+      "الدفع حالياً بتحويل بنكي: تختار الباقة فنُصدر لك رقماً مرجعياً، وتُفعَّل فور تأكيد التحويل.",
+    current: "باقتك الحالية",
+    recommended: "الأكثر اختياراً",
+    request: "اطلب هذه الباقة",
+    requestDowngrade: "اطلب الانتقال إليها",
+    contact: "اطلب عرضاً",
+    askOwner: "يطلب تغيير الباقة مالكُ الحساب أو مديره.",
+    unlimitedShort: "بلا حد",
+    notIncludedShort: "—",
+    comingSoon: "قريباً",
+    // Sold on /pricing but not built yet (PRODUCT-READINESS-PROPOSAL §2.4.6):
+    // labelled rather than silently promised. Shared with the pricing page.
+    soonFeatures: ["نطاق مخصص", "إزالة علامة حكيم", "واجهة برمجية وWebhooks"] as string[],
+    planRows: {
+      jobs: "وظائف منشورة",
+      seats: "مستخدمون",
+      analyses: "تحليلات شهرياً",
+      interviews: "مقابلات شهرياً",
+    },
+    // Only what the plan adds beyond its numeric limits; the limits come
+    // from the plans table so they can never disagree with enforcement.
+    extras: {
+      trial: ["صفحة توظيف خاصة", "الظهور في دليل الوظائف"],
+      starter: ["صفحة توظيف خاصة", "تقرير شفافية التقييم"],
+      growth: ["نطاق مخصص", "إزالة علامة حكيم", "دعم بأولوية"],
+      enterprise: ["واجهة برمجية وWebhooks", "اتفاقية معالجة بيانات", "مدير حساب مخصص"],
+    } as Record<string, string[]>,
+    pending: {
+      title: "طلب قيد التأكيد",
+      body: "طلبت الانتقال إلى باقة",
+      activation: "تُفعَّل الباقة فور تأكيد التحويل، ونُصدر لك فاتورتها.",
+      reference: "الرقم المرجعي",
+      referenceHint: "اكتبه في وصف التحويل ليُربط بطلبك.",
+      subtotal: "قيمة الباقة لشهر",
+      vat: "ضريبة القيمة المضافة 15%",
+      total: "الإجمالي",
+      bankTitle: "بيانات التحويل",
+      accountName: "اسم المستفيد",
+      bankName: "البنك",
+      iban: "الآيبان",
+      noBank: "سنرسل إليك بيانات التحويل على بريد الحساب خلال يوم عمل.",
+      contactBody: "طلبت عرض باقة المؤسسات. سنتواصل معك لتحديد الحدود والسعر.",
+      cancel: "إلغاء الطلب",
+    },
+    requested: "سُجّل طلبك. أكمل التحويل بالرقم المرجعي الظاهر أدناه.",
+    errors: {
+      requestFailed: "تعذّر تسجيل الطلب. حاول مرة أخرى.",
+      cancelFailed: "تعذّر إلغاء الطلب. حاول مرة أخرى.",
+    } as Record<string, string>,
+    invoicesTitle: "الفواتير",
+    invoicesEmpty: "لا فواتير بعد — تظهر هنا بعد أول تحويل مؤكَّد.",
+    invoice: {
+      number: "رقم الفاتورة",
+      plan: "الباقة",
+      total: "الإجمالي شامل الضريبة",
+      paidAt: "تاريخ الدفع",
+      periodEnd: "تغطي حتى",
+    },
+  },
+
   candidates: {
     title: "بنك المرشحين",
     hint: "بحث بالمهارة عبر كل من تقدّم لأي وظيفة في مؤسستك — لا يُعاد تحليل أحد، ولا يدخل هذا البحث في أي درجة.",
@@ -1204,11 +1299,15 @@ export const ar = {
       expired: "انتهت صلاحية هذه الدعوة، اطلب دعوة جديدة",
       invalid: "الدعوة غير صالحة لهذا الحساب — تأكد أنك دخلت بالبريد المدعوّ",
       serverError: "تعذّر قبول الدعوة، حاول مرة أخرى",
+      seatLimit:
+        "بلغت الشركة حد المستخدمين في باقتها. اطلب من مدير الفريق ترقية الباقة أو إزالة عضو، ثم اقبل الدعوة مجدداً.",
     },
   },
 
   settingsPage: {
     title: "الإعدادات",
+    seatLimit:
+      "بلغت حد المستخدمين في باقتك (الأعضاء والدعوات المعلّقة). أزل عضواً أو ألغِ دعوة، أو رقِّ الباقة من «الباقة والاستهلاك».",
     companyTitle: "بيانات الشركة والاحتفاظ",
     companyName: "اسم الشركة",
     retention: "مدة الاحتفاظ بالطلبات (بالأشهر)",
