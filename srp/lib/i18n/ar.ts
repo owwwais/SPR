@@ -1141,6 +1141,8 @@ export const ar = {
 
   applicants: {
     title: "المتقدمون",
+    openFull: "فتح كصفحة كاملة",
+    closePanel: "إغلاق",
     emptyTitle: "لا توجد طلبات تقديم",
     emptyBody: "لم يتقدّم أحد لهذه الوظيفة بعد.",
     noResultsTitle: "لا توجد نتائج مطابقة",
@@ -1203,6 +1205,11 @@ export const ar = {
     failedAnalysis: "فشل التحليل — يمكن قراءة السيرة يدوياً وإعادة المحاولة",
     unavailable: "التقييم غير متاح",
     retry: "إعادة التحليل",
+    rerunTitle: "إعادة تحليل السيرة؟",
+    rerunBody:
+      "يُحتسب تحليلاً واحداً من حصة باقتك لهذا الشهر. يحلّ التقييم الجديد محل الحالي، ويبقى الحالي محفوظاً في سجل التقييمات وتقرير الشفافية.",
+    rerunConfirm: "أعد التحليل",
+    rerunCancel: "تراجع",
     attempts: "المحاولات",
     fitScore: "درجة الملاءمة",
     scoreBreakdown: "تفصيل الدرجة",
@@ -1248,6 +1255,8 @@ export const ar = {
   interview: {
     sectionTitle: "المقابلة",
     scheduleLabel: "موعد المقابلة",
+    timeLabel: "الساعة",
+    timeZoneNote: "بتوقيت الرياض.",
     scheduleSave: "حفظ الموعد",
     scheduleSaved: "تم حفظ الموعد",
     notScheduled: "لم يُحدد موعد للمقابلة بعد",
@@ -1440,12 +1449,30 @@ export const ar = {
 
   application: {
     title: "ملف المتقدم",
-    tabs: {
-      profile: "الملف",
-      evaluation: "التقييم الذكي",
-      questions: "أسئلة المقابلة",
+    // P4c: one page, evidence first and the decision beside it (UI-F1).
+    sections: {
+      evaluation: "التقييم الاستشاري",
+      cv: "السيرة الذاتية",
+      extracted: "الملف المستخرج من السيرة",
+      submission: "بيانات التقديم",
       interview: "المقابلة",
+      decision: "القرار",
+      history: "سجل الحالة",
+      contact: "التواصل",
     },
+    jump: "انتقل إلى",
+    cvPreview: "معاينة السيرة الذاتية",
+    cvDocx: "السيرة بصيغة Word لا تُعرض هنا — افتحها في نافذة جديدة.",
+    openCv: "فتح في نافذة جديدة",
+    history: {
+      submitted: "قُدّم الطلب",
+      by: "بواسطة",
+      system: "النظام",
+      publicReason: "السبب المُرسل للمتقدم",
+      empty: "لم تتغيّر الحالة منذ التقديم.",
+      unavailable: "تعذّر تحميل سجل الحالة.",
+    },
+    more: "إجراءات أخرى",
     screeningTitle: "إجابات أسئلة التقديم",
     screeningFlag: "يحتاج انتباهك",
     appliedTo: "الوظيفة",
@@ -1481,6 +1508,12 @@ export const ar = {
       updating: "جارٍ التحديث…",
       updated: "تم تحديث الحالة",
       failed: "تعذّر تحديث الحالة، حاول مرة أخرى",
+      // Accepting and declining are the two decisions an applicant hears
+      // about; both ask once more (P4c).
+      confirmTitle: "تأكيد القرار",
+      confirmBody: "سيُنقل الطلب إلى «{status}» ويُرسل بريد إلى المتقدم بذلك. لا يتراجع البريد بعد إرساله.",
+      confirm: "تأكيد",
+      cancel: "تراجع",
     },
   },
 

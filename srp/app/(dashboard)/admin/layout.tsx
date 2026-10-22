@@ -38,8 +38,11 @@ async function sidebarJobs(orgId: string): Promise<SidebarJob[]> {
 
 export default async function AdminLayout({
   children,
+  panel,
 }: Readonly<{
   children: React.ReactNode;
+  /** The applicant side panel (@panel); null unless one was intercepted. */
+  panel: React.ReactNode;
 }>) {
   const session = await requireMembership();
   // getHats(): the switcher to the seeker hat (D26), a routing hint only —
@@ -89,6 +92,7 @@ export default async function AdminLayout({
         </main>
       </div>
       <MobileTabBar />
+      {panel}
     </div>
   );
 }

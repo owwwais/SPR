@@ -22,14 +22,18 @@ export function DateField({
   name,
   defaultValue,
   years = 3,
+  onValueChange,
 }: {
   /** Given to the day select, so a <Label htmlFor> lands on it. */
   id: string;
-  name: string;
+  /** Omit when the parent owns the value (onValueChange) and posts it itself. */
+  name?: string;
   /** YYYY-MM-DD */
   defaultValue?: string | null;
   /** How many years from the current one the year list offers. */
   years?: number;
+  /** Called with "YYYY-MM-DD", or "" while incomplete. */
+  onValueChange?: (value: string) => void;
 }) {
   const t = ar.common.dateField;
   const [initialYear, initialMonth, initialDay] = (defaultValue ?? "").split("-");
@@ -42,9 +46,23 @@ export function DateField({
   // A saved date in a year outside the list must still show.
   if (initialYear && !yearOptions.includes(initialYear)) yearOptions.unshift(initialYear);
 
+  const clamp = (y: string, m: string, d: string) => {
+    const max = y && m ? daysIn(Number(y), Number(m)) : 31;
+    return d && Number(d) > max ? String(max).padStart(2, "0") : d;
+  };
   const maxDay = year && month ? daysIn(Number(year), Number(month)) : 31;
-  const safeDay = day && Number(day) > maxDay ? String(maxDay).padStart(2, "0") : day;
+  const safeDay = clamp(year, month, day);
   const value = year && month && safeDay ? `${year}-${month}-${safeDay}` : "";
+
+  function change(next: { y?: string; m?: string; d?: string }) {
+    const y = next.y ?? year;
+    const m = next.m ?? month;
+    const d = clamp(y, m, next.d ?? day);
+    if (next.y !== undefined) setYear(y);
+    if (next.m !== undefined) setMonth(m);
+    if (next.d !== undefined) setDay(d);
+    onValueChange?.(y && m && d ? `${y}-${m}-${d}` : "");
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -53,7 +71,7 @@ export function DateField({
           id={id}
           aria-label={t.day}
           value={safeDay}
-          onChange={(e) => setDay(e.target.value)}
+          onChange={(e) => change({ d: e.target.value })}
           className={selectClass}
         >
           <option value="">{t.day}</option>
@@ -66,7 +84,7 @@ export function DateField({
         <select
           aria-label={t.month}
           value={month}
-          onChange={(e) => setMonth(e.target.value)}
+          onChange={(e) => change({ m: e.target.value })}
           className={selectClass}
         >
           <option value="">{t.month}</option>
@@ -79,7 +97,7 @@ export function DateField({
         <select
           aria-label={t.year}
           value={year}
-          onChange={(e) => setYear(e.target.value)}
+          onChange={(e) => change({ y: e.target.value })}
           className={selectClass}
         >
           <option value="">{t.year}</option>
@@ -90,13 +108,14 @@ export function DateField({
           ))}
         </select>
       </div>
-      <input type="hidden" name={name} value={value} />
+      {name && <input type="hidden" name={name} value={value} />}
       <button
         type="button"
         onClick={() => {
           setDay("");
           setMonth("");
           setYear("");
+          onValueChange?.("");
         }}
         className={cn(
           "w-fit text-xs text-muted-foreground hover:text-foreground",
