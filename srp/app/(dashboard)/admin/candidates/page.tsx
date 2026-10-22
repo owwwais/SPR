@@ -87,7 +87,13 @@ export default async function CandidatesPage({
         </Button>
       </form>
 
-      {payload.results.length === 0 ? (
+      {error ? (
+        // A failed search is not an empty bank — the same lesson T7 applied
+        // to the marketplace. Before 0024 is applied the RPC does not exist.
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+          {ar.candidates.loadFailed}
+        </div>
+      ) : payload.results.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-20 text-center">
           <Users className="size-10 text-muted-foreground" aria-hidden />
           <h2 className="text-lg font-semibold">

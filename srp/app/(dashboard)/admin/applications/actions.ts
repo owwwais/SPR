@@ -115,11 +115,15 @@ export async function changeApplicationStatus(
       : null;
 
   const supabase = await createClient();
+  // p_public_reason is only named when there is one: PostgREST matches a
+  // function by the parameter names it is given, so always naming it made
+  // every status change fail against a database still on the pre-0023
+  // three-argument function.
   const { error } = await supabase.rpc("change_application_status", {
     p_application_id: applicationId,
     p_new_status: newStatus,
     p_note: note.length > 0 ? note : null,
-    p_public_reason: publicReason,
+    ...(publicReason ? { p_public_reason: publicReason } : {}),
   });
   if (error) {
     console.error("change_application_status failed:", error.message);

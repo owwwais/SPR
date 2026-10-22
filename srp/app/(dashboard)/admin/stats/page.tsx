@@ -84,7 +84,11 @@ export default async function AdminStatsPage() {
     remaining: number | null;
   } | null) ?? { used: 0, quota: null, remaining: null };
 
-  const stats = (data as OrgStats | null) ?? {
+  // Merged over defaults rather than used as-is: the page deploys on merge
+  // and its migration does not, so a database still on 0013's org_stats()
+  // returns a document without calibration/source_quality — reading
+  // .length off those crashed the whole page.
+  const stats: OrgStats = {
     totals: {
       applications: 0,
       avg_fit_score: null,
@@ -97,6 +101,7 @@ export default async function AdminStatsPage() {
     over_time: [],
     calibration: [],
     source_quality: [],
+    ...((data as Partial<OrgStats> | null) ?? {}),
   };
 
   const kpis = [
