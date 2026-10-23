@@ -43,7 +43,12 @@ export function LoginForm({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="password">{ar.auth.password}</Label>
+        <div className="flex items-baseline justify-between gap-3">
+          <Label htmlFor="password">{ar.auth.password}</Label>
+          <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+            {ar.auth.forgotLink}
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"

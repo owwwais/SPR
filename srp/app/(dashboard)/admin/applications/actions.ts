@@ -52,8 +52,13 @@ export async function reRunAnalysis(
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
   ]);
   if (raced && "error" in raced && raced.error) {
-    console.warn("re-run analysis failed:", raced.error.message);
-    redirect(`${returnPath}?error=retryFailed`);
+    // 409: a run for this application is already under way (a second click,
+    // or housekeeping got there first) — what was asked for is happening.
+    const status = (raced.error as { context?: { status?: number } }).context?.status;
+    if (status !== 409) {
+      console.warn("re-run analysis failed:", raced.error.message);
+      redirect(`${returnPath}?error=retryFailed`);
+    }
   }
 
   revalidatePath(returnPath);

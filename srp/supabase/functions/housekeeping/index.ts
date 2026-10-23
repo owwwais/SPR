@@ -5,7 +5,8 @@
 //      API) — the ONLY hard-delete path in the system (D9)
 //   3) sweep orphaned CV uploads older than the retention cutoff, walking
 //      each tenant's cvs/{org_id}/ folder
-//   4) expire the submission throttle log (0008)
+//   4) remove the CV files of deleted accountless talent pages (0028)
+//   5) expire the submission throttle log (0008)
 // Before an application is deleted, its virtual interview is erased on the
 // interview agent (D30, design §8.2), so retention reaches the separate
 // server too. An application whose erasure fails waits for the next run
@@ -19,6 +20,7 @@
 // public anon key, so before 0028 anyone could trigger retries and retention.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { agentClient } from "../_shared/interview-agent-client.ts";
+import { isSchemaMissingError } from "../_shared/trace.ts";
 
 const RETRY_CAP = 10; // Gemini cost guard (§8)
 const DELETE_BATCH = 500;
@@ -260,7 +262,33 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ---- 4) throttle log ----
+  // ---- 4) files of deleted legacy talent pages (0028, KD-14) ----
+  // talent_delete_profile queues the path; only the Storage API with the
+  // service role can remove the file. A database before 0028 has no queue.
+  const { data: queued, error: queueError } = await admin
+    .schema("talent")
+    .from("file_deletions")
+    .select("path")
+    .limit(DELETE_BATCH);
+  if (queueError) {
+    if (!isSchemaMissingError(queueError)) logError(`talent file queue: ${queueError.message}`);
+  } else if (queued && queued.length > 0) {
+    const paths = queued.map((q) => q.path as string);
+    const { error: removeError } = await admin.storage.from("talent-cvs").remove(paths);
+    if (removeError) {
+      logError(`talent file removal: ${removeError.message}`);
+    } else {
+      result.deleted_files += paths.length;
+      const { error: dequeueError } = await admin
+        .schema("talent")
+        .from("file_deletions")
+        .delete()
+        .in("path", paths);
+      if (dequeueError) logError(`talent file dequeue: ${dequeueError.message}`);
+    }
+  }
+
+  // ---- 5) throttle log ----
   // Submission attempt hashes are an abuse control, not a record worth
   // keeping (0008); a day is all the limits look back over.
   const { error: throttleError } = await admin

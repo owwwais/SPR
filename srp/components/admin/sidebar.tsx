@@ -166,16 +166,22 @@ export function Sidebar({
         )}
 
         <div className="flex items-center gap-2.5 border-t pt-3">
-          <span
-            aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary-soft-foreground"
+          <Link
+            href="/admin/account"
+            title={ar.account.open}
+            className="-m-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1 transition-colors hover:bg-surface-soft focus-visible:ring-3 focus-visible:ring-ring/35 focus-visible:outline-none"
           >
-            {session.fullName.trim().charAt(0)}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm font-medium">{session.fullName}</span>
-            <span className="text-xs text-muted-foreground">{ar.admin.roles[session.role]}</span>
-          </span>
+            <span
+              aria-hidden
+              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary-soft-foreground"
+            >
+              {session.fullName.trim().charAt(0)}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{session.fullName}</span>
+              <span className="text-xs text-muted-foreground">{ar.admin.roles[session.role]}</span>
+            </span>
+          </Link>
           <form action={signOut}>
             <Button type="submit" variant="ghost" size="icon" title={ar.admin.logout}>
               <LogOut className="size-4" strokeWidth={stroke} aria-hidden />

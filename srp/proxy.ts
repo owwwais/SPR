@@ -30,12 +30,14 @@ function rewriteSubdomain(request: NextRequest): NextResponse | null {
   // CHECK constraint (0006), so this is belt and braces.
   if (["app", "api", "admin", "platform", "www"].includes(slug)) return null;
 
-  const { pathname, search } = request.nextUrl;
-  if (pathname.startsWith("/c/")) return null; // already a tenant path
+  // Only the subdomain's front page is the careers page. Every other path —
+  // a job and its apply form, tracking, sign-in — is a site-wide route keyed
+  // by its own id, and the careers page links to them as such. Prefixing
+  // them with /c/{slug} sent each one to a route that does not exist (KD-04).
+  if (request.nextUrl.pathname !== "/") return null;
 
   const url = request.nextUrl.clone();
-  url.pathname = pathname === "/" ? `/c/${slug}` : `/c/${slug}${pathname}`;
-  url.search = search;
+  url.pathname = `/c/${slug}`;
   return NextResponse.rewrite(url);
 }
 

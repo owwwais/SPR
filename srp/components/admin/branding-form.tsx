@@ -200,7 +200,7 @@ export function BrandingForm({
           <FileField
             id="logo"
             name="logo"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp"
             invalid={Boolean(state.fieldErrors.logo)}
           />
           <p className="text-xs text-muted-foreground">{t.imageHint}</p>

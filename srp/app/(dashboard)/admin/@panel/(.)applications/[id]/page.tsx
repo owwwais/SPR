@@ -7,13 +7,15 @@ import { ApplicationDossier } from "@/components/admin/application-dossier";
 // or a shared link opens the full page, which renders the same dossier.
 export default async function ApplicantPanelPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
   return (
     <ApplicantPanel>
-      <ApplicationDossier id={id} variant="panel" />
+      <ApplicationDossier id={id} variant="panel" retryFailed={error === "retryFailed"} />
     </ApplicantPanel>
   );
 }

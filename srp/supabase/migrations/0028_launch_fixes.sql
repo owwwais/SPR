@@ -24,6 +24,10 @@
 --   7. SEC-04 — housekeeping accepted any caller holding the public anon key.
 --      The daily job now carries a single-use ticket it mints at run time,
 --      so no new secret has to be configured anywhere.
+--   8. KD-14 — deleting an accountless (legacy) talent page left its CV file
+--      in talent-cvs. Only the Storage API removes a file, and only with the
+--      service role, which that page's caller does not have; the path is now
+--      queued and housekeeping removes it.
 --
 -- Every statement is safe to re-run.
 
@@ -332,3 +336,44 @@ begin
     )
   );
 end $$;
+
+-- ============================================================
+-- 8) KD-14 — files of deleted legacy talent pages
+-- ============================================================
+create table if not exists talent.file_deletions (
+  path      text primary key,
+  queued_at timestamptz not null default now()
+);
+
+alter table talent.file_deletions enable row level security;
+-- No policies: written by talent_delete_profile (security definer), drained
+-- by housekeeping (service role).
+revoke all on talent.file_deletions from anon, authenticated;
+grant all on talent.file_deletions to service_role;
+
+-- 0020's body, plus the queue. The public token stays the credential for an
+-- unlinked page (SEC-08, unchanged here); an account profile is deleted
+-- through seeker-account, which removes its files itself.
+create or replace function public.talent_delete_profile(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, talent
+as $$
+declare
+  v_cv_path text;
+begin
+  delete from talent.profiles
+  where public_token = p_token and user_id is null
+  returning cv_path into v_cv_path;
+
+  if v_cv_path is null then
+    return jsonb_build_object('ok', false, 'error', 'not_found');
+  end if;
+
+  insert into talent.file_deletions (path) values (v_cv_path)
+  on conflict (path) do nothing;
+
+  return jsonb_build_object('ok', true, 'cv_path', v_cv_path);
+end;
+$$;

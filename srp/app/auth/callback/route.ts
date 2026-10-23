@@ -1,27 +1,49 @@
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { RECOVERY_COOKIE, RECOVERY_COOKIE_MAX_AGE } from "@/lib/auth-cookies";
 import { safeNext } from "@/lib/redirects";
 
-// Where Supabase Auth returns the user — from Google, and from the link in a
-// signup confirmation email (`via=email`). Exchanging the one-time code sets
-// the session cookies and sends the user on to `next`: /onboarding, which
-// routes by the rows the account has, or /onboarding/seeker when they signed
-// up on the seeker tab.
+// Where Supabase Auth returns the user — from Google, from the link in a
+// signup confirmation email (`via=email`) and from a password-recovery link
+// (`via=recovery`). Exchanging the one-time code sets the session cookies and
+// sends the user on to `next`: /onboarding, which routes by the rows the
+// account has, /onboarding/seeker when they signed up on the seeker tab, or
+// /reset-password after a recovery link.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = safeNext(searchParams.get("next"), "/onboarding");
+  const viaRecovery = searchParams.get("via") === "recovery";
+  const next = viaRecovery ? "/reset-password" : safeNext(searchParams.get("next"), "/onboarding");
   const viaEmail = searchParams.get("via") === "email";
 
   if (code) {
     try {
       const supabase = await createClient();
       const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) return NextResponse.redirect(new URL(next, origin));
+      if (!error) {
+        if (viaRecovery) {
+          (await cookies()).set(RECOVERY_COOKIE, "1", {
+            httpOnly: true,
+            secure: origin.startsWith("https:"),
+            sameSite: "lax",
+            path: "/",
+            maxAge: RECOVERY_COOKIE_MAX_AGE,
+          });
+        }
+        return NextResponse.redirect(new URL(next, origin));
+      }
       console.error("auth code exchange failed:", error.message);
     } catch (err) {
       console.error("auth code exchange failed:", err instanceof Error ? err.message : err);
     }
+  }
+
+  // A recovery link that cannot be used — expired, used already, or opened
+  // in a browser that did not ask for it (the PKCE verifier lives where the
+  // request was made). Nothing changed; ask for a new one.
+  if (viaRecovery) {
+    return NextResponse.redirect(new URL("/forgot-password?error=link_expired", origin));
   }
 
   // An expired or already-used confirmation link comes back with an error

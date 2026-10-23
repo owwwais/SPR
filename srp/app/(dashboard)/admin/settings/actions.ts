@@ -217,14 +217,18 @@ export async function revokeInvitation(
   const session = await requireOrgAdmin();
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // RLS filters instead of refusing, so "nothing matched" (already accepted
+  // or revoked, or an owner invitation an admin may not touch — 0028) has to
+  // be read from the returned rows, or it would show as success.
+  const { data, error } = await supabase
     .from("invitations")
     .update({ status: "revoked" })
     .eq("id", invitationId)
     .eq("org_id", session.org.id)
-    .eq("status", "pending");
-  if (error) {
-    console.error("revokeInvitation failed:", error.message);
+    .eq("status", "pending")
+    .select("id");
+  if (error || !data?.length) {
+    if (error) console.error("revokeInvitation failed:", error.message);
     return { saved: false, error: ar.settingsPage.invite.revokeFailed };
   }
 
@@ -253,14 +257,20 @@ export async function updateMemberRole(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // An owner's row is outside an admin's reach (RLS), which filters rather
+  // than refuses: zero rows came back as a silent "saved" (KD-09).
+  const { data, error } = await supabase
     .from("memberships")
     .update({ role })
     .eq("org_id", session.org.id)
-    .eq("user_id", memberId);
+    .eq("user_id", memberId)
+    .select("user_id");
   if (error) {
     console.error("updateMemberRole failed:", error.message);
     return { saved: false, error: ar.settingsPage.roleFailed };
+  }
+  if (!data?.length) {
+    return { saved: false, error: ar.settingsPage.ownerProtected };
   }
 
   revalidatePath("/admin/settings");
@@ -276,15 +286,20 @@ export async function removeMember(memberId: string): Promise<SettingsState> {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("memberships")
     .delete()
     .eq("org_id", session.org.id)
-    .eq("user_id", memberId);
+    .eq("user_id", memberId)
+    .select("user_id");
   if (error) {
     // The database refuses to leave an organization without an owner (0006).
     console.error("removeMember failed:", error.message);
     return { saved: false, error: ar.settingsPage.removeFailed };
+  }
+  // Same as a role change: an owner an admin cannot reach matches nothing.
+  if (!data?.length) {
+    return { saved: false, error: ar.settingsPage.ownerProtected };
   }
 
   revalidatePath("/admin/settings");
