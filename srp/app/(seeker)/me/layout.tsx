@@ -14,7 +14,7 @@ import { getHats, requireSeeker } from "@/lib/seeker";
 // signing in, not /me). The shell itself holds nothing but links.
 //
 // Calm and guided (DESIGN.md §1): a header with the five destinations and
-// nothing else, native scrolling (A11), content on the paper canvas.
+// nothing else, native scrolling (A11), content on the canvas.
 export default async function SeekerLayout({
   children,
 }: Readonly<{
