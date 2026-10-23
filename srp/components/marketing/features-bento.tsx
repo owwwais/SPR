@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { ar } from "@/lib/i18n/ar";
 
 // An asymmetric bento (taste-skill: no row of three equal cards) of React
-// Bits SpotlightCards: a teal light follows the pointer across a quiet paper
+// Bits SpotlightCards: a teal light follows the pointer across a quiet canvas
 // card. The lead card shows the ranked list itself rather than describing it.
 const ICONS: LucideIcon[] = [MessagesSquare, FileCheck2, EyeOff, Globe2, BarChart3, Users, Timer];
 // Grid placement: two cards beside the lead, then 3 + 2 below.
@@ -34,7 +34,7 @@ const SPANS = [
 
 const SPOTLIGHT = {
   theme: "light" as const,
-  spotlightColor: "#0E5E57",
+  spotlightColor: "#0D7268",
   intensity: 0.5,
   borderGlow: 0.9,
   spotlightSize: 320,

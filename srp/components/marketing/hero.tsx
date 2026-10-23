@@ -27,15 +27,15 @@ export function Hero() {
         <DotGrid
           dotSize={3.5}
           gap={24}
-          baseColor="#D6D0C3"
-          activeColor="#0E5E57"
+          baseColor="#CBD3DC"
+          activeColor="#0D7268"
           proximity={150}
           glow={0.4}
           swell={0.9}
           shockStrength={3}
           fade={0.5}
         />
-        {/* Paper wash behind the copy so the dots never fight the text. */}
+        {/* Canvas wash behind the copy so the dots never fight the text. */}
         <div className="absolute inset-0 bg-[radial-gradient(70%_60%_at_70%_45%,var(--background)_30%,transparent_80%)]" />
       </div>
 

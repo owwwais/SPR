@@ -82,13 +82,13 @@ export default async function AdminLayout({
 
   return (
     <div className="flex flex-1">
-      <aside className="sticky top-0 hidden h-dvh w-62 shrink-0 overflow-y-auto border-e bg-sidebar md:block">
+      <aside className="sticky top-0 hidden h-dvh w-62 shrink-0 overflow-y-auto border-e bg-sidebar md:block print:hidden">
         {sidebar}
       </aside>
       <MobileNavDrawer>{sidebar}</MobileNavDrawer>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-4 sm:px-6">
+        <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background px-4 sm:px-6 print:hidden">
           <MobileNavTrigger />
           <Breadcrumbs orgName={session.org.name} />
           <div className="ms-auto flex shrink-0 items-center gap-2">

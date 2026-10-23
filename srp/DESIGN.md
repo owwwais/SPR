@@ -1,11 +1,13 @@
 ---
 version: 1.0
-name: Hakeem — "Ink & Paper"
+name: Hakeem — "Clear"
 description: >
   The design system of حكيم, an Arabic-first (RTL) recruitment platform whose
   name means "the wise one": it advises, it does not rule. The interface is a
-  warm editorial canvas — bone-white paper, warm near-black ink, hairline
-  rules — with a single deep-teal accent reserved for action and focus.
+  clean, cool canvas — near-white grey, white surfaces, cool near-black ink,
+  hairline rules — with a single teal accent reserved for action and focus.
+  (2026-10-23, owner: replaces the warm "Ink & Paper" neutrals, whose
+  yellowed canvas read as murky.)
   Calm, evidence-first and quietly premium; the company dashboard borrows
   Linear's density discipline inside the same tokens. Structure follows the
   DESIGN.md format popularised by VoltAgent/awesome-design-md; direction A of
@@ -13,35 +15,35 @@ description: >
   2026-10-16. Binding per CLAUDE.md D29.
 
 colors:
-  canvas: "#F8F7F3"          # page background (paper)
-  surface: "#FFFFFF"         # cards, inputs, popovers
-  surface-soft: "#F2F0EA"    # hover rows, secondary buttons, subtle bands
-  surface-sunken: "#EBE8E0"  # skeletons, wells, code blocks
-  hairline: "#E5E1D8"        # borders and dividers
-  hairline-strong: "#D3CEC2" # input borders, emphasised rules
-  ink: "#1A1A17"             # headings, primary text
-  body: "#34332F"            # long-form text
-  muted: "#6B6960"           # secondary text (5.1:1 on canvas)
-  muted-soft: "#8F8C82"      # NON-TEXT only: resting icons, disabled controls, decorative rules (3.1:1)
-  primary: "#0E5E57"         # the one accent: actions, links, focus, brand mark (7.1:1)
-  primary-hover: "#0A4A44"
+  canvas: "#F6F8FA"          # page background: cool near-white
+  surface: "#FFFFFF"         # cards, inputs, popovers, the sidebar
+  surface-soft: "#F0F3F6"    # hover rows, secondary buttons, subtle bands
+  surface-sunken: "#E7EBF0"  # skeletons, wells, code blocks
+  hairline: "#E2E7ED"        # borders and dividers
+  hairline-strong: "#CBD3DC" # input borders, emphasised rules
+  ink: "#111A27"             # headings, primary text (16.4:1 on canvas)
+  body: "#323D4C"            # long-form text (11:1)
+  muted: "#596577"           # secondary text (5.5:1 on canvas, 5.3:1 on surface-soft)
+  muted-soft: "#95A0AF"      # NON-TEXT only: resting icons, disabled controls, decorative rules
+  primary: "#0D7268"         # the one accent: actions, links, focus, brand mark (5.8:1 on white)
+  primary-hover: "#0A5C54"
   on-primary: "#FFFFFF"
-  primary-soft: "#E2EEEB"    # tinted backgrounds for selected / info
-  primary-soft-ink: "#0B4B45"
-  success: "#2F7A4C"         # score band ≥ 75, positive states
-  success-soft: "#E6F1E9"
-  warning: "#8F6200"         # score band 50–74, cautions
-  warning-soft: "#FAF0D7"
-  danger: "#B0372F"          # score band < 50, destructive, errors
-  danger-soft: "#FAE8E6"
+  primary-soft: "#E6F4F1"    # tinted backgrounds for selected / info
+  primary-soft-ink: "#0A5C54" # (7:1 on primary-soft)
+  success: "#177245"         # score band ≥ 75, positive states (5.3:1 on its soft)
+  success-soft: "#E7F5EC"
+  warning: "#A1520A"         # score band 50–74, cautions (5.1:1 on its soft)
+  warning-soft: "#FDF3E3"
+  danger: "#C2352B"          # score band < 50, destructive, errors (4.7:1 on its soft)
+  danger-soft: "#FCEBE9"
   # dark (defined, not yet switchable — dark mode ships later)
-  dark-canvas: "#141412"
-  dark-surface: "#1C1C19"
-  dark-surface-soft: "#24241F"
-  dark-hairline: "#33322C"
-  dark-ink: "#F2F0EA"
-  dark-muted: "#A29F95"
-  dark-primary: "#5FB8AC"
+  dark-canvas: "#0F141B"
+  dark-surface: "#151B24"
+  dark-surface-soft: "#1C2430"
+  dark-hairline: "#2A3441"
+  dark-ink: "#E9EEF4"
+  dark-muted: "#9AA5B4"
+  dark-primary: "#52B8AC"
 
 typography:
   # Arabic is the primary script. Line heights are deliberately taller than
@@ -79,7 +81,7 @@ spacing:
 
 elevation:
   flat: "none"                      # default for everything on the canvas
-  raised: "0 1px 2px rgb(26 26 23 / 0.04), 0 8px 24px rgb(26 26 23 / 0.06)"  # popovers, dialogs, menus only
+  raised: "0 1px 2px rgb(17 26 39 / 0.05), 0 8px 24px rgb(17 26 39 / 0.07)"  # popovers, dialogs, menus only
 
 motion:
   micro: 150ms                     # hover, press
@@ -89,16 +91,17 @@ motion:
   press: "scale(0.98)"
 ---
 
-# Hakeem Design System — "Ink & Paper"
+# Hakeem Design System — "Clear"
 
 ## 1. Overview
 
 حكيم advises; a human decides. The interface has to carry that stance before a
 word is read: calm instead of loud, evidence instead of decoration, one accent
-instead of a rainbow. The canvas is warm paper (`canvas`), text is warm ink
-(`ink`, `body`), structure comes from hairline rules (`hairline`) and
-whitespace rather than shadows, and the deep teal `primary` appears only where
-the user can act or where focus is.
+instead of a rainbow. The canvas is a clean, cool near-white (`canvas`), text
+is cool near-black ink (`ink`, `body`), structure comes from hairline rules
+(`hairline`) and whitespace rather than shadows, and the teal `primary`
+appears only where the user can act or where focus is. No warm or yellowed
+neutrals: the owner rejected them (2026-10-23).
 
 Three surfaces share these tokens:
 
@@ -110,7 +113,7 @@ Three surfaces share these tokens:
 
 ## 2. Colors
 
-- **One accent.** `primary` (deep teal) is the only chromatic brand color. Do
+- **One accent.** `primary` (teal) is the only chromatic brand color. Do
   not introduce a second accent, gradients, or neon.
 - **Semantic colors are not accents.** `success` / `warning` / `danger` exist
   for meaning — chiefly the fit-score bands (FR-04/05: ≥ 75 green, 50–74
@@ -123,8 +126,10 @@ Three surfaces share these tokens:
 - **Text contrast ≥ 4.5:1** (AA). `muted-soft` fails that and is for non-text
   only: resting icons, disabled controls, decorative rules. Input placeholders
   are text and use `muted`.
-- No pure black (`#000`) and no pure white canvas: paper is `canvas`, white is
-  for surfaces that sit on it.
+- No pure black (`#000`) and no pure white canvas: the page is `canvas`, white
+  is for surfaces that sit on it (cards, inputs, popovers, the sidebar).
+- **One grey family.** Every neutral is the same cool slate hue; never mix in
+  warm greys, beige or cream.
 - Dark tokens are defined so components stay token-only, but the theme is not
   switchable yet.
 
@@ -218,7 +223,7 @@ tighter than their containers.
 | **Skeleton** | `surface-sunken`, shaped like the content it replaces. |
 | **Focus** | Every interactive element shows a visible focus ring; never `outline: none` without a replacement. |
 | **Navigation** | Active item: `primary-soft` background with `primary-soft-ink` text. |
-| **Workspace shell** | Sidebar `w-62` on `sidebar` with a hairline at the end edge: org switcher, then the work (Today, jobs with up to five published jobs nested beneath and a count badge, candidates, calendar, statistics), then the organisation (careers page, plan, settings), then usage, switches and the account at the bottom. Top bar 48px on `canvas`: breadcrumb (derived from the URL, `ChevronLeft` separators) and the one primary action. Below `md`: the sidebar moves into a drawer from the start edge (Base UI `Dialog`, 240ms transform, mirrored by `dir`, no blur) and a 56px tab bar holds four places, every target ≥ 44px. |
+| **Workspace shell** | Sidebar `w-62` on `sidebar` (white) with a hairline at the end edge: org switcher, then the work (Today, jobs with up to five published jobs nested beneath and a count badge, candidates, interviews, services, calendar, statistics), then the organisation (careers page, plan, settings), then usage, switches and the account at the bottom. Top bar 48px on `canvas`: breadcrumb (derived from the URL, `ChevronLeft` separators) and the one primary action. Below `md`: the sidebar moves into a drawer from the start edge (Base UI `Dialog`, 240ms transform, mirrored by `dir`, no blur) and a 56px tab bar holds four places, every target ≥ 44px. |
 | **Usage meter** | Base UI `Meter`: label and `<bdi>used من limit</bdi>` above a 6px `surface-sunken` track; `primary` fill, `warning` from 80%, `danger` at 100%. No limit → "بلا حد" and no bar; limit 0 → "غير مشمولة في الباقة". |
 | **File field** | The native input stays in the form, visually hidden; a dashed `hairline-strong` box shows an Arabic prompt or the chosen file name (`dir="ltr"`), accepts a drop, and shows focus through `has-[:focus-visible]`. Never the browser's own control (it speaks the browser's language). |
 | **Date field** | Day, month and year selects with Arabic labels writing one hidden `YYYY-MM-DD` value; never `<input type="date">`, which shows the browser's format. |
@@ -226,6 +231,8 @@ tighter than their containers.
 | **Command palette** | Ctrl/⌘ K or the top-bar field. Base UI `Dialog` at 12vh, `w-[min(36rem,92vw)]`, `shadow-raised`; a combobox input over a listbox grouped by kind (records first, then commands), the active row on `surface-soft`, Latin codes as `<bdi dir="ltr">` islands, key hints in the footer. |
 | **Row menu** | One contextual action stays on the row; the rest go behind an `Ellipsis` trigger (Base UI `Menu`, aligned to the end edge). Destructive items sit last, after a hairline, in `danger`, and always confirm. |
 | **Decision** | Changing an application's status sits beside its evidence, never on another tab. Accepting or declining confirms in an alert dialog that says an email will be sent. |
+| **Service card** | The services hub: a `rounded-xl` card on `surface` with a 40px `primary-soft` icon tile, title, one-line value and a "ابدأ" link with a forward arrow; hover turns the hairline `primary/40` and adds the faintest ink shadow, never a lift. |
+| **AI result** | Every model output opens with the advisory banner (`primary-soft`, an `Info` icon, «مسودة استشارية» and what it is). Sections are hairline panels (title bar + body). Model text that came from the company's input is tagged `default`, general knowledge `secondary`; confidence below high shows as a `warning` line, never a score. Numbers the code computed (points, grade, salary) are `tabular-nums` and never coloured as success or danger. Results print without the shell (`print:hidden` on sidebar, top bar and tab bar). |
 | **Product scene** | Real product UI rendered in code on marketing and sign-in surfaces (the scored applicant with its reasons and the human decision; recommended jobs with their reasons), always captioned "مثال توضيحي". Static: nothing in it animates on load. |
 
 ## 10. Motion

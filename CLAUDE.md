@@ -27,7 +27,7 @@ A recruitment platform with two sides (v3, approved 2026-10-16 — see §2.2):
 |---|----------|
 | D1 | **Stack:** Next.js (App Router) + TypeScript strict + Tailwind + shadcn/ui on Vercel. **Supabase** for Postgres, Auth, Storage, Edge Functions. |
 | D2 | **AI model: Google Gemini 3.5 Flash** (`gemini-3.5-flash`) via the official `@google/genai` SDK. One model for all AI tasks (extraction + scoring + questions) in a single call per application. _(Changed from `gemini-2.5-flash` by engineer decision, 2026-07-10.)_ |
-| D3 | **The Gemini API key never reaches the browser or Next.js client code.** All AI calls happen inside one Supabase Edge Function: `analyze-application`. _(One approved exception, 2026-10-16: the separately deployed `interview-agent` service (D30) calls the model for interviews. Its key lives in that server's environment only — never in Next.js, never in the repo.)_ |
+| D3 | **The Gemini API key never reaches the browser or Next.js client code.** All AI calls happen inside one Supabase Edge Function: `analyze-application`. _(One approved exception, 2026-10-16: the separately deployed `interview-agent` service (D30) calls the model for interviews. Its key lives in that server's environment only — never in Next.js, never in the repo. Second exception, 2026-10-23 (owner request): the `hr-services` Edge Function calls the model for the services hub (D34), with the same key in the same Edge Function environment.)_ |
 | D4 | **Applying never fails because of AI.** Submission writes the application row + uploads the CV, then triggers analysis asynchronously. `applications.analysis_status` tracks: `pending → processing → done | failed`. Failed analyses are retryable (max 3 attempts) and re-runnable from the dashboard. |
 | D5 | **Structured output only.** Gemini is called with `responseMimeType: "application/json"` + a `responseSchema`. The Edge Function validates the response with zod before persisting. If validation fails → mark `failed`, store raw error, never store malformed data. |
 | D6 | **Prompts are versioned assets.** They live in `supabase/functions/analyze-application/prompts.ts`, exported with a `PROMPT_VERSION` constant. Every evaluation row stores the `prompt_version` and `model` used. |
@@ -75,6 +75,12 @@ The owner approved every recommendation in both documents on 2026-10-16.
 | **D32** | **Candidate code runs in an isolated sandbox host** (self-hosted Judge0) with no outbound network. Hidden tests never leave the server; a generated task is shown only after its reference solution passes its own tests. |
 | **D33** | **Interviews are their own quota unit:** a monthly interview allowance per plan, enforced inside the agent before any model call (the D16 pattern). |
 
+### 2.3 Services Hub (approved 2026-10-23, owner request)
+
+| # | Decision |
+|---|----------|
+| **D34** | **«الخدمات» — advisory HR services in the workspace:** job-needs analysis (O*NET content model, KSAOs, competencies, 90-day outcomes), fair pay (point-factor job evaluation → a grade, and a range from the company's **own** `pay_grades` only), team formation (roles and skills, matched against the org's analysed candidates in code), job-ad audit, structured interview guide (anchored 1–4 scales) and a 30/60/90 onboarding plan. Each run is **one model call** inside `hr-services`, charged as **one unit of the monthly analysis quota** before the call (the D16 pattern) and refunded if the model is never reached, with a 40-run daily ceiling per org. Output is zod-validated before it is stored (D5) in `service_runs`, prompts are versioned in `supabase/functions/hr-services/prompts.ts` (`SERVICES_PROMPT_VERSION`, D6), and content touching a protected category is dropped. **The model never produces a salary or market figure**; grades, points, salary placement and skill matches are arithmetic in `_shared/services.ts`. Results are drafts: nothing changes a job, an application or a status until a person acts. |
+
 Interview-specific amendments: D2's single model covers interview text; the
 audio models (speech synthesis and transcription) are chosen and recorded at
 milestone I5. D2's "single call per application" and §8's cost guard apply to
@@ -114,6 +120,7 @@ srp/
 │   │   ├── jobs/                    # FR-01 manage jobs
 │   │   ├── jobs/[id]/applicants/    # FR-06 ranked applicants
 │   │   ├── applications/[id]/       # applicant detail: CV, AI eval, questions, status
+│   │   ├── services/                # D34: the services hub
 │   │   ├── stats/                   # FR-09
 │   │   └── settings/                # org profile, retention, team (admin only)
 │   ├── (platform)/platform/         # S4 (billing slice): PLATFORM console (owner only)
@@ -129,6 +136,7 @@ srp/
 ├── supabase/
 │   ├── migrations/
 │   ├── functions/
+│   │   ├── hr-services/             # D34: the services hub's model calls (D3 exception)
 │   │   ├── analyze-application/     # Gemini call lives ONLY here
 │   │   │   ├── index.ts
 │   │   │   └── prompts.ts           # versioned prompts (see §7)
@@ -638,6 +646,13 @@ suites: `tenant_isolation.sql` (75), `onboarding.sql` (30),
 `interview_isolation.sql` (79), `seeker_isolation.sql` (144), `billing.sql`
 (44), `rls_check.sql`. See `docs/HANDOVER-2026-08.md`, round 12. Migrations
 run to `0028`.
+
+**Status (2026-10-23, round 13):** the owner asked for a calmer palette and a
+services tab. `DESIGN.md` is now "Clear": one cool grey family on a near-white
+canvas, white surfaces and sidebar, and a crisper teal, all text pairs AA. The
+services hub (D34) ships six services on `hr-services` and `0029`
+(`service_runs`, `pay_grades`); `tenant_isolation.sql` is at 86. Migrations run
+to `0029`. See `docs/HANDOVER-2026-08.md`, round 13.
 
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
