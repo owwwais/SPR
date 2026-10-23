@@ -593,6 +593,54 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      // 0029: the services hub. Runs are written only by the hr-services
+      // Edge Function (service role); pay_grades by owners/admins.
+      service_runs: {
+        Row: {
+          id: string;
+          org_id: string;
+          kind: "job_need" | "pay_grade" | "team" | "ad_audit" | "interview_kit" | "onboarding";
+          job_id: string | null;
+          title: string;
+          input: Json;
+          status: AnalysisStatus;
+          output: Json | null;
+          error: string | null;
+          model: string | null;
+          prompt_version: string | null;
+          created_by: string | null;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      pay_grades: {
+        Row: {
+          org_id: string;
+          grade: number;
+          min_monthly: number;
+          max_monthly: number;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          org_id: string;
+          grade: number;
+          min_monthly: number;
+          max_monthly: number;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          min_monthly?: number;
+          max_monthly?: number;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       // 0025: billing. Every table below is written only by security
       // definer functions — never through the client — hence the empty
       // Insert/Update shapes (all four keys are still required by

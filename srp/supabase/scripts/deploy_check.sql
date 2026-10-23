@@ -88,7 +88,9 @@ checks (migration, applied) as (values
     exists (select 1 from fn where name = 'search_workspace')),
   ('0028_launch_fixes',
     exists (select 1 from fn where name = 'claim_application_for_analysis'
-            and src like '%analysis_claimed_at%'))
+            and src like '%analysis_claimed_at%')),
+  ('0029_services',
+    to_regclass('public.pay_grades') is not null)
 )
 select
   migration,

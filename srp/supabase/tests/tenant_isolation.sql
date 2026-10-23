@@ -459,6 +459,56 @@ select pg_temp.chk('impersonation: an expired session grants nothing',
   (select cardinality(public.current_org_ids())) = 0);
 
 -- ============================================================
+-- Services hub (0029): runs and the company's pay structure
+-- ============================================================
+
+reset role;
+insert into service_runs (id, org_id, kind, job_id, title, status) values
+  ('0a000000-0000-4000-8000-0000000000c1','0a000000-0000-4000-8000-000000000001','pay_grade',
+   '0a000000-0000-4000-8000-0000000000a1','وظيفة أكمي','done'),
+  ('0b000000-0000-4000-8000-0000000000c1','0b000000-0000-4000-8000-000000000001','team',
+   null,'فريق جلوبكس','done');
+insert into pay_grades (org_id, grade, min_monthly, max_monthly) values
+  ('0b000000-0000-4000-8000-000000000001', 5, 9000, 14000);
+
+select pg_temp.chk_denied('services: a run CANNOT name another organization''s job',
+  $$insert into service_runs (org_id, kind, job_id, title)
+    values ('0b000000-0000-4000-8000-000000000001','ad_audit',
+            '0a000000-0000-4000-8000-0000000000a1','x')$$);
+
+select pg_temp.as_user('0a000000-0000-4000-8000-000000000011');
+select pg_temp.chk('services: acme hr reads its own runs',
+  exists (select 1 from service_runs where id = '0a000000-0000-4000-8000-0000000000c1'));
+select pg_temp.chk_blind('services: acme hr CANNOT read a globex run',
+  $$select count(*) from service_runs where id = '0b000000-0000-4000-8000-0000000000c1'$$);
+select pg_temp.chk_denied('services: no client writes a run (only hr-services does)',
+  $$insert into service_runs (org_id, kind, title)
+    values ('0a000000-0000-4000-8000-000000000001','team','x')$$);
+select pg_temp.chk_denied('services: acme hr CANNOT set the pay structure',
+  $$insert into pay_grades (org_id, grade, min_monthly, max_monthly)
+    values ('0a000000-0000-4000-8000-000000000001', 3, 6000, 9000)$$);
+select pg_temp.chk_blind('services: acme hr CANNOT read globex pay grades',
+  $$select count(*) from pay_grades where org_id = '0b000000-0000-4000-8000-000000000001'$$);
+
+select pg_temp.as_user('0a000000-0000-4000-8000-000000000010');
+select pg_temp.chk_rows('services: the acme owner sets its pay structure',
+  $$insert into pay_grades (org_id, grade, min_monthly, max_monthly)
+    values ('0a000000-0000-4000-8000-000000000001', 3, 6000, 9000)$$, 1);
+select pg_temp.chk_denied('services: the acme owner CANNOT write globex pay grades',
+  $$insert into pay_grades (org_id, grade, min_monthly, max_monthly)
+    values ('0b000000-0000-4000-8000-000000000001', 3, 1, 2)$$);
+select pg_temp.chk_rows('services: the acme owner CANNOT change globex pay grades',
+  $$update pay_grades set max_monthly = 99999
+    where org_id = '0b000000-0000-4000-8000-000000000001'$$, 0);
+
+select pg_temp.as_user('0a000000-0000-4000-8000-000000000012');
+select pg_temp.chk_blind('services: an acme viewer does not see pay grades',
+  $$select count(*) from pay_grades where org_id = '0a000000-0000-4000-8000-000000000001'$$);
+select pg_temp.chk('services: an acme viewer still reads the runs',
+  exists (select 1 from service_runs where id = '0a000000-0000-4000-8000-0000000000c1'));
+reset role;
+
+-- ============================================================
 -- Structural guards
 -- ============================================================
 
