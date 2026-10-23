@@ -334,6 +334,8 @@ export type Database = {
           analysis_status: AnalysisStatus;
           analysis_attempts: number;
           analysis_error: string | null;
+          // 0028 (KD-17): when the current or last run claimed the row.
+          analysis_claimed_at: string | null;
           counts_toward_saudization: boolean | null;
           // 0013: trigger-maintained copy of ai_evaluations.fit_score, so the
           // ranked list can be served from an index.

@@ -189,6 +189,51 @@ select pg_temp.as_user('0e000000-0000-4000-8000-000000000002');
 select pg_temp.chk('invite: the new member sees exactly one organization',
   (select cardinality(public.current_org_ids())) = 1);
 
+-- SEC-01 (0028): after creation an admin may only revoke. Rewriting the role,
+-- address or token hash would let an admin mint an owner invitation with a
+-- token they know and accept it from a second account.
+reset role;
+update memberships set role = 'admin'
+where user_id = '0e000000-0000-4000-8000-000000000002';
+update organizations set max_seats = null where slug = 'brand-new-co';
+insert into invitations (id, org_id, email, role, token_hash)
+select '0e000000-0000-4000-8000-0000000000a2', o.id, 'second@new.test', 'hr',
+       encode(digest('second-token-0123456789', 'sha256'), 'hex')
+from organizations o where o.slug = 'brand-new-co';
+insert into invitations (id, org_id, email, role, token_hash)
+select '0e000000-0000-4000-8000-0000000000a3', o.id, 'partner@new.test', 'owner',
+       encode(digest('owner-token-0123456789', 'sha256'), 'hex')
+from organizations o where o.slug = 'brand-new-co';
+
+select pg_temp.as_user('0e000000-0000-4000-8000-000000000002');
+select pg_temp.chk_denied('invite: an admin CANNOT raise a pending invitation to owner',
+  $$update invitations set role = 'owner'
+    where id = '0e000000-0000-4000-8000-0000000000a2'$$);
+select pg_temp.chk_denied('invite: an admin CANNOT replace an invitation''s token hash',
+  $$update invitations set token_hash = 'known'
+    where id = '0e000000-0000-4000-8000-0000000000a2'$$);
+select pg_temp.chk_denied('invite: an admin CANNOT readdress an invitation',
+  $$update invitations set email = 'admin-alt@new.test'
+    where id = '0e000000-0000-4000-8000-0000000000a2'$$);
+update invitations set status = 'revoked'
+where id in ('0e000000-0000-4000-8000-0000000000a2', '0e000000-0000-4000-8000-0000000000a3');
+select pg_temp.chk_denied('invite: a revoked invitation CANNOT be reopened',
+  $$update invitations set status = 'pending'
+    where id = '0e000000-0000-4000-8000-0000000000a2'$$);
+
+reset role;
+select pg_temp.chk('invite: an admin can revoke an hr invitation',
+  (select status from invitations where id = '0e000000-0000-4000-8000-0000000000a2') = 'revoked');
+select pg_temp.chk('invite: an admin CANNOT touch an owner invitation',
+  (select status from invitations where id = '0e000000-0000-4000-8000-0000000000a3') = 'pending');
+
+select pg_temp.as_user('0e000000-0000-4000-8000-000000000001');
+update invitations set status = 'revoked'
+where id = '0e000000-0000-4000-8000-0000000000a3';
+reset role;
+select pg_temp.chk('invite: the owner can revoke an owner invitation',
+  (select status from invitations where id = '0e000000-0000-4000-8000-0000000000a3') = 'revoked');
+
 -- ============================================================
 -- Report
 -- ============================================================

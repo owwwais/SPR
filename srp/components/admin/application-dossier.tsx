@@ -98,9 +98,12 @@ async function loadHistory(orgId: string, applicationId: string) {
 export async function ApplicationDossier({
   id,
   variant,
+  retryFailed = false,
 }: {
   id: string;
   variant: "page" | "panel";
+  /** reRunAnalysis redirected back with ?error=retryFailed (KD-07). */
+  retryFailed?: boolean;
 }) {
   const session = await requireMembership();
   if (!UUID_RE.test(id)) notFound();
@@ -292,6 +295,13 @@ export async function ApplicationDossier({
         >
           {/* §10.4: the advisory framing is always visible. */}
           <p className="text-sm text-muted-foreground">{t.advisoryDisclaimer}</p>
+
+          {retryFailed && (
+            <Alert variant="destructive" role="alert">
+              <AlertCircle className="size-4" aria-hidden />
+              <AlertDescription>{ar.applicants.errors.retryFailed}</AlertDescription>
+            </Alert>
+          )}
 
           {(application.analysis_status === "pending" ||
             application.analysis_status === "processing") && (

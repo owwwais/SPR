@@ -78,6 +78,9 @@ export default async function AdminStatsPage() {
   // D16 enforces the ceiling inside analyze-application; showing it here is
   // what stops exhaustion from arriving as a surprise pile of failed
   // analyses the customer cannot explain.
+  // A failed read is its own state: defaulting it to {quota: null} printed
+  // «بلا حدّ», telling a capped customer they were uncapped (KD-08).
+  const quotaUnavailable = Boolean(quotaRes.error) || !quotaRes.data;
   const quota = (quotaRes.data as {
     used: number;
     quota: number | null;
@@ -143,13 +146,17 @@ export default async function AdminStatsPage() {
             <span className="text-sm text-muted-foreground">
               {ar.quota.title}
             </span>
-            <span className="text-2xl font-bold tabular-nums">
-              {quota.quota === null
-                ? ar.quota.unlimited
-                : `${quota.used} ${ar.quota.ofTotal} ${quota.quota} ${ar.quota.unit}`}
-            </span>
+            {quotaUnavailable ? (
+              <span className="text-sm text-muted-foreground">{ar.quota.unavailable}</span>
+            ) : (
+              <span className="text-2xl font-bold tabular-nums">
+                {quota.quota === null
+                  ? ar.quota.unlimited
+                  : `${quota.used} ${ar.quota.ofTotal} ${quota.quota} ${ar.quota.unit}`}
+              </span>
+            )}
           </div>
-          {quota.quota !== null && quota.remaining !== null && (
+          {!quotaUnavailable && quota.quota !== null && quota.remaining !== null && (
             <span
               className={
                 quota.remaining === 0
@@ -165,7 +172,7 @@ export default async function AdminStatsPage() {
         </CardContent>
       </Card>
 
-      {quota.remaining === 0 && (
+      {!quotaUnavailable && quota.remaining === 0 && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
           <p className="text-sm font-medium">{ar.quota.exhaustedTitle}</p>
           <p className="mt-1 text-sm text-muted-foreground">

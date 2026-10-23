@@ -18,7 +18,7 @@
 //   { action: "create", org_id, email, password, full_name, role }
 //     Kept for the case where email delivery is not available — the admin
 //     sets a temporary password and passes it on out of band.
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE =
@@ -54,7 +54,7 @@ async function callerRole(req: Request, orgId: string): Promise<Role | null> {
 }
 
 async function findUserIdByEmail(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient,
   email: string
 ): Promise<string | null> {
   // listUsers is paginated; a tenant's colleague may be anywhere in it.
@@ -242,16 +242,20 @@ Deno.serve(async (req) => {
   if (!userId) return json(500, { error: "create failed" });
 
   // profiles is identity-only now: one row per person, reused across orgs.
-  // Only fill in the name for an account we just created.
-  if (isNewAccount) {
-    const { error: profileError } = await admin
-      .from("profiles")
-      .insert({ id: userId, full_name: fullName });
-    if (profileError) {
-      console.error("profile insert failed:", profileError.message);
-      await admin.auth.admin.deleteUser(userId);
-      return json(500, { error: "profile failed" });
-    }
+  // A new account gets one with the given name. An existing account keeps
+  // its own name — but it may have none at all: a seeker account (D26) or
+  // one that never finished signup has no profiles row, and a membership
+  // without one sent the member to /onboarding and hid them from the team
+  // list (KD-10). Create it then, never overwrite it.
+  const { error: profileError } = isNewAccount
+    ? await admin.from("profiles").insert({ id: userId, full_name: fullName })
+    : await admin
+        .from("profiles")
+        .upsert({ id: userId, full_name: fullName }, { onConflict: "id", ignoreDuplicates: true });
+  if (profileError) {
+    console.error("profile insert failed:", profileError.message);
+    if (isNewAccount) await admin.auth.admin.deleteUser(userId);
+    return json(500, { error: "profile failed" });
   }
 
   const { error: membershipError } = await admin

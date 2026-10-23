@@ -103,10 +103,18 @@ export default async function CalendarPage({
   const session = await requireMembership();
   const sp = await searchParams;
 
-  // Visible month (?m=YYYY-MM), defaulting to the current month.
-  const monthBase = /^\d{4}-\d{2}$/.test(sp.m ?? "")
-    ? new Date(`${sp.m}-01T00:00:00`)
-    : new Date();
+  // Visible month (?m=YYYY-MM), defaulting to the current month. The shape
+  // alone let ?m=2026-13 through to an Invalid Date, which date-fns threw on
+  // (KD-06); the month must be a real one, in a sane range of years.
+  const requested = /^(\d{4})-(\d{2})$/.exec(sp.m ?? "");
+  const monthBase =
+    requested &&
+    Number(requested[2]) >= 1 &&
+    Number(requested[2]) <= 12 &&
+    Number(requested[1]) >= 2000 &&
+    Number(requested[1]) <= 2100
+      ? new Date(Number(requested[1]), Number(requested[2]) - 1, 1)
+      : new Date();
   const monthStart = startOfMonth(monthBase);
   // Saudi week starts on Saturday (weekStartsOn: 6).
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 6 });

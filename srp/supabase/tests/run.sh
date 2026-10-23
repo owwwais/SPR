@@ -52,7 +52,21 @@ fi
 for migration in supabase/migrations/*.sql; do
   echo "→ $(basename "$migration")"
   run "$migration"
+  # Production applied 0001–0022 under the legacy Data API defaults; from
+  # 2026-10-30 nothing new is exposed without a GRANT. Test every later
+  # migration under the new defaults (skipped against a hosted project,
+  # which already has its own).
+  if [[ "$(basename "$migration")" == 0022_* && "${SKIP_HARNESS:-0}" != "1" ]]; then
+    echo "→ new default privileges"
+    run supabase/tests/new_default_privileges.sql
+  fi
 done
+
+if [[ "${SKIP_HARNESS:-0}" != "1" ]]; then
+  # The suites' own pg_temp helpers are functions too: give them back the
+  # PUBLIC EXECUTE that new_default_privileges.sql withheld from migrations.
+  psql "$DATABASE_URL" "${PSQL_OPTS[@]}" -c "alter default privileges grant execute on routines to public;"
+fi
 
 echo "→ seed"
 run supabase/seed.sql

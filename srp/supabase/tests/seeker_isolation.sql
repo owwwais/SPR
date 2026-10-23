@@ -593,6 +593,25 @@ select pg_temp.chk('token: the account profile is intact after all four attempts
 select pg_temp.chk('token: an unlinked legacy profile is still served by its token',
   pg_temp.out('tok_review_legacy') ->> 'full_name' = 'صاحب ملف قديم');
 
+-- KD-14 (0028): the caller of a token deletion cannot reach Storage, so the
+-- CV file's path is queued for housekeeping instead of being left behind.
+insert into talent.profiles (id, public_token, email, email_verified_at, status, onboarding_step,
+                             analysis_status, cv_path, cv_sha256) values
+  ('5d000000-0000-4000-8000-0000000000f9', md5('pdel'), 'leaving@s.test', now(), 'published', 'done',
+   'done', '5d000000-0000-4000-8000-0000000000f9.pdf', encode(sha256('del'::bytea), 'hex'));
+select pg_temp.as_anon();
+insert into t_out values ('tok_delete_legacy', public.talent_delete_profile(md5('pdel')));
+select pg_temp.as_owner();
+select pg_temp.chk('token: deleting a legacy page removes the row',
+  pg_temp.out('tok_delete_legacy') ->> 'ok' = 'true'
+  and not exists (select 1 from talent.profiles where id = '5d000000-0000-4000-8000-0000000000f9'));
+select pg_temp.chk('token: deleting a legacy page queues its CV file for removal',
+  exists (select 1 from talent.file_deletions
+          where path = '5d000000-0000-4000-8000-0000000000f9.pdf'));
+select pg_temp.chk('token: no client role reads the file queue',
+  not has_table_privilege('anon', 'talent.file_deletions', 'select')
+  and not has_table_privilege('authenticated', 'talent.file_deletions', 'select'));
+
 -- ============================================================
 -- my_applications — the caller's own, never an evaluation
 -- ============================================================

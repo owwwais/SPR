@@ -232,7 +232,7 @@ export default async function AdminSettingsPage({
                                 {t.invite.expiresAt} {formatDate(invitation.expires_at)}
                               </span>
                               <span className="ms-auto">
-                                <RevokeInvitationButton id={invitation.id} />
+                                <RevokeInvitationButton id={invitation.id} email={invitation.email} />
                               </span>
                             </li>
                           ))}

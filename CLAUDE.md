@@ -622,6 +622,23 @@ through an intercepted `@panel` route (P4c), job and applicant lists (P4d),
 the interviews hub (P4e), settings in tabs (P4f), and the command palette on
 `search_workspace()` (`0027`, P4g). Migrations run to `0027`.
 
+**Status (2026-10-23):** round 12 closed the launch blockers in
+`docs/PRD.md` §13.2–13.3 that need no owner decision. `0028` gives every
+object from `0023`–`0027` explicit grants (Supabase stops auto-exposing new
+objects on 2026-10-30), restricts invitation updates to revoking (SEC-01),
+leaves `status_history` to its trigger (SEC-02), adds the missing column
+grants (KD-01/02), fixes the zero quota (KD-16) and stale-only forced claims
+(KD-17), and gives housekeeping single-use tickets (SEC-04). `send-email`
+and `analyze-application` authorize every caller (SEC-03/05). Password
+recovery and change shipped (`/forgot-password`, `/reset-password`,
+`/admin/account`). `supabase/tests/run.sh` applies every migration after
+`0022` under the post-2026-10-30 default privileges, so **a new migration
+must GRANT what it creates — to `service_role` too — or CI fails.** Test
+suites: `tenant_isolation.sql` (75), `onboarding.sql` (30),
+`interview_isolation.sql` (79), `seeker_isolation.sql` (144), `billing.sql`
+(44), `rls_check.sql`. See `docs/HANDOVER-2026-08.md`, round 12. Migrations
+run to `0028`.
+
 **Old status (2026-08-06):**
 Migrations run to `0011`. Test suites: `tenant_isolation.sql` (53),
 `onboarding.sql` (23), `rls_check.sql` (42) — `npm run test:db` runs all

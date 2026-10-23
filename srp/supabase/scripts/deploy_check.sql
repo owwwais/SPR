@@ -85,7 +85,10 @@ checks (migration, applied) as (values
   ('0026_workspace_today',
     exists (select 1 from fn where name = 'workspace_today')),
   ('0027_workspace_search',
-    exists (select 1 from fn where name = 'search_workspace'))
+    exists (select 1 from fn where name = 'search_workspace')),
+  ('0028_launch_fixes',
+    exists (select 1 from fn where name = 'claim_application_for_analysis'
+            and src like '%analysis_claimed_at%'))
 )
 select
   migration,

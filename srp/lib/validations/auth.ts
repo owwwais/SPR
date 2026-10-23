@@ -6,3 +6,7 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// Supabase stores a bcrypt hash, which reads at most 72 bytes; the minimum
+// matches signup.
+export const passwordSchema = z.string().min(8).max(72);

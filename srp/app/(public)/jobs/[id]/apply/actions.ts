@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import {
   CV_FORM_MAX_BYTES,
@@ -60,6 +61,25 @@ function translateFieldErrors(
   return out;
 }
 
+// OQ-07: the function's per-address limit sees this server, not the visitor,
+// so every guest shared one bucket. The visitor's address travels with a
+// secret only this server and the function hold (SUBMIT_RELAY_SECRET, never
+// NEXT_PUBLIC_). x-real-ip is set by the hosting edge; failing that, the
+// rightmost X-Forwarded-For hop is the one our own proxy appended — the
+// leftmost is whatever the visitor typed. Without the secret nothing is sent
+// and the function falls back to its own view.
+async function relayHeaders(): Promise<Record<string, string>> {
+  const secret = process.env.SUBMIT_RELAY_SECRET;
+  if (!secret) return {};
+  const h = await headers();
+  const hops = (h.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  const ip = h.get("x-real-ip")?.trim() || hops[hops.length - 1];
+  return ip ? { "x-relay-secret": secret, "x-relay-client-ip": ip } : {};
+}
+
 export async function submitApplication(
   jobId: string,
   source: string | null,
@@ -91,6 +111,7 @@ export async function submitApplication(
       method: "POST",
       headers: {
         Authorization: `Bearer ${anonKey}`,
+        ...(await relayHeaders()),
         // Content-Type is deliberately unset: fetch derives the multipart
         // boundary from the FormData body.
       },

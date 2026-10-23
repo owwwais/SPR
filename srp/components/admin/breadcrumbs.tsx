@@ -16,6 +16,7 @@ const SECTIONS: Record<string, string> = {
   stats: ar.admin.stats,
   settings: ar.admin.settings,
   billing: ar.shell.billing,
+  account: ar.account.title,
 };
 
 // Derived from the URL alone, so it needs no data and cannot disagree with

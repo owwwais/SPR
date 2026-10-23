@@ -31,6 +31,9 @@ type Report = {
       gaps?: string[];
       red_flags?: string[];
     };
+    // Both returned since 0015/0023; optional for older databases.
+    interview_questions?: { question?: string; kind?: string; rationale?: string }[] | null;
+    blind_screening?: boolean;
     model: string;
     prompt_version: string;
     evaluated_at: string;
@@ -139,6 +142,21 @@ export async function GET(
     )
     .join("");
 
+  // KD-11: the report showed less than the RPC returns. The questions are
+  // part of what the model produced, and the blind flag says whether it saw
+  // the applicant's identity at all.
+  const questionItems = (e?.interview_questions ?? [])
+    .filter((q) => typeof q?.question === "string" && q.question.length > 0)
+    .map((q) => {
+      const kind = q.kind
+        ? ar.evaluation.questionKinds[q.kind as keyof typeof ar.evaluation.questionKinds]
+        : undefined;
+      return `<li>${kind ? `<span class="meta">${esc(kind)} · </span>` : ""}${esc(q.question)}${
+        q.rationale ? `<br><span class="meta">${esc(q.rationale)}</span>` : ""
+      }</li>`;
+    })
+    .join("");
+
   // Absent on a database still on 0015's version of the RPC (the route
   // deploys on merge, 0023 does not) — default it instead of crashing.
   report.superseded_evaluations ??= [];
@@ -202,7 +220,15 @@ ${
          <tr><th>${esc(t.model)}</th><td>${esc(e.model)}</td></tr>
          <tr><th>${esc(t.promptVersion)}</th><td>${esc(e.prompt_version)}</td></tr>
          <tr><th>${esc(t.evaluatedAt)}</th><td>${esc(fmt(e.evaluated_at))}</td></tr>
-       </table>`
+         ${
+           e.blind_screening === undefined
+             ? ""
+             : `<tr><th>${esc(t.blindScreening)}</th><td>${esc(
+                 e.blind_screening ? t.blindOn : t.blindOff
+               )}</td></tr>`
+         }
+       </table>
+       ${questionItems ? `<h3>${esc(t.questions)}</h3><ul>${questionItems}</ul>` : ""}`
     : `<p>${esc(t.noEvaluation)}</p>`
 }
 
@@ -223,7 +249,7 @@ ${
 <h2>${esc(t.trail)}</h2>
 <table>
   <thead><tr>
-    <th>${esc(t.evaluatedAt)}</th><th>${esc(t.currentStatus)}</th>
+    <th>${esc(t.changedAt)}</th><th>${esc(t.transition)}</th>
     <th>${esc(t.changedBy)}</th><th>${esc(t.humanDecision)}</th><th>${esc(t.note)}</th>
   </tr></thead>
   <tbody>${trailRows}</tbody>

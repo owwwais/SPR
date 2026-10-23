@@ -5,14 +5,22 @@
 //      API) — the ONLY hard-delete path in the system (D9)
 //   3) sweep orphaned CV uploads older than the retention cutoff, walking
 //      each tenant's cvs/{org_id}/ folder
-//   4) expire the submission throttle log (0008)
+//   4) remove the CV files of deleted accountless talent pages (0028)
+//   5) expire the submission throttle log (0008)
 // Before an application is deleted, its virtual interview is erased on the
 // interview agent (D30, design §8.2), so retention reaches the separate
 // server too. An application whose erasure fails waits for the next run
 // rather than leaving an orphaned copy on the agent.
-// Idempotent and safe to invoke at any time; returns only counters.
-import { createClient } from "@supabase/supabase-js";
+// Idempotent; returns only counters.
+//
+// Callers (SEC-04): the daily pg_cron job, which sends a single-use ticket it
+// minted at run time in `x-housekeeping-ticket` (0028), or anything holding
+// the service-role key (an operator's manual run). The gateway in front only
+// checks for a valid project JWT, and the job's bearer has always been the
+// public anon key, so before 0028 anyone could trigger retries and retention.
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { agentClient } from "../_shared/interview-agent-client.ts";
+import { isSchemaMissingError } from "../_shared/trace.ts";
 
 const RETRY_CAP = 10; // Gemini cost guard (§8)
 const DELETE_BATCH = 500;
@@ -24,12 +32,31 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
+async function authorized(req: Request, admin: SupabaseClient, serviceKey: string): Promise<boolean> {
+  if (req.headers.get("Authorization") === `Bearer ${serviceKey}`) return true;
+  const ticket = req.headers.get("x-housekeeping-ticket") ?? "";
+  const { data, error } = await admin.rpc("redeem_housekeeping_ticket", { p_ticket: ticket });
+  if (!error) return data === true;
+  // PGRST202: the database predates 0028, so the job cannot send a ticket
+  // yet. Keep retention running (D8) until the migration is applied.
+  if (error.code === "PGRST202") {
+    console.warn("housekeeping: 0028 not applied — running without a ticket check");
+    return true;
+  }
+  console.error("housekeeping: ticket check failed:", error.message);
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
+
+  if (!(await authorized(req, admin, serviceKey))) {
+    return json(401, { error: "unauthorized" });
+  }
 
   const result = {
     retried: 0,
@@ -45,10 +72,28 @@ Deno.serve(async (req) => {
 
   // ---- 1) retry failed analyses (D4: max 3 attempts), and sweep runs
   // whose invocation was lost: still 'pending' after 15 minutes (the
-  // post-submit trigger never landed) or stuck 'processing' for over an
-  // hour (crashed mid-run — analyze-application accepts force for these).
+  // post-submit trigger never landed) or stuck 'processing' since a claim
+  // over 15 minutes old (crashed mid-run — a forced claim takes exactly
+  // these, 0028). Before 0028 there is no claim time, so an hour since the
+  // application arrived stands in for it.
   const fifteenMinAgo = new Date(Date.now() - 15 * 60_000).toISOString();
   const oneHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+
+  const staleProcessing = async () => {
+    const byClaim = await admin
+      .from("applications")
+      .select("id")
+      .eq("analysis_status", "processing")
+      .or(`analysis_claimed_at.is.null,analysis_claimed_at.lt."${fifteenMinAgo}"`)
+      .limit(RETRY_CAP);
+    if (byClaim.error?.code !== "42703") return byClaim;
+    return admin
+      .from("applications")
+      .select("id")
+      .eq("analysis_status", "processing")
+      .lt("created_at", oneHourAgo)
+      .limit(RETRY_CAP);
+  };
 
   const [failedRes, stalePendingRes, staleProcessingRes] = await Promise.all([
     admin
@@ -64,12 +109,7 @@ Deno.serve(async (req) => {
       .eq("analysis_status", "pending")
       .lt("created_at", fifteenMinAgo)
       .limit(RETRY_CAP),
-    admin
-      .from("applications")
-      .select("id")
-      .eq("analysis_status", "processing")
-      .lt("created_at", oneHourAgo)
-      .limit(RETRY_CAP),
+    staleProcessing(),
   ]);
   for (const res of [failedRes, stalePendingRes, staleProcessingRes]) {
     if (res.error) logError(`retry lookup: ${res.error.message}`);
@@ -222,7 +262,33 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ---- 4) throttle log ----
+  // ---- 4) files of deleted legacy talent pages (0028, KD-14) ----
+  // talent_delete_profile queues the path; only the Storage API with the
+  // service role can remove the file. A database before 0028 has no queue.
+  const { data: queued, error: queueError } = await admin
+    .schema("talent")
+    .from("file_deletions")
+    .select("path")
+    .limit(DELETE_BATCH);
+  if (queueError) {
+    if (!isSchemaMissingError(queueError)) logError(`talent file queue: ${queueError.message}`);
+  } else if (queued && queued.length > 0) {
+    const paths = queued.map((q) => q.path as string);
+    const { error: removeError } = await admin.storage.from("talent-cvs").remove(paths);
+    if (removeError) {
+      logError(`talent file removal: ${removeError.message}`);
+    } else {
+      result.deleted_files += paths.length;
+      const { error: dequeueError } = await admin
+        .schema("talent")
+        .from("file_deletions")
+        .delete()
+        .in("path", paths);
+      if (dequeueError) logError(`talent file dequeue: ${dequeueError.message}`);
+    }
+  }
+
+  // ---- 5) throttle log ----
   // Submission attempt hashes are an abuse control, not a record worth
   // keeping (0008); a day is all the limits look back over.
   const { error: throttleError } = await admin

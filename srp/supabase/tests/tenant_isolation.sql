@@ -259,6 +259,24 @@ select pg_temp.chk('acme hr: own status change was recorded with the note',
             and note = 'ملاحظة'
             and org_id = '0a000000-0000-4000-8000-000000000001'));
 
+-- SEC-02 (0028): history is the record that a human decided (D24), so only
+-- the status trigger writes it. A hand-written row naming the owner would
+-- otherwise appear in the transparency report as the owner's decision.
+select pg_temp.chk_denied('acme hr: CANNOT write status history by hand',
+  $$insert into status_history (org_id, application_id, from_status, to_status, changed_by, note)
+    values ('0a000000-0000-4000-8000-000000000001',
+            '0a000000-0000-4000-8000-0000000000f1','under_review','accepted',
+            '0a000000-0000-4000-8000-000000000010','مزوّر')$$);
+
+-- KD-02 (0028): the Saudization indicator is recorded by hr at offer stage.
+select pg_temp.chk_rows('acme hr: CAN record the Saudization indicator',
+  $$update applications set counts_toward_saudization = true
+    where id = '0a000000-0000-4000-8000-0000000000f1'
+      and org_id = '0a000000-0000-4000-8000-000000000001'$$, 1);
+select pg_temp.chk_rows('acme hr: CANNOT record it on a globex application',
+  $$update applications set counts_toward_saudization = true
+    where id = '0b000000-0000-4000-8000-0000000000f1'$$, 0);
+
 -- ============================================================
 -- ACME viewer — read-only inside its own tenant
 -- ============================================================
@@ -273,12 +291,23 @@ select pg_temp.chk_denied('acme viewer: CANNOT create a job',
 select pg_temp.chk_denied('acme viewer: CANNOT change application status',
   $$select public.change_application_status(
       '0a000000-0000-4000-8000-0000000000f1','accepted',null)$$);
+select pg_temp.chk_rows('acme viewer: CANNOT record the Saudization indicator',
+  $$update applications set counts_toward_saudization = false
+    where id = '0a000000-0000-4000-8000-0000000000f1'$$, 0);
 
 -- ============================================================
 -- ACME owner vs admin — the owner ceiling on memberships
 -- ============================================================
 
 select pg_temp.as_user('0a000000-0000-4000-8000-000000000010');
+-- KD-01 (0028): the compliance settings 0016 added were never grantable.
+select pg_temp.chk_rows('acme owner: CAN save the compliance settings',
+  $$update organizations
+    set blind_screening = true, nitaqat_band = 'green_mid', saudization_target = 30
+    where id = '0a000000-0000-4000-8000-000000000001'$$, 1);
+select pg_temp.chk_rows('acme owner: CANNOT save globex compliance settings',
+  $$update organizations set blind_screening = true
+    where id = '0b000000-0000-4000-8000-000000000001'$$, 0);
 select pg_temp.chk_rows('acme owner: can add a member',
   $$insert into memberships (org_id, user_id, role)
     values ('0a000000-0000-4000-8000-000000000001',
@@ -460,11 +489,51 @@ select pg_temp.chk('grants: anon holds no write privilege on any public or talen
     select 1 from information_schema.role_table_grants
     where grantee = 'anon' and table_schema in ('public', 'talent')
       and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')));
+-- 2026-10-30: a new object reaches the Data API only through an explicit
+-- GRANT (run.sh applies every migration after 0022 under that default).
+-- A policy written for a role that lacks the privilege is dead code: the
+-- feature behind it fails with "permission denied" in production.
+select pg_temp.chk('grants: every policy''s roles hold the privilege it governs',
+  not exists (
+    select 1
+    from (
+      select schemaname, tablename, cmd,
+             unnest(case when roles = '{public}' then array['authenticated']::name[]
+                         else roles end) as role
+      from pg_policies where schemaname in ('public', 'talent')
+    ) p
+    where p.role in ('anon', 'authenticated')
+      and not case p.cmd
+        when 'INSERT' then has_any_column_privilege(p.role, format('%I.%I', p.schemaname, p.tablename), 'INSERT')
+        when 'UPDATE' then has_any_column_privilege(p.role, format('%I.%I', p.schemaname, p.tablename), 'UPDATE')
+        when 'DELETE' then has_table_privilege(p.role, format('%I.%I', p.schemaname, p.tablename), 'DELETE')
+        else has_any_column_privilege(p.role, format('%I.%I', p.schemaname, p.tablename), 'SELECT')
+      end));
+select pg_temp.chk('grants: service_role reaches every public table',
+  not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p')
+      and not has_table_privilege('service_role', c.oid, 'SELECT')));
 select pg_temp.chk('grants: no client role holds TRUNCATE, REFERENCES or TRIGGER',
   not exists (
     select 1 from information_schema.role_table_grants
     where grantee in ('anon', 'authenticated') and table_schema in ('public', 'talent')
       and privilege_type in ('TRUNCATE','REFERENCES','TRIGGER')));
+
+-- SEC-04 (0028): housekeeping runs only on a ticket the daily job minted.
+create temp table t_ticket as select public.issue_housekeeping_ticket() as v;
+select pg_temp.chk('housekeeping: a fresh ticket is redeemed',
+  public.redeem_housekeeping_ticket((select v from t_ticket)));
+select pg_temp.chk('housekeeping: a ticket works only once',
+  not public.redeem_housekeeping_ticket((select v from t_ticket)));
+select pg_temp.chk('housekeeping: a made-up ticket is refused',
+  not public.redeem_housekeeping_ticket(repeat('a', 64)));
+select pg_temp.chk('housekeeping: no client role may mint or redeem a ticket',
+  not has_function_privilege('anon', 'public.redeem_housekeeping_ticket(text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.redeem_housekeeping_ticket(text)', 'execute')
+  and not has_function_privilege('anon', 'public.issue_housekeeping_ticket()', 'execute')
+  and not has_function_privilege('authenticated', 'public.issue_housekeeping_ticket()', 'execute')
+  and not has_function_privilege('service_role', 'public.issue_housekeeping_ticket()', 'execute'));
 
 select pg_temp.chk_rows('guard: deleting an org still cascades cleanly',
   $$delete from organizations

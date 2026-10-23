@@ -1,7 +1,18 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { Check, Mail, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -398,23 +409,51 @@ export function InviteMemberForm({
   );
 }
 
-export function RevokeInvitationButton({ id }: { id: string }) {
-  const [pending, setPending] = useState(false);
+// Revoking cannot be undone (the link dies; a new invitation is a new
+// email), so it asks first, and a refusal is said out loud (KD-13).
+export function RevokeInvitationButton({ id, email }: { id: string; email: string }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const t = ar.settingsPage.invite;
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      disabled={pending}
-      onClick={async () => {
-        setPending(true);
-        await revokeInvitation(id);
-        setPending(false);
-      }}
-    >
-      <X className="size-3.5" aria-hidden />
-      {ar.settingsPage.invite.revoke}
-    </Button>
+    <span className="flex items-center gap-2">
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger render={<Button type="button" variant="ghost" size="sm" disabled={pending} />}>
+          <X className="size-3.5" aria-hidden />
+          {t.revoke}
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.revokeTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.revokeBody} <bdi dir="ltr">{email}</bdi>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t.revokeCancel}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await revokeInvitation(id);
+                  setError(result.error);
+                  setOpen(false);
+                })
+              }
+            >
+              {t.revokeConfirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </span>
   );
 }

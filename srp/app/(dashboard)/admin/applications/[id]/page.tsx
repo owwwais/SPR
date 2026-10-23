@@ -10,9 +10,11 @@ export const metadata: Metadata = {
 // list (the @panel slot); a shared link or a refresh lands here.
 export default async function ApplicationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
-  return <ApplicationDossier id={id} variant="page" />;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
+  return <ApplicationDossier id={id} variant="page" retryFailed={error === "retryFailed"} />;
 }

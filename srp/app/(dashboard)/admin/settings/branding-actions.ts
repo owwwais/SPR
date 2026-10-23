@@ -20,11 +20,13 @@ export type BrandingState = {
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+// The org-assets bucket refuses SVG since 0012 (it can carry script, and the
+// bucket is public). Accepting it here only to fail at upload showed the
+// wrong message (KD-12); refusing it here says "unsupported format".
 const IMAGE_MIME: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
-  "image/svg+xml": "svg",
 };
 const IMAGE_MAX_BYTES = 2 * 1024 * 1024; // matches the bucket limit (0011)
 

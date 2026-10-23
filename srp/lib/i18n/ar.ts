@@ -918,6 +918,12 @@ export const ar = {
     evaluatedAt: "تاريخ التقييم",
     noEvaluation: "لم يُجرَ تقييم آلي لهذا الطلب.",
     trail: "سجل القرارات البشرية",
+    changedAt: "تاريخ التغيير",
+    transition: "من ← إلى",
+    blindScreening: "الفرز المُعمّى",
+    blindOn: "مُفعّل — لم يرَ النموذج اسم المتقدم ولا بياناته الشخصية",
+    blindOff: "غير مُفعّل",
+    questions: "أسئلة المقابلة المقترحة",
     changedBy: "بواسطة",
     system: "النظام",
     note: "ملاحظة",
@@ -934,6 +940,7 @@ export const ar = {
     used: "المستهلك",
     remaining: "المتبقي",
     unlimited: "بلا حدّ",
+    unavailable: "تعذّرت قراءة الحصة الآن. أعد تحميل الصفحة بعد قليل.",
     ofTotal: "من",
     unit: "تحليلاً",
     exhaustedTitle: "انتهت حصتك الشهرية",
@@ -1461,7 +1468,11 @@ export const ar = {
       failed: "تعذّر إرسال الدعوة، حاول مرة أخرى",
       createdNotEmailed:
         "أُنشئت الدعوة لكن تعذّر إرسال البريد — راجع إعدادات البريد ثم أعد الإرسال",
-      revokeFailed: "تعذّر إلغاء الدعوة",
+      revokeFailed: "تعذّر إلغاء الدعوة — ربما قُبلت أو أُلغيت من قبل. حدّث الصفحة.",
+      revokeTitle: "إلغاء الدعوة؟",
+      revokeBody: "يتوقف رابط الدعوة عن العمل فوراً، ولإضافة هذا الشخص لاحقاً ترسل دعوة جديدة:",
+      revokeCancel: "تراجع",
+      revokeConfirm: "إلغاء الدعوة",
       manualTitle: "إنشاء حساب بكلمة مرور مؤقتة",
       manualHint: "استخدمه فقط إذا تعذّر وصول البريد للعضو.",
     },
@@ -1471,6 +1482,7 @@ export const ar = {
     removeFailed: "تعذّر إزالة العضو — لا يمكن ترك المؤسسة بلا مالك",
     roleSaved: "تم تحديث الدور",
     roleFailed: "تعذّر تحديث الدور",
+    ownerProtected: "دور المالك لا يغيّره ولا يزيله إلا مالك",
   },
 
   application: {
@@ -1640,7 +1652,65 @@ export const ar = {
       oauth: "تعذّر تسجيل الدخول عبر Google. حاول مرة أخرى، أو استخدم البريد وكلمة المرور.",
       linkExpired:
         "انتهت صلاحية رابط التأكيد أو سبق استخدامه، فلم يتأكّد بريدك بعد. أنشئ الحساب بالبريد نفسه مرة أخرى لنرسل إليك رابطاً جديداً.",
+      passwordTooShort: "كلمة المرور 8 أحرف على الأقل",
+      passwordMismatch: "كلمتا المرور غير متطابقتين",
+      samePassword: "هذه كلمة المرور الحالية نفسها — اختر غيرها",
+      weakPassword: "كلمة المرور ضعيفة — اختر كلمة أطول أو أقل شيوعاً",
+      wrongCurrentPassword: "كلمة المرور الحالية غير صحيحة",
+      emailInvalid: "أدخل بريداً إلكترونياً صحيحاً",
+      rateLimited: "طلبات كثيرة خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى.",
     },
+    // Password recovery: /forgot-password sends the link, /auth/callback
+    // exchanges it, /reset-password sets the new one.
+    forgotLink: "نسيت كلمة المرور؟",
+    forgot: {
+      title: "استعادة كلمة المرور",
+      subtitle: "أدخل بريد حسابك وسنرسل إليك رابطاً لتعيين كلمة مرور جديدة.",
+      submit: "أرسل الرابط",
+      sending: "جارٍ الإرسال…",
+      // Deliberately the same whether or not the address has an account,
+      // so the form cannot be used to find out who is registered.
+      sentTitle: "تحقّق من بريدك",
+      sentBody:
+        "إن كان هذا البريد مسجّلاً لدينا فستصلك رسالة فيها رابط لتعيين كلمة مرور جديدة. افتح الرابط في هذا المتصفح نفسه.",
+      backToLogin: "العودة إلى تسجيل الدخول",
+      linkExpired:
+        "تعذّر استخدام رابط الاستعادة: انتهت صلاحيته، أو سبق استخدامه، أو فُتح في متصفح غير الذي طُلب منه. اطلب رابطاً جديداً.",
+    },
+    reset: {
+      title: "تعيين كلمة مرور جديدة",
+      subtitle: "اختر كلمة مرور جديدة لحسابك.",
+      newPassword: "كلمة المرور الجديدة",
+      confirmPassword: "تأكيد كلمة المرور الجديدة",
+      submit: "حفظ كلمة المرور",
+      saving: "جارٍ الحفظ…",
+      doneTitle: "تغيّرت كلمة المرور",
+      doneBody: "استخدمها في المرة القادمة التي تسجّل فيها الدخول.",
+      continue: "متابعة إلى حسابي",
+    },
+    // Signed in: change the password, proving the current one first.
+    changePassword: {
+      title: "كلمة المرور",
+      hint: "أدخل كلمة المرور الحالية ثم الجديدة.",
+      currentPassword: "كلمة المرور الحالية",
+      submit: "تغيير كلمة المرور",
+      saving: "جارٍ الحفظ…",
+      done: "تغيّرت كلمة المرور.",
+      oauthOnly:
+        "تدخل إلى هذا الحساب عبر Google، فلا كلمة مرور له. إن أردت الدخول بالبريد وكلمة مرور أيضاً، أرسل إلى بريدك رابط التعيين.",
+      oauthOnlyCta: "أرسل رابط التعيين",
+    },
+  },
+
+  // The workspace account page: identity and password, for every role.
+  account: {
+    title: "حسابي",
+    subtitle: "بيانات دخولك. الاسم واحد في كل المساحات، والدور يخص هذه المساحة.",
+    identityTitle: "الهوية",
+    name: "الاسم",
+    email: "البريد الإلكتروني",
+    role: "دورك في هذه المساحة",
+    open: "حسابي",
   },
 
   // The workspace home: what needs a person today (P4b, 0026).
