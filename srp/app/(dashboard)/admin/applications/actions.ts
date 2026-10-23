@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canWrite, requireMembership } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { createPublicClient } from "@/lib/supabase/public";
 import { InterviewQa } from "@/lib/validations/screening";
 import { ar } from "@/lib/i18n/ar";
 import type { AppStatus, Json } from "@/types/database";
@@ -20,13 +19,13 @@ async function requireOwnApplication(applicationId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("applications")
-    .select("id")
+    .select("id, status")
     .eq("id", applicationId)
     .eq("org_id", session.org.id)
     .maybeSingle();
   if (!data) redirect("/admin");
 
-  return { session, supabase };
+  return { session, supabase, status: data.status as AppStatus };
 }
 
 // FR-06: re-run analysis for failed (or re-runnable) applications. Invoked
@@ -98,7 +97,7 @@ export async function changeApplicationStatus(
   _prev: StatusChangeState,
   formData: FormData
 ): Promise<StatusChangeState> {
-  await requireOwnApplication(applicationId);
+  const { supabase, status: previousStatus } = await requireOwnApplication(applicationId);
 
   const newStatus = String(formData.get("status") ?? "") as AppStatus;
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
@@ -114,7 +113,6 @@ export async function changeApplicationStatus(
       ? rawReason
       : null;
 
-  const supabase = await createClient();
   // p_public_reason is only named when there is one: PostgREST matches a
   // function by the parameter names it is given, so always naming it made
   // every status change fail against a database still on the pre-0023
@@ -130,12 +128,15 @@ export async function changeApplicationStatus(
     return { changed: false, error: ar.application.statusChange.failed };
   }
 
-  // Never blocks or fails the status change (same posture as D4).
-  const emailKind = STATUS_EMAIL_KIND[newStatus];
+  // Never blocks or fails the status change (same posture as D4). A stale
+  // tab re-submitting the status the application already has changes
+  // nothing, so it must not email the applicant again (KD-15). The email is
+  // sent with the staff member's own session: send-email checks that they
+  // manage this application and that the change just happened (SEC-03).
+  const emailKind = newStatus !== previousStatus ? STATUS_EMAIL_KIND[newStatus] : undefined;
   if (emailKind) {
     try {
-      const publicClient = createPublicClient();
-      const { error: emailError } = await publicClient.functions.invoke(
+      const { error: emailError } = await supabase.functions.invoke(
         "send-email",
         {
           body: {

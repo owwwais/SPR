@@ -33,7 +33,10 @@
 // lib/i18n/ar.ts on the Next.js side.
 //
 // Secrets: platform-injected SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY /
-// SUPABASE_ANON_KEY, plus optional TURNSTILE_SECRET_KEY and THROTTLE_SALT.
+// SUPABASE_ANON_KEY, plus optional THROTTLE_SALT, TURNSTILE_SECRET_KEY with
+// TURNSTILE_SITE_KEY (both, or the captcha stays off), and
+// SUBMIT_RELAY_SECRET (shared with the Next.js server, which relays the
+// visitor's address).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   applicationSchema,
@@ -130,7 +133,35 @@ async function sha256Hex(value: string): Promise<string> {
 // The rightmost entry is the one our own infrastructure appended and is the
 // only one a caller cannot forge. Prefer the platform's own header when it is
 // present, and fall back to that last hop.
+//
+// A guest form does not reach us from the visitor, though: the Next.js server
+// action relays it, so every header above describes the web tier, and one
+// 5-an-hour bucket was shared by every guest (OQ-07). The relay therefore
+// sends the visitor's address with a shared secret; only a request carrying
+// that secret may name the address it is counted under.
+const IP_RE = /^(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]{2,45})$/i;
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i]! ^ y[i]!;
+  return diff === 0;
+}
+
+function relayedIp(req: Request): string | null {
+  const secret = Deno.env.get("SUBMIT_RELAY_SECRET");
+  const presented = req.headers.get("x-relay-secret");
+  const ip = req.headers.get("x-relay-client-ip")?.trim().toLowerCase();
+  if (!secret || !presented || !ip || !timingSafeEqual(presented, secret)) return null;
+  return IP_RE.test(ip) ? ip : null;
+}
+
 function clientIp(req: Request): string {
+  const relayed = relayedIp(req);
+  if (relayed) return relayed;
+
   const direct =
     req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip");
   if (direct?.trim()) return direct.trim();
@@ -159,18 +190,24 @@ async function sniffMime(file: File): Promise<CvMime | null> {
   return null;
 }
 
-// Optional: only enforced once a site key is configured (S9-mini). Absent
-// configuration must not block submissions, or a misconfigured deploy
-// silently rejects every applicant.
+// Optional (S9-mini): enforced only when BOTH keys are set here. The site key
+// is not used by this function; it is the operator's statement that the
+// widget is live on the form. With the secret alone, the form (built without
+// NEXT_PUBLIC_TURNSTILE_SITE_KEY) renders no widget, sends no token, and
+// every guest was refused (KD-03). Absent configuration must never block
+// submissions.
 async function turnstileOk(token: string | null): Promise<boolean> {
   const secret = Deno.env.get("TURNSTILE_SECRET_KEY");
-  if (!secret) {
-    // Deploying without a secret disables the captcha silently, which is how
-    // an environment ends up with no bot protection and nobody noticing.
+  const siteKey = Deno.env.get("TURNSTILE_SITE_KEY");
+  if (!secret || !siteKey) {
+    // Deploying without them disables the captcha, which is how an
+    // environment ends up with no bot protection and nobody noticing.
     // Still allow the submission — refusing every applicant over a missing
     // env var is worse — but never let it pass unremarked.
     console.error(
-      "TURNSTILE_SECRET_KEY is not configured — captcha verification DISABLED"
+      secret
+        ? "TURNSTILE_SITE_KEY is not configured — captcha verification DISABLED (set it to the site key the form uses)"
+        : "TURNSTILE_SECRET_KEY is not configured — captcha verification DISABLED"
     );
     return true;
   }

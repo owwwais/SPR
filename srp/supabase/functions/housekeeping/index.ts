@@ -10,8 +10,14 @@
 // interview agent (D30, design §8.2), so retention reaches the separate
 // server too. An application whose erasure fails waits for the next run
 // rather than leaving an orphaned copy on the agent.
-// Idempotent and safe to invoke at any time; returns only counters.
-import { createClient } from "@supabase/supabase-js";
+// Idempotent; returns only counters.
+//
+// Callers (SEC-04): the daily pg_cron job, which sends a single-use ticket it
+// minted at run time in `x-housekeeping-ticket` (0028), or anything holding
+// the service-role key (an operator's manual run). The gateway in front only
+// checks for a valid project JWT, and the job's bearer has always been the
+// public anon key, so before 0028 anyone could trigger retries and retention.
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { agentClient } from "../_shared/interview-agent-client.ts";
 
 const RETRY_CAP = 10; // Gemini cost guard (§8)
@@ -24,12 +30,31 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
+async function authorized(req: Request, admin: SupabaseClient, serviceKey: string): Promise<boolean> {
+  if (req.headers.get("Authorization") === `Bearer ${serviceKey}`) return true;
+  const ticket = req.headers.get("x-housekeeping-ticket") ?? "";
+  const { data, error } = await admin.rpc("redeem_housekeeping_ticket", { p_ticket: ticket });
+  if (!error) return data === true;
+  // PGRST202: the database predates 0028, so the job cannot send a ticket
+  // yet. Keep retention running (D8) until the migration is applied.
+  if (error.code === "PGRST202") {
+    console.warn("housekeeping: 0028 not applied — running without a ticket check");
+    return true;
+  }
+  console.error("housekeeping: ticket check failed:", error.message);
+  return false;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(supabaseUrl, serviceKey);
+
+  if (!(await authorized(req, admin, serviceKey))) {
+    return json(401, { error: "unauthorized" });
+  }
 
   const result = {
     retried: 0,
@@ -45,10 +70,28 @@ Deno.serve(async (req) => {
 
   // ---- 1) retry failed analyses (D4: max 3 attempts), and sweep runs
   // whose invocation was lost: still 'pending' after 15 minutes (the
-  // post-submit trigger never landed) or stuck 'processing' for over an
-  // hour (crashed mid-run — analyze-application accepts force for these).
+  // post-submit trigger never landed) or stuck 'processing' since a claim
+  // over 15 minutes old (crashed mid-run — a forced claim takes exactly
+  // these, 0028). Before 0028 there is no claim time, so an hour since the
+  // application arrived stands in for it.
   const fifteenMinAgo = new Date(Date.now() - 15 * 60_000).toISOString();
   const oneHourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+
+  const staleProcessing = async () => {
+    const byClaim = await admin
+      .from("applications")
+      .select("id")
+      .eq("analysis_status", "processing")
+      .or(`analysis_claimed_at.is.null,analysis_claimed_at.lt."${fifteenMinAgo}"`)
+      .limit(RETRY_CAP);
+    if (byClaim.error?.code !== "42703") return byClaim;
+    return admin
+      .from("applications")
+      .select("id")
+      .eq("analysis_status", "processing")
+      .lt("created_at", oneHourAgo)
+      .limit(RETRY_CAP);
+  };
 
   const [failedRes, stalePendingRes, staleProcessingRes] = await Promise.all([
     admin
@@ -64,12 +107,7 @@ Deno.serve(async (req) => {
       .eq("analysis_status", "pending")
       .lt("created_at", fifteenMinAgo)
       .limit(RETRY_CAP),
-    admin
-      .from("applications")
-      .select("id")
-      .eq("analysis_status", "processing")
-      .lt("created_at", oneHourAgo)
-      .limit(RETRY_CAP),
+    staleProcessing(),
   ]);
   for (const res of [failedRes, stalePendingRes, staleProcessingRes]) {
     if (res.error) logError(`retry lookup: ${res.error.message}`);

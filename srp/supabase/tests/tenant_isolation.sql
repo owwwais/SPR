@@ -520,6 +520,21 @@ select pg_temp.chk('grants: no client role holds TRUNCATE, REFERENCES or TRIGGER
     where grantee in ('anon', 'authenticated') and table_schema in ('public', 'talent')
       and privilege_type in ('TRUNCATE','REFERENCES','TRIGGER')));
 
+-- SEC-04 (0028): housekeeping runs only on a ticket the daily job minted.
+create temp table t_ticket as select public.issue_housekeeping_ticket() as v;
+select pg_temp.chk('housekeeping: a fresh ticket is redeemed',
+  public.redeem_housekeeping_ticket((select v from t_ticket)));
+select pg_temp.chk('housekeeping: a ticket works only once',
+  not public.redeem_housekeeping_ticket((select v from t_ticket)));
+select pg_temp.chk('housekeeping: a made-up ticket is refused',
+  not public.redeem_housekeeping_ticket(repeat('a', 64)));
+select pg_temp.chk('housekeeping: no client role may mint or redeem a ticket',
+  not has_function_privilege('anon', 'public.redeem_housekeeping_ticket(text)', 'execute')
+  and not has_function_privilege('authenticated', 'public.redeem_housekeeping_ticket(text)', 'execute')
+  and not has_function_privilege('anon', 'public.issue_housekeeping_ticket()', 'execute')
+  and not has_function_privilege('authenticated', 'public.issue_housekeeping_ticket()', 'execute')
+  and not has_function_privilege('service_role', 'public.issue_housekeeping_ticket()', 'execute'));
+
 select pg_temp.chk_rows('guard: deleting an org still cascades cleanly',
   $$delete from organizations
     where id = '0b000000-0000-4000-8000-000000000001'$$, 1);

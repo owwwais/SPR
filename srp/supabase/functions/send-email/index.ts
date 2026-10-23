@@ -13,8 +13,13 @@ import {
   type EmailKind,
 } from "./templates.ts";
 
-// Applicant templates: the recipient is derived from the application row, so
-// these are safe to invoke with the anon key from a server action.
+// Applicant templates: the recipient is derived from the application row,
+// never named by the caller. "Received" is sent by submit-application alone
+// (service role). The status templates are sent by the dashboard with the
+// staff member's own JWT, and only right after the status they announce was
+// actually set (SEC-03): anyone holding the public anon key used to be able
+// to send a rejection to any applicant whose id they knew, as often as they
+// liked.
 const APPLICANT_KINDS: EmailKind[] = [
   "application_received",
   "interview_invited",
@@ -22,12 +27,46 @@ const APPLICANT_KINDS: EmailKind[] = [
   "rejected",
 ];
 
+const STATUS_FOR_KIND: Partial<Record<EmailKind, string>> = {
+  interview_invited: "interview",
+  accepted: "accepted",
+  rejected: "rejected",
+};
+
+// How long after a status change its email may still be sent. The dashboard
+// sends it in the same request as the change; anything later is a replay.
+const STATUS_EMAIL_WINDOW_MS = 10 * 60_000;
+
 // The invitation template is different: it carries a one-time accept token,
 // so it is service-role only. manage-users invokes it after it has already
 // checked that the caller administers the organization.
 function isServiceRoleCaller(req: Request): boolean {
   const header = req.headers.get("Authorization") ?? "";
   return header === `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`;
+}
+
+// Is the caller staff (owner/admin/hr) of this application's organization?
+// Asked with the caller's own JWT, so the membership helpers decide (D12).
+// The anon key carries no user and always answers no.
+async function callerManagesApplication(
+  req: Request,
+  applicationId: string
+): Promise<boolean> {
+  const header = req.headers.get("Authorization") ?? "";
+  if (!header.startsWith("Bearer ")) return false;
+  try {
+    const asCaller = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: header } } }
+    );
+    const { data } = await asCaller.rpc("can_manage_application", {
+      p_application_id: applicationId,
+    });
+    return data === true;
+  } catch {
+    return false;
+  }
 }
 
 // Arabic role names. Duplicated from lib/i18n/ar.ts rather than imported:
@@ -200,9 +239,21 @@ Deno.serve(async (req) => {
     return json(400, { error: "invalid kind or application_id" });
   }
 
+  // Authorize before reading anything, so an unauthorized caller learns
+  // nothing — not even whether the application exists.
+  const serviceCaller = isServiceRoleCaller(req);
+  if (!serviceCaller) {
+    if (kind === "application_received") {
+      return json(403, { error: "service role only" });
+    }
+    if (!(await callerManagesApplication(req, applicationId))) {
+      return json(403, { error: "forbidden" });
+    }
+  }
+
   const { data: application, error: appError } = await supabase
     .from("applications")
-    .select("full_name, email, ref_code, org_id, jobs(title)")
+    .select("full_name, email, ref_code, org_id, status, jobs(title)")
     .eq("id", applicationId)
     .maybeSingle();
   if (appError) {
@@ -210,6 +261,33 @@ Deno.serve(async (req) => {
     return json(500, { error: "lookup failed" });
   }
   if (!application) return json(404, { error: "application not found" });
+
+  // A status email announces a change that just happened: the application
+  // must be in that status, and the change into it must be the latest entry
+  // and recent. A repeat inside the window is the only duplicate left, and
+  // only a member of the company can cause it.
+  const expectedStatus = STATUS_FOR_KIND[kind];
+  if (expectedStatus) {
+    if (application.status !== expectedStatus) {
+      return json(409, { error: "status does not match" });
+    }
+    const { data: latest, error: historyError } = await supabase
+      .from("status_history")
+      .select("to_status, created_at")
+      .eq("application_id", applicationId)
+      .eq("org_id", application.org_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (historyError) {
+      console.error("history lookup failed:", historyError.message);
+      return json(500, { error: "lookup failed" });
+    }
+    const fresh =
+      latest?.to_status === expectedStatus &&
+      Date.now() - new Date(latest.created_at).getTime() <= STATUS_EMAIL_WINDOW_MS;
+    if (!fresh) return json(409, { error: "no recent status change" });
+  }
 
   // The sender identity now comes from the applicant's own organization —
   // the single `settings` row is gone (0006). An applicant to company A must

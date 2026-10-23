@@ -21,6 +21,9 @@
 --   6. KD-17 — two forced re-runs of one application both ran and both paid
 --      (§8 cost guard). A forced claim now takes a 'processing' row only once
 --      its claim is stale, which is all housekeeping ever needed.
+--   7. SEC-04 — housekeeping accepted any caller holding the public anon key.
+--      The daily job now carries a single-use ticket it mints at run time,
+--      so no new secret has to be configured anywhere.
 --
 -- Every statement is safe to re-run.
 
@@ -215,3 +218,117 @@ $$;
 revoke execute on function public.claim_application_for_analysis(uuid, boolean)
   from public, anon, authenticated;
 grant execute on function public.claim_application_for_analysis(uuid, boolean) to service_role;
+
+-- ============================================================
+-- 7) SEC-04 — housekeeping tickets
+-- ============================================================
+-- The gateway in front of housekeeping only checks that the bearer is a valid
+-- project JWT, and the job has always sent the anon key, which is public.
+-- Each run of the job now mints a random ticket here and sends it in its own
+-- header; the function redeems it (service role) before doing anything. Only
+-- the hash is stored, a ticket works once, and it expires in 10 minutes.
+create table if not exists housekeeping_tickets (
+  ticket_hash text primary key,
+  expires_at  timestamptz not null default now() + interval '10 minutes'
+);
+
+alter table housekeeping_tickets enable row level security;
+-- No policies: no client role reads or writes tickets.
+revoke all on housekeeping_tickets from anon, authenticated;
+grant all on housekeeping_tickets to service_role;
+
+create or replace function public.issue_housekeeping_ticket()
+returns text
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_ticket text := encode(gen_random_bytes(32), 'hex');
+begin
+  delete from housekeeping_tickets where expires_at < now();
+  insert into housekeeping_tickets (ticket_hash)
+  values (encode(digest(v_ticket, 'sha256'), 'hex'));
+  return v_ticket;
+end;
+$$;
+
+-- Only the job (run by the database owner) mints tickets.
+revoke execute on function public.issue_housekeeping_ticket()
+  from public, anon, authenticated, service_role;
+
+create or replace function public.redeem_housekeeping_ticket(p_ticket text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_found boolean;
+begin
+  if p_ticket is null or length(p_ticket) <> 64 then
+    return false;
+  end if;
+  delete from housekeeping_tickets
+  where ticket_hash = encode(digest(p_ticket, 'sha256'), 'hex')
+    and expires_at > now()
+  returning true into v_found;
+  return coalesce(v_found, false);
+end;
+$$;
+
+revoke execute on function public.redeem_housekeeping_ticket(text)
+  from public, anon, authenticated;
+grant execute on function public.redeem_housekeeping_ticket(text) to service_role;
+
+-- Rebuild the daily job so it sends a ticket. The URL and the gateway key
+-- come from the settings 0004/0012 read; a project that scheduled the job
+-- but no longer has the settings keeps the values its current job uses.
+-- Without pg_cron (local harness) there is nothing to rebuild.
+do $$
+declare
+  v_url text := nullif(current_setting('app.housekeeping_url', true), '');
+  v_auth text := 'Bearer ' || nullif(current_setting('app.housekeeping_key', true), '');
+  v_command text;
+begin
+  if not exists (select 1 from pg_extension where extname = 'pg_cron') then
+    raise notice 'pg_cron not installed — no housekeeping job to rebuild (local harness)';
+    return;
+  end if;
+
+  select command into v_command from cron.job where jobname = 'srp-daily-housekeeping';
+  if v_url is null then
+    v_url := substring(v_command from $re$url := '([^']+)'$re$);
+  end if;
+  if v_auth is null then
+    v_auth := substring(v_command from $re$'Authorization', '([^']+)'$re$);
+  end if;
+
+  if v_url is null or v_auth is null then
+    -- Deliberately loud, as in 0012: retention (D8) is not running.
+    raise warning 'app.housekeeping_url / app.housekeeping_key not set and no job to copy them from — daily housekeeping is NOT scheduled';
+    return;
+  end if;
+
+  create extension if not exists pg_net;
+  if v_command is not null then
+    perform cron.unschedule('srp-daily-housekeeping');
+  end if;
+  perform cron.schedule(
+    'srp-daily-housekeeping',
+    '0 3 * * *',
+    format(
+      $job$select net.http_post(
+        url := %L,
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', %L,
+          'x-housekeeping-ticket', public.issue_housekeeping_ticket()
+        ),
+        body := '{}'::jsonb
+      )$job$,
+      v_url,
+      v_auth
+    )
+  );
+end $$;

@@ -125,6 +125,16 @@ Deno.serve(async (req) => {
     return json(400, { error: "invalid application_id" });
   }
 
+  // Every run spends the organization's quota and a model call, so every
+  // caller is authorised, a pending row included (SEC-05): submit-application
+  // and housekeeping call with the service role, the dashboard with the
+  // staff member's own JWT. The public anon key used to be enough to analyse
+  // any pending application whose id the caller knew. Asked before the row
+  // is read, so a refusal says nothing about whether it exists.
+  if (!(await canManageApplication(req, applicationId))) {
+    return json(403, { error: "forbidden" });
+  }
+
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -143,17 +153,15 @@ Deno.serve(async (req) => {
   }
   if (!application) return json(404, { error: "application not found" });
 
-  if (application.analysis_status !== "pending") {
-    // done/failed/processing: only staff of this application's own org
-    // (dashboard re-run) or the service role (housekeeping cron) may proceed.
-    if (!payload.force || !(await canManageApplication(req, applicationId))) {
-      return json(
-        application.analysis_status === "processing" ? 409 : 403,
-        { error: "re-run requires a staff caller with force" }
-      );
-    }
-    // NOTE: force overrides 'processing' too, so a run stuck mid-flight
-    // (crashed instance) can be recovered by housekeeping.
+  if (application.analysis_status !== "pending" && !payload.force) {
+    // done/failed/processing: a re-run is asked for explicitly. A forced
+    // claim takes a 'processing' row only once that run is 15 minutes old —
+    // a crashed instance housekeeping recovers — never from a live run (0028,
+    // KD-17).
+    return json(
+      application.analysis_status === "processing" ? 409 : 403,
+      { error: "re-run requires force" }
+    );
   }
 
   // Claim the row atomically. Reading the status above and writing
