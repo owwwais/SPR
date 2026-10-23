@@ -29,8 +29,8 @@ export default async function AccountPage() {
           <dt className="text-muted-foreground">{t.name}</dt>
           <dd className="font-medium">{session.fullName}</dd>
           <dt className="text-muted-foreground">{t.email}</dt>
-          <dd dir="ltr" className="text-start font-medium">
-            {user.email}
+          <dd className="font-medium">
+            <bdi dir="ltr">{user.email}</bdi>
           </dd>
           <dt className="text-muted-foreground">{t.role}</dt>
           <dd className="font-medium">{ar.admin.roles[session.role]}</dd>

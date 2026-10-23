@@ -11,7 +11,13 @@ import { safeNext } from "@/lib/redirects";
 // account has, /onboarding/seeker when they signed up on the seeker tab, or
 // /reset-password after a recovery link.
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
+  // Every link that lands here was built on the configured site URL
+  // (siteOrigin() in the auth actions), so the session cookies are set on
+  // that origin and the redirect must stay on it. request.nextUrl reports
+  // the server's own idea of its host, which behind a proxy (or in `next
+  // dev`) can differ, and the next page would then see no session.
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || request.nextUrl.origin;
   const code = searchParams.get("code");
   const viaRecovery = searchParams.get("via") === "recovery";
   const next = viaRecovery ? "/reset-password" : safeNext(searchParams.get("next"), "/onboarding");

@@ -288,7 +288,8 @@ grant execute on function public.redeem_housekeeping_ticket(text) to service_rol
 -- Rebuild the daily job so it sends a ticket. The URL and the gateway key
 -- come from the settings 0004/0012 read; a project that scheduled the job
 -- but no longer has the settings keeps the values its current job uses.
--- Without pg_cron (local harness) there is nothing to rebuild.
+-- pg_cron is installed here when the settings exist and it is not yet
+-- (a project where 0004 found no settings); the local harness has none.
 do $$
 declare
   v_url text := nullif(current_setting('app.housekeeping_url', true), '');
@@ -296,8 +297,16 @@ declare
   v_command text;
 begin
   if not exists (select 1 from pg_extension where extname = 'pg_cron') then
-    raise notice 'pg_cron not installed — no housekeeping job to rebuild (local harness)';
-    return;
+    if not exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+      raise notice 'pg_cron unavailable — nothing to schedule (local harness)';
+      return;
+    end if;
+    if v_url is null or v_auth is null then
+      -- Deliberately loud, as in 0012: retention (D8) is not running.
+      raise warning 'daily housekeeping is NOT scheduled — run supabase/scripts/schedule_housekeeping.sql';
+      return;
+    end if;
+    create extension pg_cron;
   end if;
 
   select command into v_command from cron.job where jobname = 'srp-daily-housekeeping';
@@ -310,7 +319,7 @@ begin
 
   if v_url is null or v_auth is null then
     -- Deliberately loud, as in 0012: retention (D8) is not running.
-    raise warning 'app.housekeeping_url / app.housekeeping_key not set and no job to copy them from — daily housekeeping is NOT scheduled';
+    raise warning 'daily housekeeping is NOT scheduled — run supabase/scripts/schedule_housekeeping.sql';
     return;
   end if;
 
