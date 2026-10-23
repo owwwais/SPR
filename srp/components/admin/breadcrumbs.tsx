@@ -17,6 +17,7 @@ const SECTIONS: Record<string, string> = {
   settings: ar.admin.settings,
   billing: ar.shell.billing,
   account: ar.account.title,
+  services: ar.services.title,
 };
 
 // Derived from the URL alone, so it needs no data and cannot disagree with
@@ -31,6 +32,13 @@ function crumbsFor(pathname: string): Crumb[] {
     return [{ label: ar.admin.jobs, href: "/admin/jobs" }, { label: c.application }];
   }
   const root: Crumb = { label: SECTIONS[section] ?? section, href: `/admin/${section}` };
+  if (section === "services" && id) {
+    const kind = (ar.services.kinds as Record<string, { title: string }>)[id];
+    if (!kind) return [{ label: root.label }];
+    return sub
+      ? [root, { label: kind.title, href: `/admin/services/${id}` }, { label: c.result }]
+      : [root, { label: kind.title }];
+  }
   if (section !== "jobs" || !id) return [{ label: root.label }];
   if (id === "new") return [root, { label: c.newJob }];
   if (sub === "edit") return [root, { label: c.edit }];

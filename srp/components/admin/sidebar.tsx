@@ -6,6 +6,7 @@ import {
   CreditCard,
   ExternalLink,
   House,
+  LayoutGrid,
   LogOut,
   MessagesSquare,
   Settings,
@@ -92,6 +93,10 @@ export function Sidebar({
         <NavLink href="/admin/interviews" badge={banksToReview} badgeLabel={ar.today.banks.title}>
           <MessagesSquare className={icon} strokeWidth={stroke} aria-hidden />
           {ar.interviewsHub.title}
+        </NavLink>
+        <NavLink href="/admin/services">
+          <LayoutGrid className={icon} strokeWidth={stroke} aria-hidden />
+          {ar.services.title}
         </NavLink>
         <NavLink href="/admin/calendar">
           <CalendarDays className={icon} strokeWidth={stroke} aria-hidden />

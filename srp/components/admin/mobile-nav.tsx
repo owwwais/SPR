@@ -70,7 +70,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label={ar.shell.primaryNav}
-      className="fixed inset-x-0 bottom-0 z-30 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden print:hidden"
     >
       <ul className="flex h-14 items-stretch gap-1 px-2 py-1">
         {TABS.map((tab) => {
