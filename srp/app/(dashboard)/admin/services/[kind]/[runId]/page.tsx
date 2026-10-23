@@ -36,7 +36,11 @@ export default async function ServiceRunPage({ params }: { params: Promise<{ kin
   const errorText = run.error ? ((t.errors as Record<string, string>)[run.error] ?? t.errors.server_error) : null;
 
   const [grades, pool] = await Promise.all([
-    kind === "pay_grade" && run.status === "done" ? getPayGrades(session.org.id) : Promise.resolve(null),
+    // Pay is for owner/admin/hr (RLS hides it from viewers too; this keeps
+    // a viewer from seeing an empty structure as if there were none).
+    kind === "pay_grade" && run.status === "done" && canWrite(session.role)
+      ? getPayGrades(session.org.id)
+      : Promise.resolve(null),
     kind === "team" && run.status === "done" ? candidatePool(session.org.id) : Promise.resolve([]),
   ]);
 

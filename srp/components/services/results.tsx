@@ -229,9 +229,9 @@ export function PayGradeResult({
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
-                  <th className="py-2 text-start font-medium">{t.factor}</th>
-                  <th className="py-2 text-start font-medium">{t.level}</th>
-                  <th className="py-2 text-start font-medium">{t.points}</th>
+                  <th className="py-2 pe-3 text-start font-medium">{t.factor}</th>
+                  <th className="py-2 pe-3 text-start font-medium">{t.level}</th>
+                  <th className="py-2 pe-3 text-start font-medium">{t.points}</th>
                   <th className="py-2 text-start font-medium">{ar.services.results.jobNeed.why}</th>
                 </tr>
               </thead>
@@ -272,7 +272,7 @@ export function PayGradeResult({
             <table className="text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
-                  <th className="py-1.5 text-start font-medium">{t.factor}</th>
+                  <th className="py-1.5 pe-3 text-start font-medium">{t.factor}</th>
                   <th className="py-1.5 text-start font-medium">{t.weight}</th>
                 </tr>
               </thead>
@@ -288,7 +288,7 @@ export function PayGradeResult({
             <table className="text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
-                  <th className="py-1.5 text-start font-medium">{t.grade}</th>
+                  <th className="py-1.5 pe-3 text-start font-medium">{t.grade}</th>
                   <th className="py-1.5 text-start font-medium">{t.points}</th>
                 </tr>
               </thead>
@@ -312,7 +312,7 @@ export function PayGradeResult({
       <aside className="flex flex-col gap-4">
         <Panel id="range" title={t.rangeTitle}>
           {grades === null ? (
-            <p className="text-sm text-muted-foreground">{ar.services.errors.forbidden}</p>
+            <p className="text-sm text-muted-foreground">{t.hiddenForViewer}</p>
           ) : (
             <PayPlacement suggested={computed?.grade ?? 1} grades={grades} />
           )}

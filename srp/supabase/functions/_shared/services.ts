@@ -34,7 +34,7 @@ export type Seniority = (typeof SENIORITY)[number];
 
 export const JobNeedInput = z.object({
   // "Review this job": the current text is analysed too.
-  job_id: z.uuid().optional(),
+  job_id: z.guid().optional(),
   title_hint: optionalText(120),
   problem: text(1500).min(10),
   outcomes: text(1500).min(10),
@@ -49,10 +49,10 @@ export const JobNeedInput = z.object({
 export type JobNeedInput = z.infer<typeof JobNeedInput>;
 
 // Pay grade, ad audit, interview kit and onboarding read an existing job.
-export const JobRefInput = z.object({ job_id: z.uuid() });
+export const JobRefInput = z.object({ job_id: z.guid() });
 
 export const PayGradeInput = z.union([
-  z.object({ job_id: z.uuid() }),
+  z.object({ job_id: z.guid() }),
   z.object({ title: text(120).min(2), summary: text(4000).min(20) }),
 ]);
 export type PayGradeInput = z.infer<typeof PayGradeInput>;
@@ -65,7 +65,7 @@ export const TeamInput = z.object({
 export type TeamInput = z.infer<typeof TeamInput>;
 
 export const OnboardingInput = z.object({
-  job_id: z.uuid(),
+  job_id: z.guid(),
   context: optionalText(800),
 });
 

@@ -119,10 +119,10 @@ export function PayPlacement({ suggested, grades }: { suggested: number; grades:
               [p.midpoint, position.midpoint],
               [p.max, band.max_monthly],
             ].map(([label, value]) => (
-              <div key={String(label)} className="flex flex-col gap-0.5 bg-card px-3 py-3">
+              <div key={String(label)} className="flex flex-col gap-0.5 bg-card px-2 py-3">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="text-lg font-semibold tabular-nums">
-                  <bdi>{money(Number(value))}</bdi>
+                <dd className="text-base font-semibold whitespace-nowrap tabular-nums">
+                  <bdi>{nf.format(Number(value))}</bdi>
                 </dd>
               </div>
             ))}
@@ -140,7 +140,7 @@ export function PayPlacement({ suggested, grades }: { suggested: number; grades:
               ))}
             </ul>
             <p className="text-xs text-muted-foreground">
-              {p.monthly}
+              {p.sar} · {p.monthly}
             </p>
           </div>
         </div>
