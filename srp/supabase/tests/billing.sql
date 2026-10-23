@@ -223,6 +223,54 @@ select pg_temp.chk('signup: a new organization starts on the trial limits',
   (select max_active_jobs = 1 and max_seats = 2 and monthly_analysis_quota = 25 and plan_code = 'trial'
    from organizations where slug = 'fresh-co'));
 
+-- ---------- analysis quota (KD-16, 0028) ----------
+-- Service-role functions: called by analyze-application, so tested as the
+-- owner here. A zero allowance must refuse the month's FIRST analysis too.
+delete from analysis_usage where org_id = '1b000000-0000-4000-8000-000000000001';
+update organizations set monthly_analysis_quota = 0
+where id = '1b000000-0000-4000-8000-000000000001';
+select pg_temp.chk('quota: an allowance of 0 refuses the first analysis of the month',
+  (public.consume_analysis_quota('1b000000-0000-4000-8000-000000000001')->>'allowed')::boolean = false
+  and not exists (select 1 from analysis_usage where org_id = '1b000000-0000-4000-8000-000000000001'));
+update organizations set monthly_analysis_quota = 2
+where id = '1b000000-0000-4000-8000-000000000001';
+select pg_temp.chk('quota: an allowance of 2 allows the first',
+  (public.consume_analysis_quota('1b000000-0000-4000-8000-000000000001')->>'allowed')::boolean);
+select pg_temp.chk('quota: an allowance of 2 allows the second',
+  (public.consume_analysis_quota('1b000000-0000-4000-8000-000000000001')->>'allowed')::boolean);
+select pg_temp.chk('quota: an allowance of 2 refuses the third',
+  not (public.consume_analysis_quota('1b000000-0000-4000-8000-000000000001')->>'allowed')::boolean);
+
+-- ---------- analysis claims (KD-17, 0028) ----------
+-- One forced run at a time: a forced claim takes a processing row only once
+-- the live claim is 15 minutes old (a run that died), never from a live one.
+insert into applications (id, job_id, ref_code, full_name, email, phone, cv_path, cv_mime)
+select '1b000000-0000-4000-8000-0000000000f1', j.id, 'SOUTH-01', 'متقدم الجنوب', 's@app.test',
+       '+966500000009', '1b000000-0000-4000-8000-000000000001/1b000000-0000-4000-8000-0000000000f1.pdf',
+       'application/pdf'
+from jobs j where j.org_id = '1b000000-0000-4000-8000-000000000001' limit 1;
+
+select pg_temp.chk('claim: a pending row is claimed',
+  public.claim_application_for_analysis('1b000000-0000-4000-8000-0000000000f1', false));
+select pg_temp.chk('claim: a claimed row is not claimed twice',
+  not public.claim_application_for_analysis('1b000000-0000-4000-8000-0000000000f1', false));
+select pg_temp.chk('claim: a forced claim CANNOT take a live run',
+  not public.claim_application_for_analysis('1b000000-0000-4000-8000-0000000000f1', true));
+update applications set analysis_claimed_at = now() - interval '20 minutes'
+where id = '1b000000-0000-4000-8000-0000000000f1';
+select pg_temp.chk('claim: a forced claim recovers a run that died',
+  public.claim_application_for_analysis('1b000000-0000-4000-8000-0000000000f1', true));
+select pg_temp.chk('claim: the recovery restarts the claim clock',
+  (select analysis_claimed_at > now() - interval '1 minute' from applications
+   where id = '1b000000-0000-4000-8000-0000000000f1'));
+update applications set analysis_status = 'failed'
+where id = '1b000000-0000-4000-8000-0000000000f1';
+select pg_temp.chk('claim: a forced re-run takes a failed row',
+  public.claim_application_for_analysis('1b000000-0000-4000-8000-0000000000f1', true));
+select pg_temp.chk('claim: only the three successful claims counted as attempts',
+  (select analysis_attempts from applications
+   where id = '1b000000-0000-4000-8000-0000000000f1') = 3);
+
 \o
 select id, label, pass from t_results order by id;
 select count(*) filter (where pass) as passed,
