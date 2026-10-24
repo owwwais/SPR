@@ -55,6 +55,15 @@ on:
         type: choice
         options: [none, check, apply]
         default: none
+      interview_secrets:
+        description: "Interview agent secrets: 'check' lists which are set (names only); 'apply' sets the agent URL and, if missing, a new reference secret"
+        type: choice
+        options: [none, check, apply]
+        default: none
+      interview_agent_url:
+        description: "With interview_secrets=apply: the interview agent's base URL (https://...)"
+        type: string
+        default: ""
 
 concurrency:
   # Never let two deploys race against the same project.
@@ -62,6 +71,74 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The interview gateway answers `interviews_not_configured` until three
+  # Edge Function secrets exist: INTERVIEW_AGENT_URL, INTERVIEW_AGENT_KEYS
+  # (the agent's PLATFORM_HMAC_KEYS) and INTERVIEW_REF_SECRET (32+ chars).
+  # This job reads secret NAMES only — never values, digests included: this
+  # repository's Action logs are public. 'apply' sets the URL from the input
+  # and creates INTERVIEW_REF_SECRET only when it does not exist, because
+  # changing it later re-keys every tenant's references on the agent. The
+  # agent's shared key cannot be set from here: only its owner knows it.
+  interview-secrets:
+    name: Interview agent secrets (check / apply)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.interview_secrets != 'none'
+    steps:
+      - name: Check, set what can be set, check again
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          MODE: ${{ inputs.interview_secrets }}
+          AGENT_URL: ${{ inputs.interview_agent_url }}
+        run: |
+          set -euo pipefail
+          api="https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/secrets"
+          auth=(-H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          wanted="INTERVIEW_AGENT_URL INTERVIEW_AGENT_KEYS INTERVIEW_REF_SECRET INTERVIEW_WEBHOOK_SECRETS"
+
+          names() {
+            curl -sS --fail-with-body "${auth[@]}" "$api" | jq -r '.[].name'
+          }
+          report() {
+            local present; present=$(names)
+            for n in $wanted; do
+              if grep -qx "$n" <<< "$present"; then echo "  set      $n"; else echo "  MISSING  $n"; fi
+            done
+          }
+
+          echo "== interview secrets in Supabase"
+          report
+          if [ "$MODE" != "apply" ]; then exit 0; fi
+
+          present=$(names)
+          payload='[]'
+          if [ -n "$AGENT_URL" ]; then
+            if ! [[ "$AGENT_URL" =~ ^https://[A-Za-z0-9.-]+(/)?$ ]]; then
+              echo "::error::interview_agent_url must be an https base URL"; exit 1
+            fi
+            payload=$(jq -c --arg v "${AGENT_URL%/}" '. + [{name:"INTERVIEW_AGENT_URL", value:$v}]' <<< "$payload")
+            echo "will set INTERVIEW_AGENT_URL"
+          fi
+          if ! grep -qx INTERVIEW_REF_SECRET <<< "$present"; then
+            # Never echoed, not even to mask it: masking would print it first.
+            ref=$(openssl rand -hex 32)
+            payload=$(jq -c --arg v "$ref" '. + [{name:"INTERVIEW_REF_SECRET", value:$v}]' <<< "$payload")
+            echo "will create INTERVIEW_REF_SECRET (random, 64 hex characters, not shown)"
+          else
+            echo "INTERVIEW_REF_SECRET exists — left untouched (it must never change)"
+          fi
+          if [ "$payload" != "[]" ]; then
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${auth[@]}" \
+              -H "Content-Type: application/json" --data "$payload" "$api")
+            if [ "$code" -ge 300 ]; then echo "::error::Setting secrets failed (HTTP $code)"; exit 1; fi
+          fi
+
+          echo "== interview secrets in Supabase, after"
+          report
+          if ! names | grep -qx INTERVIEW_AGENT_KEYS; then
+            echo "::warning::INTERVIEW_AGENT_KEYS is still missing. Add it in Supabase (Edge Functions -> Secrets) as k1:<the secret in the agent's PLATFORM_HMAC_KEYS>."
+          fi
+
   # The live project's migrations were applied by hand in the SQL Editor, so
   # `supabase db push` (the `migrations` box) cannot tell what is there. This
   # asks the database itself: supabase/scripts/deploy_check.sql reports, per
